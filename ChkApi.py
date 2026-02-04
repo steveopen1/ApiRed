@@ -1560,7 +1560,7 @@ def manage_interactive():
         print(f"[!] API服务器启动失败: {e}")
 
     # 直接启动 Web 服务，进入大厅模式
-    start_web_view(results_root, manage_mode=True)
+    start_web_view(results_root, manage_mode=True, api_server=api_server)
 
 class ResultsHandler(BaseHTTPRequestHandler):
     selected_dir = ""
@@ -3068,7 +3068,7 @@ load();
         self.send_response(404)
         self.end_headers()
 
-def start_web_view(selected_dir, manage_mode=False):
+def start_web_view(selected_dir, manage_mode=False, api_server=None):
     ResultsHandler.selected_dir = selected_dir if not manage_mode else ""
     try:
         ResultsHandler.results_root = os.path.dirname(selected_dir) if not manage_mode else selected_dir
@@ -3090,9 +3090,15 @@ def start_web_view(selected_dir, manage_mode=False):
             webbrowser.open("http://127.0.0.1:8088/")
     try:
         while t.is_alive():
+            # 等待Web服务器线程和API服务器线程
+            api_thread = getattr(api_server, "_thread", None) if api_server else None
+            if api_thread and not api_thread.is_alive():
+                break
             time.sleep(0.5)
     except KeyboardInterrupt:
         server.shutdown()
+        if api_server:
+            api_server.shutdown()
         server.server_close()
         pass
 

@@ -735,8 +735,10 @@ def run_api_server(host="127.0.0.1", port=8089):
     print(f"[API Server] Results root: {_RESULTS_ROOT}")
 
     # 在后台线程中运行
-    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=False)
     server_thread.start()
+    # 将线程对象保存到服务器实例中
+    server._thread = server_thread
 
     return server
 
