@@ -3065,6 +3065,27 @@ load();
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
             return
+        # 管理界面路由 - 在 404 之前处理
+        if self.path == "/manage" or self.path.startswith("/manage/"):
+            if self.path == "/manage":
+                # 提供管理界面首页
+                web_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'index.html')
+                if os.path.exists(web_file):
+                    with open(web_file, 'rb') as f:
+                        html_content = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(html_content)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -3078,9 +3099,8 @@ def start_web_view(selected_dir, manage_mode=False, api_server=None):
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     if manage_mode:
-        # 使用独立 Web 界面文件
-        web_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'index.html')
-        webbrowser.open(f"file://{web_file}")
+        # 通过 HTTP 路由提供管理界面
+        webbrowser.open("http://127.0.0.1:8088/manage")
     else:
         # 单任务模式，预先注册当前目录，否则无法访问
         if selected_dir:
