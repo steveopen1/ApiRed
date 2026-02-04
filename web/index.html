@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChkApi 管理控制台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定义样式 */
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: rgba(30, 41, 59, 0.6);
+            --border-color: #334155;
+            --text-primary: #e5e7eb;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #22d3ee;
+            --accent-success: #10b981;
+            --accent-warning: #f59e0b;
+            --accent-danger: #ef4444;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+        }
+
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+
+        .nav-item {
+            transition: all 0.2s ease;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-left: 3px solid var(--accent-primary);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(34, 211, 238, 0.1) 100%);
+            border: 1px solid var(--border-color);
+        }
+
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden">
+    <div id="app" class="flex h-full">
+        <!-- 侧边栏 -->
+        <aside class="sidebar w-64 flex-shrink-0 flex flex-col">
+            <div class="p-6 border-b border-gray-700">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 11 14 0 5 7 0 14-14 0 7 7 0-14 14zm-1-1v-2.59a1 1 0 00-1.41l-3.29-3.29H7a5 5 0 00-5 5v5.59c0 .55.45 1 1.41l3.29 3.29h8a3 3 0 003-3v-6a5 5 0 00-5 5v6a5 5 0 00-5 5z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-white">ChkApi</h1>
+                        <p class="text-xs text-gray-400">API 安全扫描控制台</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
+                <a href="#/dashboard" class="nav-item active flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="dashboard">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2 2 0 0124-4h16a2 2 0 0124 4v8a2 2 0 01-2-2H6a2 2 0 00-2 2v-8z"/>
+                    </svg>
+                    <span class="text-sm font-medium">仪表盘</span>
+                </a>
+                <a href="#/targets" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="targets">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012-2 2 0 01-2.932L.867 8.139a2 2 0 01.215-2.05l1.294.162.227.162.227h2.094l.531 2.84a2 2 0 01.384-1.558 1.293-1.558h-1.832a1 2 0 01.067.067l.16.751.16.751a1 2 0 01.084.086h3.148a1 2 0 01.084.083l1.083 1.083a1 2 0 01.083.084h4.168a1 2 0 01.084-.083l1.083-1.083a1 2 0 01.083-.084h3.168a1 2 0 01.083.084l-1.083-1.083a1 2 0 01-.084.083h-4.168a1 2 0 01-.084.083l-1.083 1.083a1 2 0 01-.083.084h-3.148a1 2 0 01-.067-.067l-.16.751-1.16.751a1 2 0 01-.384.1.558-1.293-1.558h-1.832a1 2 0 01-.067-.067l-1.083 1.083a1 2 0 01-.083.084H5.055z"/>
+                    </svg>
+                    <span class="text-sm font-medium">目标管理</span>
+                </a>
+                <a href="#/api" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="api">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 0h-6v12h6m0 0v-12h-6m11.667-5.333h1.333v12h-6v-12h-6"/>
+                    </svg>
+                    <span class="text-sm font-medium">API 接口</span>
+                </a>
+                <a href="#/sensitive" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="sensitive">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 9a2 2 0 012-2 2 0 0124-4h6a2 2 0 00-2-2v-4h-2v-4H6a2 2 0 00-2 2v4a2 2 0 00-2 2 0124 4h6a2 2 0 00-2 2v-4h-2v4a2 2 0 00-2 2 012-4z"/>
+                    </svg>
+                    <span class="text-sm font-medium">敏感信息</span>
+                </a>
+                <a href="#/compare" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="compare">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l4 4m0 0l-4-4m4 4l-4 4m0 0l-4-4"/>
+                    </svg>
+                    <span class="text-sm font-medium">历史对比</span>
+                </a>
+                <a href="#/settings" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:text-white" data-page="settings">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.891 2.424-1.891 2.424-1.891-1.891h-1.891a1.5 1.5 0 00-3-3V2.5a1.5 1.5 0 003-3H6a1.5 1.5 0 00-1.5 1.5v14a1.5 1.5 0 003 3h1.891a1.5 1.5 0 003-3v-7.714c0-1.5 1.5-3 3-1.5-3h-2.5M16.5 10.75a1.5 1.5 0 00-3 0h-2.5a1.5 1.5 0 00-1.5-1.5V10.5a1.5 1.5 0 00-1.5-1.5z"/>
+                    </svg>
+                    <span class="text-sm font-medium">设置</span>
+                </a>
+            </nav>
+
+            <div class="p-4 border-t border-gray-700">
+                <div class="text-xs text-gray-500 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span>扫描服务运行中</span>
+                    </div>
+                    <div class="text-gray-400">v2.0.0</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部栏 -->
+            <header class="h-16 border-b border-gray-700 flex items-center justify-between px-6 bg-slate-800/50 backdrop-blur-sm">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 text-gray-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 012-2 2 0 0124-4h4a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 003-3h4a2 2 0 013-3 0 0133 3z"/>
+                        </svg>
+                        <span class="text-sm" id="current-target">未选择目标</span>
+                    </div>
+                    <div class="h-6 w-px bg-gray-700"></div>
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l-3 3m6 0l-3-3m6 0V8M5 19a2 2 0 01-2-2H7a2 2 0 01-2 2v4a2 2 0 003-3h4a2 2 0 012-2 2v-4h-2v-4a2 2 0 00-2-2h-2m0 0a2 2 0 01-2 2v2a2 2 0 003 3h4a2 2 0 012-2 2v-2a2 2 0 00-2-2h-2m0 0V5a2 2 0 00-2 2v2h4a2 2 0 012-2 2V7a2 2 0 00-2 2h-2z"/>
+                        </svg>
+                        <span class="text-sm text-blue-400" id="async-status">异步分析: 待启动</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+                        + 新建扫描
+                    </button>
+                    <button class="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 text-sm font-medium hover:bg-gray-700 transition-colors">
+                        刷新数据
+                    </button>
+                </div>
+            </header>
+
+            <!-- 页面内容 -->
+            <div class="flex-1 overflow-y-auto scrollbar-thin p-6">
+                <!-- 仪表盘页面 -->
+                <div id="page-dashboard" class="page-content">
+                    <!-- 统计卡片 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div class="stat-card rounded-xl p-5 card-hover transition-all">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="p-2 rounded-lg bg-blue-500/20">
+                                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 2H6a2 2 0 00-2-2 0 0-4-4h9a2 2 0 00-2 2v4a2 2 0 00-2 2 0124 4h-9a2 2 0 00-2 2V4z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm text-gray-400">总 API</span>
+                                </div>
+                                <span class="text-2xl font-bold text-white" id="stat-total-api">0</span>
+                            </div>
+                            <div class="text-xs text-gray-500">发现的 API 接口总数</div>
+                        </div>
+
+                        <div class="stat-card rounded-xl p-5 card-hover transition-all">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="p-2 rounded-lg bg-green-500/20">
+                                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-2m0 0l4-4m0 0l4 4m-12 0l-4-4m0 0l4 4m0 0V5m0 0l4-4M3 20h18M5 20h14M9 8l2 2m6 0l2 2"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm text-gray-400">有效 API</span>
+                                </div>
+                                <span class="text-2xl font-bold text-white" id="stat-valid-api">0</span>
+                            </div>
+                            <div class="text-xs text-gray-500">可访问的接口数量</div>
+                        </div>
+
+                        <div class="stat-card rounded-xl p-5 card-hover transition-all">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="p-2 rounded-lg bg-red-500/20">
+                                        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 0l-4-4m4 4l4 4m0 0l-4-4m4 4l-4 4m0 0l-4-4M12 3v.01M12 3v.01"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm text-gray-400">风险 URL</span>
+                                </div>
+                                <span class="text-2xl font-bold text-white" id="stat-risk-url">0</span>
+                            </div>
+                            <div class="text-xs text-gray-500">检测到风险的数量</div>
+                        </div>
+
+                        <div class="stat-card rounded-xl p-5 card-hover transition-all">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="p-2 rounded-lg bg-yellow-500/20">
+                                        <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 0l-4-4m4 4l4 4m0 0l-4-4m4 4l-4 4m0 0l-4-4M12 3v.01M12 3v.01"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm text-gray-400">敏感信息</span>
+                                </div>
+                                <span class="text-2xl font-bold text-white" id="stat-sensitive">0</span>
+                            </div>
+                            <div class="text-xs text-gray-500">检测到的敏感数据条数</div>
+                        </div>
+                    </div>
+
+                    <!-- 异步分析进度 -->
+                    <div class="glass-card rounded-xl p-6 mb-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l-3 3m6 0l-3-3m6 0V8M5 19a2 2 0 01-2-2H7a2 2 0 01-2 2v4a2 2 0 00-2 2 0124 4h-9a2 2 0 00-2 2V4z"/>
+                            </svg>
+                            异步分析进度
+                        </h3>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-400 mb-2">AST 分析</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                                        <div class="h-full bg-blue-500 rounded-full transition-all" id="progress-ast" style="width: 0%"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-500" id="progress-ast-text">0/0</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-400 mb-2">SourceMap 还原</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                                        <div class="h-full bg-purple-500 rounded-full transition-all" id="progress-sourcemap" style="width: 0%"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-500" id="progress-sourcemap-text">0/0</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-400 mb-2">正则匹配</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                                        <div class="h-full bg-green-500 rounded-full transition-all" id="progress-regex" style="width: 0%"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-500" id="progress-regex-text">0/0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 最近扫描 -->
+                    <div class="glass-card rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l-3 3m6 0l-3-3m6 0V8M5 19a2 2 0 01-2-2H7a2 2 0 01-2 2v4a2 2 0 00-2 2 0124 4h-9a2 2 0 00-2 2V4z"/>
+                            </svg>
+                            最近扫描
+                        </h3>
+                        <div class="text-center text-gray-500 py-8" id="recent-scans-empty">
+                            暂无扫描记录
+                        </div>
+                        <div class="space-y-3" id="recent-scans-list" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 目标管理页面 -->
+                <div id="page-targets" class="page-content hidden">
+                    <div class="mb-6">
+                        <div class="relative">
+                            <input type="text" placeholder="搜索目标..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <svg class="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 11 14 0 5 7 0 14-14 0 5 7 0-14-14zm-1-1v-2.59a1 1 0 00-1.41l-3.29-3.29H7a5 5 0 00-5 5v5.59c0 .55.45 1 1.41l3.29 3.29h8a3 3 0 003-3v-6a5 5 0 00-5 5z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-xl overflow-hidden">
+                        <table class="w-full">
+                            <thead class="bg-gray-800">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">目标 URL</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">域名</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">扫描时间</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">状态</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">API 数量</th>
+                                    <th class="px-4 py-3 text-right text-xs text-gray-400 font-medium uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="targets-table-body" class="divide-y divide-gray-700">
+                                <tr>
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                        暂无目标数据
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- API 接口页面 -->
+                <div id="page-api" class="page-content hidden">
+                    <div class="mb-6">
+                        <div class="relative">
+                            <input type="text" placeholder="搜索 API..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <svg class="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 11 14 0 5 7 0 14-14 0 5 7 0-14-14zm-1-1v-2.59a1 1 0 00-1.41l-3.29-3.29H7a5 5 0 00-5 5v5.59c0 .55.45 1 1.41l3.29 3.29h8a3 3 0 003-3v-6a5 5 0 00-5 5z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-xl overflow-hidden">
+                        <table class="w-full">
+                            <thead class="bg-gray-800">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">API 路径</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">方法</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">状态码</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">长度</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">风险等级</th>
+                                    <th class="px-4 py-3 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">来源</th>
+                                </tr>
+                            </thead>
+                            <tbody id="api-table-body" class="divide-y divide-gray-700">
+                                <tr>
+                                    <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                        请先选择一个扫描目标
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 敏感信息页面 -->
+                <div id="page-sensitive" class="page-content hidden">
+                    <div class="glass-card rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4">敏感信息检测报告</h3>
+                        <p class="text-gray-500 mb-4">选择扫描目标后查看详细报告</p>
+                    </div>
+                </div>
+
+                <!-- 历史对比页面 -->
+                <div id="page-compare" class="page-content hidden">
+                    <div class="glass-card rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4">历史对比</h3>
+                        <p class="text-gray-500 mb-4">选择两个扫描记录进行对比</p>
+                    </div>
+                </div>
+
+                <!-- 设置页面 -->
+                <div id="page-settings" class="page-content hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass-card rounded-xl p-6">
+                            <h3 class="text-lg font-semibold text-white mb-4">扫描配置</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="text-sm text-gray-400 mb-2 block">最大深度</label>
+                                    <input type="number" value="3" min="1" max="10" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-sm text-gray-400 mb-2 block">线程数</label>
+                                    <input type="number" value="8" min="1" max="64" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="setting-async-analysis" checked class="w-5 h-5 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-2 focus:ring-blue-500">
+                                    <label for="setting-async-analysis" class="text-sm text-gray-300">启用异步分析（推荐）</label>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" id="setting-ai-scan" class="w-5 h-5 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-2 focus:ring-blue-500">
+                                    <label for="setting-ai-scan" class="text-sm text-gray-300">启用 AI 扫描</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card rounded-xl p-6">
+                            <h3 class="text-lg font-semibold text-white mb-4">导出设置</h3>
+                            <div class="space-y-4">
+                                <button class="w-full px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1a3 3 0 00-3-3h-4v4a2 2 0 00-2-2h6a2 2 0 00-2 2v6a2 2 0 002-2 0124-4h-4a2 2 0 00-2 2V4z"/>
+                                    </svg>
+                                    导出完整报告 (JSON)
+                                </button>
+                                <button class="w-full px-4 py-3 rounded-lg border border-gray-600 text-gray-300 font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003 3v-1a3 3 0 00-3-3h-4v4a2 2 0 00-2-2h6a2 2 0 00-2 2v6a2 2 0 002-2 0124-4h-4a2 2 0 00-2 2V4z"/>
+                                    </svg>
+                                    导出风险列表 (CSV)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // API配置
+        const API_BASE = 'http://127.0.0.1:8089/api';
+
+        // 简单的路由处理
+        const routes = {
+            '/dashboard': 'page-dashboard',
+            '/targets': 'page-targets',
+            '/api': 'page-api',
+            '/sensitive': 'page-sensitive',
+            '/compare': 'page-compare',
+            '/settings': 'page-settings'
+        };
+
+        // 当前选中的目标
+        let currentTargetId = null;
+
+        // 初始化路由
+        function initRouter() {
+            window.addEventListener('hashchange', handleHashChange);
+            handleHashChange();
+        }
+
+        function handleHashChange() {
+            const hash = window.location.hash || '#/dashboard';
+            const pageId = routes[hash];
+
+            // 更新导航高亮
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active');
+                if (el.getAttribute('data-page') === hash.replace('#/', '')) {
+                    el.classList.add('active');
+                }
+            });
+
+            // 切换页面
+            document.querySelectorAll('.page-content').forEach(el => {
+                el.classList.add('hidden');
+            });
+            const targetPage = document.getElementById(pageId);
+            if (targetPage) {
+                targetPage.classList.remove('hidden');
+                // 加载页面数据
+                loadPageData(hash.replace('#/', ''));
+            }
+        }
+
+        // 加载页面数据
+        async function loadPageData(page) {
+            switch(page) {
+                case 'dashboard':
+                    await loadDashboardData();
+                    break;
+                case 'targets':
+                    await loadTargets();
+                    break;
+                case 'api':
+                    if (currentTargetId) {
+                        await loadApis(currentTargetId);
+                    }
+                    break;
+                case 'sensitive':
+                    if (currentTargetId) {
+                        await loadSensitive(currentTargetId);
+                    }
+                    break;
+            }
+        }
+
+        // API调用函数
+        async function apiGet(endpoint, params = {}) {
+            const url = new URL(API_BASE + endpoint);
+            Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+            try {
+                const response = await fetch(url.toString());
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return null;
+            }
+        }
+
+        async function apiPost(endpoint, data = {}) {
+            try {
+                const response = await fetch(API_BASE + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return null;
+            }
+        }
+
+        async function apiDelete(endpoint) {
+            try {
+                const response = await fetch(API_BASE + endpoint, { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return null;
+            }
+        }
+
+        // 加载仪表盘数据
+        async function loadDashboardData() {
+            const stats = await apiGet('/stats');
+            if (stats) {
+                document.getElementById('stat-total-api').textContent = stats.total_targets || 0;
+                document.getElementById('stat-valid-api').textContent = stats.active_scans || 0;
+                document.getElementById('stat-risk-url').textContent = '0';
+
+                // 更新异步分析进度
+                if (stats.async_analysis) {
+                    const ast = stats.async_analysis.ast || {};
+                    const sourcemap = stats.async_analysis.sourcemap || {};
+                    const regex = stats.async_analysis.regex || {};
+
+                    updateProgress('ast', ast.completed || 0, ast.submitted || 0);
+                    updateProgress('sourcemap', sourcemap.completed || 0, sourcemap.submitted || 0);
+                    updateProgress('regex', regex.completed || 0, regex.submitted || 0);
+                }
+            }
+
+            // 加载目标列表
+            await loadRecentScans();
+        }
+
+        function updateProgress(type, completed, total) {
+            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            document.getElementById(`progress-${type}`).style.width = `${percent}%`;
+            document.getElementById(`progress-${type}-text`).textContent = `${completed}/${total}`;
+        }
+
+        // 加载最近扫描
+        async function loadRecentScans() {
+            const data = await apiGet('/targets');
+            if (!data || !data.targets) {
+                const container = document.getElementById('recent-scans-list');
+                const empty = document.getElementById('recent-scans-empty');
+                container.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            const scans = data.targets.map(t => ({
+                name: t.id,
+                domain: t.domain || 'N/A',
+                time: t.scan_time || 'N/A',
+                status: '完成',
+                apiCount: t.total_api || 0
+            }));
+
+            const container = document.getElementById('recent-scans-list');
+            const empty = document.getElementById('recent-scans-empty');
+
+            if (scans.length > 0) {
+                container.innerHTML = scans.map(scan => `
+                    <tr class="hover:bg-gray-800/50 cursor-pointer" data-target-id="${scan.name}">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full ${scan.status === '完成' ? 'bg-green-500' : 'bg-yellow-500'}"></div>
+                                <span class="text-white">${scan.name}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-gray-300">${scan.domain}</td>
+                        <td class="px-4 py-3 text-gray-400">${scan.time}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded text-xs ${scan.status === '完成' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${scan.status}</span>
+                        </td>
+                        <td class="px-4 py-3 text-white font-mono">${scan.apiCount}</td>
+                        <td class="px-4 py-3 text-right">
+                            <button class="text-blue-400 hover:text-blue-300 text-sm" onclick="selectTarget('${scan.name}')">查看</button>
+                            <button class="text-red-400 hover:text-red-300 text-sm ml-2" onclick="deleteTarget('${scan.name}')">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+                container.style.display = 'block';
+                empty.style.display = 'none';
+
+                // 绑定行点击事件
+                container.querySelectorAll('tr[data-target-id]').forEach(row => {
+                    row.addEventListener('click', (e) => {
+                        if (e.target.tagName !== 'BUTTON') {
+                            selectTarget(row.dataset.targetId);
+                        }
+                    });
+                });
+            }
+        }
+
+        // 加载目标管理页面
+        async function loadTargets() {
+            const data = await apiGet('/targets');
+            if (data && data.targets) {
+                renderTargetsList(data.targets);
+            }
+        }
+
+        function renderTargetsList(targets) {
+            const container = document.getElementById('targets-list');
+            const empty = document.getElementById('targets-empty');
+
+            if (targets.length === 0) {
+                container.innerHTML = '';
+                container.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            container.innerHTML = targets.map(target => `
+                <div class="glass-card p-5 card-hover transition-all">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-white mb-1">${target.id}</h3>
+                            <p class="text-sm text-gray-400">${target.url || 'N/A'}</p>
+                        </div>
+                        <span class="px-2 py-1 rounded text-xs bg-green-500/20 text-green-400">完成</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <div class="text-gray-500">域名</div>
+                            <div class="text-gray-300">${target.domain || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">总API</div>
+                            <div class="text-white font-mono">${target.total_api || 0}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">有效API</div>
+                            <div class="text-blue-400 font-mono">${target.valid_api || 0}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">风险URL</div>
+                            <div class="text-yellow-400 font-mono">${target.risk_total || 0}</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-700 flex justify-end gap-2">
+                        <button class="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 text-sm hover:bg-gray-700 transition-colors" onclick="selectTarget('${target.id}')">
+                            查看详情
+                        </button>
+                        <button class="px-4 py-2 rounded-lg bg-red-600/20 text-red-400 text-sm hover:bg-red-600/30 transition-colors" onclick="deleteTarget('${target.id}')">
+                            删除
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            container.style.display = 'block';
+            empty.style.display = 'none';
+        }
+
+        // 加载API列表
+        async function loadApis(targetId, page = 1, search = '') {
+            const data = await apiGet('/apis', {
+                target_id: targetId,
+                page: page,
+                size: 50,
+                search: search
+            });
+            if (data && data.apis) {
+                renderApisList(data.apis);
+            }
+        }
+
+        function renderApisList(apis) {
+            const container = document.getElementById('api-list');
+            const empty = document.getElementById('api-empty');
+
+            if (apis.length === 0) {
+                container.innerHTML = '';
+                container.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            container.innerHTML = apis.map(api => `
+                <tr class="hover:bg-gray-800/50">
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded text-xs ${api.method === 'GET' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}">${api.method || 'GET'}</span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-300 font-mono text-sm">${api.url || ''}</td>
+                    <td class="px-4 py-3 text-gray-400">${api.status || '未知'}</td>
+                    <td class="px-4 py-3 text-gray-400">${api.response_code || '-'}</td>
+                    <td class="px-4 py-3">
+                        <button class="text-blue-400 hover:text-blue-300 text-sm">测试</button>
+                    </td>
+                </tr>
+            `).join('');
+            container.style.display = 'block';
+            empty.style.display = 'none';
+        }
+
+        // 加载敏感信息
+        async function loadSensitive(targetId, severity = '', page = 1) {
+            const data = await apiGet('/sensitive', {
+                target_id: targetId,
+                severity: severity,
+                page: page,
+                size: 50
+            });
+            if (data && data.sensitive) {
+                renderSensitiveList(data.sensitive);
+            }
+        }
+
+        function renderSensitiveList(sensitive) {
+            const container = document.getElementById('sensitive-list');
+            const empty = document.getElementById('sensitive-empty');
+
+            if (sensitive.length === 0) {
+                container.innerHTML = '';
+                container.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            container.innerHTML = sensitive.map(item => `
+                <tr class="hover:bg-gray-800/50">
+                    <td class="px-4 py-3">${item.name || ''}</td>
+                    <td class="px-4 py-3">
+                        <code class="bg-gray-800 px-2 py-1 rounded text-sm text-gray-300">${item.matches || ''}</code>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded text-xs ${item.severity === 'high' ? 'bg-red-500/20 text-red-400' : item.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-blue-500/20 text-blue-400'}">${item.severity || 'medium'}</span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-400">${item.url || ''}</td>
+                </tr>
+            `).join('');
+            container.style.display = 'block';
+            empty.style.display = 'none';
+        }
+
+        // 选择目标
+        function selectTarget(targetId) {
+            currentTargetId = targetId;
+            document.getElementById('current-target').textContent = targetId;
+            window.location.hash = '#/targets';
+
+            // 跳转到8088端口的详情页面（使用token）
+            const reportUrl = `http://127.0.0.1:8088/?id=${targetId}`;
+            window.open(reportUrl, '_blank');
+        }
+
+        // 删除目标
+        async function deleteTarget(targetId) {
+            if (!confirm(`确定要删除目标 ${targetId} 吗？此操作不可恢复！`)) {
+                return;
+            }
+
+            const result = await apiDelete(`/target/${targetId}`);
+            if (result && result.status === 'deleted') {
+                // 刷新列表
+                loadDashboardData();
+                loadTargets();
+            } else {
+                alert('删除失败：' + (result?.error || '未知错误'));
+            }
+        }
+
+        // 新建扫描任务
+        async function createNewScan() {
+            const url = prompt('请输入要扫描的目标URL：');
+            if (!url) return;
+
+            const result = await apiPost('/tasks/create', {
+                url: url,
+                js_depth: 3,
+                attack_type: 0
+            });
+
+            if (result && result.task_id) {
+                alert('扫描任务创建成功！');
+                await apiPost('/tasks/start', { task_id: result.task_id });
+                // 刷新列表
+                loadDashboardData();
+                loadTargets();
+            } else {
+                alert('创建失败：' + (result?.error || '未知错误'));
+            }
+        }
+
+        // 刷新数据
+        async function refreshData() {
+            await loadDashboardData();
+            if (window.location.hash === '#/targets') {
+                await loadTargets();
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initRouter();
+
+            // 绑定按钮事件
+            document.querySelectorAll('button').forEach(btn => {
+                if (btn.textContent.includes('新建扫描')) {
+                    btn.onclick = createNewScan;
+                }
+                if (btn.textContent.includes('刷新数据')) {
+                    btn.onclick = refreshData;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
