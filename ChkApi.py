@@ -1536,7 +1536,7 @@ def run_url(url, cookies, chrome, attackType, noApiScan, dedupe='on', store='db'
                 pass
     return getJsUrl_info
 
-def manage_interactive():
+def manage_interactive(url=None, cookies=None, chrome=None, attackType=0, noApiScan=0, dedupe=1, store='db', rr_config=None, proxy=None, proxy_mode=None, infoScan=False, js_depth=3, aiScan=False):
     # 启用Windows ANSI支持
     os.system('')
 
@@ -1549,7 +1549,13 @@ def manage_interactive():
             print("[!] 无法创建results目录")
             return
 
-    print("[*] 正在启动Web管理界面...")
+    # 如果提供了 URL，先执行扫描
+    if url:
+        print(f"[*] 正在扫描: {url}")
+        run_url(url, cookies, chrome, attackType, noApiScan, dedupe, store, rr_config, proxy, proxy_mode, infoScan, js_depth, aiScan)
+        print(f"[*] 扫描完成，正在启动Web管理界面...")
+    else:
+        print("[*] 正在启动Web管理界面...")
     print("[*] API服务器地址: http://127.0.0.1:8089")
 
     # 启动API服务器
@@ -3888,7 +3894,29 @@ def main():
     options, args = parse.parse_args()
     
     if options.manage:
-        manage_interactive()
+        # 传递扫描参数到管理界面
+        manage_interactive(
+            url=options.url,
+            cookies=options.cookies,
+            chrome=options.chrome,
+            attackType=options.attackType,
+            noApiScan=options.noApiScan,
+            dedupe=options.dedupe,
+            store=options.store,
+            rr_config={
+                'subdir': options.rr_subdir,
+                'keep_days': options.rr_keep_days,
+                'no_param_flag': (options.rr_no_param_flag == 'on'),
+                'base_override': options.base_override,
+                'basepath': options.basepath,
+                'headers': options.header
+            },
+            proxy=options.proxy,
+            proxy_mode=options.proxy_mode,
+            infoScan=options.infoScan,
+            js_depth=options.js_depth,
+            aiScan=options.aiScan
+        )
         return
 
     url = options.url
