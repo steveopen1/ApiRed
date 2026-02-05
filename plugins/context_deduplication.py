@@ -50,6 +50,9 @@ class ContextDeduplicator:
                 ctx_map = {}
                 for row in rows:
                     path = row['api_path']
+                    norm_path = self._normalize_path(path)
+                    if not norm_path:
+                        continue
                     ctx = None
                     try:
                         ctx = json.loads(row['regex_context_json'])
@@ -57,14 +60,14 @@ class ContextDeduplicator:
                         ctx = None
                     if not ctx:
                         continue
-                    items = ctx_map.get(path) or []
+                    items = ctx_map.get(norm_path) or []
                     items.append({
                         'file': ctx.get('file'),
                         'loc': ctx.get('loc', 0),
                         'context': ctx.get('context') or '',
                         'raw_url': ctx.get('raw_url') or ''
                     })
-                    ctx_map[path] = items
+                    ctx_map[norm_path] = items
                 self.regex_context_map = ctx_map
             except Exception:
                 pass
@@ -250,6 +253,18 @@ class ContextDeduplicator:
                         'params': {}
                     }
 
+        for entry in self.merged_apis.values():
+            ast_items = entry.get('ast_info') or []
+            if ast_items:
+                if any((i.get('type') != 'string_literal') for i in ast_items):
+                    entry['sources'] = [s for s in entry.get('sources', []) if s != 'ast_string']
+                entry['sources'] = [s for s in entry.get('sources', []) if s != 'regex']
+                entry['regex_match'] = False
+                try:
+                    entry['sources'] = list(dict.fromkeys(entry['sources']))
+                except Exception:
+                    pass
+
     def _normalize_path(self, url_or_path):
         if not url_or_path: return None
         try:
@@ -283,7 +298,8 @@ class ContextDeduplicator:
             'loc': api.get('loc'),
             'context': api.get('context'),
             'type': api.get('type'),
-            'params': api.get('params', [])
+            'params': api.get('params', []),
+            'param_sources': api.get('param_sources', [])
         })
         
         # 如果当前entry method未知，且AST有明确Method，更新之
@@ -300,6 +316,127 @@ class ContextDeduplicator:
                 'dynamic' in x['sources'],
                 'ast' in x['sources']
             ), reverse=True)
+
+            file_groups = {}
+            for entry in report_data:
+                for ai in entry.get('ast_info') or []:
+                    f = ai.get('file') or ''
+                    if not f:
+                        continue
+                    if f not in file_groups:
+                        file_groups[f] = []
+                    file_groups[f].append({
+                        'path': entry.get('path'),
+                        'method': ai.get('method', 'UNKNOWN'),
+                        'url': ai.get('raw_url', '') or ai.get('url', ''),
+                        'loc': ai.get('loc', 0),
+                        'context': ai.get('context', ''),
+                        'params': ai.get('params', []) if isinstance(ai.get('params', []), list) else [],
+                        'param_sources': ai.get('param_sources', []),
+                        'type': ai.get('type', ''),
+                        'tool': ai.get('tool', '')
+                    })
+            for f, items in list(file_groups.items()):
+                by_loc = {}
+                for it in items:
+                    loc = int(it.get('loc') or 0)
+                    cur = by_loc.get(loc)
+                    if not cur:
+                        by_loc[loc] = {
+                            'path': it.get('path'),
+                            'method': it.get('method', 'UNKNOWN'),
+                            'url': it.get('url', ''),
+                            'loc': loc,
+                            'context': it.get('context', ''),
+                            'params': list(it.get('params', [])) if isinstance(it.get('params', []), list) else [],
+                            'param_sources': list(it.get('param_sources', [])) if isinstance(it.get('param_sources', []), list) else []
+                        }
+                    else:
+                        if (not cur.get('url')) or cur.get('url') == 'UNKNOWN':
+                            if it.get('url'):
+                                cur['url'] = it.get('url')
+                        if cur.get('method', 'UNKNOWN') == 'UNKNOWN' and it.get('method') and it.get('method') != 'UNKNOWN':
+                            cur['method'] = it.get('method')
+                        p = it.get('params', []) if isinstance(it.get('params', []), list) else []
+                        cur['params'] = list(dict.fromkeys((cur['params'] or []) + p))
+                        ps = it.get('param_sources', []) if isinstance(it.get('param_sources', []), list) else []
+                        cur['param_sources'] = list((cur['param_sources'] or []) + ps)
+                        if not cur.get('context') and it.get('context'):
+                            cur['context'] = it.get('context')
+                        if not cur.get('path') and it.get('path'):
+                            cur['path'] = it.get('path')
+                enriched = []
+                try:
+                    lines = []
+                    if os.path.exists(f):
+                        with open(f, 'r', encoding='utf-8', errors='ignore') as _rf:
+                            lines = _rf.read().splitlines()
+                    for it in list(by_loc.values()):
+                        ln = int(it.get('loc') or 0)
+                        s = max(0, ln - 30)
+                        e = min(len(lines), ln + 30) if lines else ln
+                        win_text = "\n".join(lines[s:e]) if lines else (it.get('context') or '')
+                        h = hashlib.md5((win_text or '').encode('utf-8', 'ignore')).hexdigest()
+                        it2 = dict(it)
+                        it2['s'] = s
+                        it2['e'] = e
+                        it2['hash'] = h
+                        enriched.append(it2)
+                    clusters = []
+                    used = [False] * len(enriched)
+                    for i in range(len(enriched)):
+                        if used[i]:
+                            continue
+                        g = [enriched[i]]
+                        used[i] = True
+                        for j in range(i + 1, len(enriched)):
+                            if used[j]:
+                                continue
+                            if enriched[j]['hash'] == enriched[i]['hash']:
+                                used[j] = True
+                                g.append(enriched[j])
+                        clusters.append(g)
+                    merged = []
+                    def overlap(a, b):
+                        return not (a[1] < b[0] or b[1] < a[0])
+                    N = 6
+                    for g in clusters:
+                        r = (min([x['s'] for x in g]), max([x['e'] for x in g]))
+                        locs = sorted(list({int(x.get('loc') or 0) for x in g}))
+                        merged_into = False
+                        for mg in merged:
+                            rr = mg['range']
+                            if overlap(r, rr) or any(abs(p - q) <= N for p in locs for q in mg['locs']):
+                                mg['locs'] = sorted(list({*mg['locs'], *locs}))
+                                mg['range'] = (min(mg['range'][0], r[0]), max(mg['range'][1], r[1]))
+                                mg['params'] = list(dict.fromkeys((mg['params'] or []) + (g[0].get('params', []) if isinstance(g[0].get('params', []), list) else [])))
+                                mg['param_sources'] = list((mg['param_sources'] or []) + (g[0].get('param_sources', []) if isinstance(g[0].get('param_sources', []), list) else []))
+                                if (not mg['url']) or mg['url'] == 'UNKNOWN':
+                                    if g[0].get('url'):
+                                        mg['url'] = g[0].get('url')
+                                if mg['method'] == 'UNKNOWN' and g[0].get('method') and g[0].get('method') != 'UNKNOWN':
+                                    mg['method'] = g[0].get('method')
+                                merged_into = True
+                                break
+                        if not merged_into:
+                            merged.append({
+                                'path': g[0].get('path'),
+                                'method': g[0].get('method', 'UNKNOWN'),
+                                'url': g[0].get('url', ''),
+                                'loc': int(g[0].get('loc') or 0),
+                                'locs': locs,
+                                's': r[0],
+                                'e': r[1],
+                                'context': g[0].get('context', ''),
+                                'params': g[0].get('params', []) if isinstance(g[0].get('params', []), list) else [],
+                                'param_sources': g[0].get('param_sources', []) if isinstance(g[0].get('param_sources', []), list) else [],
+                                'range': r
+                            })
+                    file_groups[f] = merged
+                except Exception:
+                    file_groups[f] = list(by_loc.values())
+            multi_file_groups = {k: v for k, v in file_groups.items() if len(v) >= 2}
+
 
             html_content = """
             <!DOCTYPE html>
@@ -337,12 +474,134 @@ class ContextDeduplicator:
                     .highlight-url { background-color: #ffff00; color: #000; font-weight: bold; padding: 0 2px; border-radius: 2px; }
                     .highlight-method { background-color: #007bff; color: #fff; font-weight: bold; padding: 0 2px; border-radius: 2px; }
                     .highlight-param { background-color: #28a745; color: #fff; font-weight: bold; padding: 0 2px; border-radius: 2px; }
+                    .tag-kind { display:inline-block; padding:2px 6px; border-radius:4px; font-size:12px; margin-left:8px; border:1px solid #ddd; }
+                    .kind-interface { background:#e8f4ff; color:#0969da; }
+                    .kind-param { background:#e9fbe8; color:#1f883d; }
+                    .kind-other { background:#eee; color:#666; }
+                    .loc-chip { display:inline-block; padding:0 6px; margin-left:6px; font-size:12px; border:1px solid #ddd; border-radius:10px; background:#fff; cursor:pointer; }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h1>API 接口分析详情报告</h1>
                     <p>总计发现接口: {total_count}</p>
+            """.replace('{total_count}', str(len(report_data)))
+
+            html_content += """
+                    <style>
+                        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 16px; }
+                        .file-card { border: 1px solid #eee; border-radius: 8px; padding: 12px; background: #fafafa; }
+                        .file-card h3 { margin: 0 0 8px 0; font-size: 14px; }
+                        .open-btn { display:inline-block;padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer; }
+                        .modal { position: fixed; left:0; top:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; padding:20px; }
+                        .modal-content { width: 95%; max-width: 1200px; background:#fff; border-radius:8px; overflow:hidden; display:flex; flex-direction:row; }
+                        .modal-left { flex: 2; padding: 16px; border-right: 1px solid #eee; }
+                        .modal-right { flex: 1; padding: 16px; max-height: 80vh; overflow:auto; }
+                    .iface-item { padding:6px 8px; border-bottom:1px solid #f0f0f0; cursor:pointer; }
+                        .iface-item:hover { background:#f5f5f5; }
+                    .iface-item.active { background:#e6f2ff; border-left:3px solid #0969da; }
+                        .modal-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid #eee; }
+                        .close-btn { border:none; background:#f44336; color:#fff; padding:6px 10px; border-radius:4px; cursor:pointer; }
+                    </style>
+                    <details open>
+                        <summary>AST 文件卡片视图</summary>
+                        <div class="card-grid">
+            """
+
+            for file_path, items in multi_file_groups.items():
+                card_id = f"card_{abs(hash(file_path))}"
+                html_content += f"""
+                            <div class="file-card">
+                                <h3>{file_path}</h3>
+                                <div>匹配接口数量: {len(items)}</div>
+                                <button class="open-btn" onclick="openFileCard('{card_id}')">打开卡片</button>
+                            </div>
+                            <div id="{card_id}" class="modal">
+                                <div class="modal-content">
+                                    <div class="modal-left">
+                                        <div class="modal-header">
+                                            <div style="font-size:13px">{file_path}</div>
+                                            <div><button class="close-btn" onclick="closeFileCard('{card_id}')">关闭</button></div>
+                                        </div>
+                                        <div id="{card_id}_viewer" class="code-block"></div>
+                                        <div id="{card_id}_status" style="font-size:12px;color:#666;margin-top:6px;">当前行: -</div>
+                                    </div>
+                                    <div class="modal-right">
+                """
+                for idx, it in enumerate(items):
+                    url_show = it.get('url', '')
+                    method_show = (it.get('method') or 'UNKNOWN')
+                    param_sources = it.get('param_sources', []) or []
+                    param_names = [p.get('name') for p in param_sources if isinstance(p, dict) and p.get('name')]
+                    if not param_names and isinstance(it.get('params', []), list):
+                        param_names = it.get('params', [])
+                    sources_set = sorted({(p.get('source') if isinstance(p, dict) else '') for p in param_sources} - {''})
+                    has_params = bool(param_names)
+                    has_interface = bool((url_show and url_show != 'UNKNOWN') or (method_show and method_show != 'UNKNOWN'))
+                    kind_labels = []
+                    kind_classes = []
+                    if has_interface:
+                        kind_labels.append('接口')
+                        kind_classes.append('kind-interface')
+                    if has_params:
+                        kind_labels.append('参数')
+                        kind_classes.append('kind-param')
+                    tags_html = "".join([f"<span class='tag-kind {cls}'>{lbl}</span>" for (lbl, cls) in zip(kind_labels, kind_classes)]) or "<span class='tag-kind kind-other'>其他</span>"
+                    source_hint = f"源: {','.join(sources_set)}" if sources_set else ''
+                    params_info_html = ""
+                    if has_params:
+                        params_info_html = "<div style='font-size:12px;color:#333'>Params: [" + ", ".join(param_names) + "]</div>"
+                    context_code_long = it.get('context', '')
+                    try:
+                        if os.path.exists(file_path):
+                            ln2 = int((it.get('locs') or [it.get('loc') or 0])[0] or 0)
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as _f2:
+                                lines2 = _f2.read().splitlines()
+                                s2 = int(it.get('s') or max(0, ln2 - 30))
+                                e2 = int(it.get('e') or min(len(lines2), ln2 + 30))
+                                buf2 = []
+                                for j2 in range(s2, e2):
+                                    prefix2 = '> ' if (j2 + 1) == ln2 else '  '
+                                    buf2.append(f"{prefix2}{j2+1}: {lines2[j2]}")
+                                context_code_long = "\n".join(buf2)
+                    except Exception:
+                        context_code_long = context_code_long or ''
+                    esc_long = (context_code_long or '').replace('<', '&lt;').replace('>', '&gt;')
+                    if url_show:
+                        esc_long = esc_long.replace(str(url_show), f"<span class='highlight-url'>{url_show}</span>")
+                    if method_show and method_show != 'UNKNOWN':
+                        esc_long = esc_long.replace(method_show.upper(), f"<span class='highlight-method'>{method_show.upper()}</span>")
+                        if method_show.lower() != method_show.upper():
+                            esc_long = esc_long.replace(method_show.lower(), f"<span class='highlight-method'>{method_show.lower()}</span>")
+                    if param_names:
+                        for pn in param_names:
+                            if pn and isinstance(pn, str) and len(pn) > 1:
+                                esc_long = esc_long.replace(pn, f"<span class='highlight-param'>{pn}</span>")
+                    esc_long = esc_long.replace('"', '&quot;').replace("'", '&#39;')
+                    locs = it.get('locs') or [int(it.get('loc') or 0)]
+                    locs_html = " ".join([f"<span class='loc-chip' onclick=\"jumpOnly('{card_id}', {ln})\">{ln}</span>" for ln in locs])
+                    html_content += f"""
+                                        <div class="iface-item" onclick="switchInterface('{card_id}', {int(locs[0] if isinstance(locs, list) and locs else (it.get('loc') or 0))})" data-view-long="{esc_long}" data-loc="{int(locs[0] if isinstance(locs, list) and locs else (it.get('loc') or 0))}" data-locs="{','.join([str(x) for x in (locs if isinstance(locs, list) else [int(it.get('loc') or 0)])])}">
+                                            <div>
+                                                <span class="method method-{method_show}">{method_show}</span>
+                                                <span style="font-family:monospace">{url_show}</span>
+                                                {tags_html}
+                                            </div>
+                                            <div style="font-size:12px;color:#666">{it.get('path','')} {source_hint} | Line: {int(locs[0] if isinstance(locs, list) and locs else (it.get('loc') or 0))} {locs_html}</div>
+                                            {params_info_html}
+                                        </div>
+                    """
+                html_content += f"""
+                                    </div>
+                                </div>
+                            </div>
+                """
+            html_content += """
+                        </div>
+                    </details>
+            """
+
+            html_content += """
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
                         <input id="searchInput" style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;min-width:220px;" placeholder="搜索 Path/URL/参数">
                         <select id="methodSelect" style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;">
@@ -370,10 +629,17 @@ class ContextDeduplicator:
 
             for api in report_data:
                 method_class = f"method-{api['method']}"
+                # 根据规则：若存在 AST 匹配（ast_info 非空），则不显示 Regex 标签
+                effective_sources = list(api.get('sources', []))
+                if api.get('ast_info'):
+                    try:
+                        effective_sources = [s for s in effective_sources if s != 'regex']
+                    except Exception:
+                        pass
                 sources_html = ""
-                if 'dynamic' in api['sources']: sources_html += '<span class="tag tag-dynamic">Dynamic</span>'
-                if 'ast' in api['sources'] or 'ast_string' in api['sources']: sources_html += '<span class="tag tag-ast">AST</span>'
-                if 'regex' in api['sources']: sources_html += '<span class="tag tag-regex">Regex</span>'
+                if 'dynamic' in effective_sources: sources_html += '<span class="tag tag-dynamic">Dynamic</span>'
+                if ('ast' in effective_sources) or ('ast_string' in effective_sources) or api.get('ast_info'): sources_html += '<span class="tag tag-ast">AST</span>'
+                if 'regex' in effective_sources and not api.get('ast_info'): sources_html += '<span class="tag tag-regex">Regex</span>'
 
                 details_html = ""
 
@@ -395,7 +661,8 @@ class ContextDeduplicator:
                 if 'regex' in api.get('sources', []) and not api.get('ast_info'):
                     details_html += "<details><summary>正则匹配详情 (Code Context)</summary>"
                     path_key = api.get('path')
-                    ctx_items = self.regex_context_map.get(path_key) or []
+                    norm_key = self._normalize_path(path_key)
+                    ctx_items = self.regex_context_map.get(norm_key) or []
                     if ctx_items:
                         for info in ctx_items:
                             context_code = info.get('context', '') or ''
@@ -427,55 +694,125 @@ class ContextDeduplicator:
                 # AST 详情 (代码上下文)
                 if api.get('ast_info'):
                     details_html += """<details open><summary>静态分析详情 (Code Context)</summary>"""
-                    for info in api['ast_info']:
+                    ast_infos = api['ast_info'] or []
+                    has_non_string_literal = any((i.get('type') != 'string_literal') for i in ast_infos)
+                    display_infos = [i for i in ast_infos if (i.get('type') != 'string_literal')] if has_non_string_literal else ast_infos
+                    for info in display_infos:
+                        file_is_multi = info.get('file') in multi_file_groups
                         context_code = info.get('context', '')
+                        if not context_code:
+                            try:
+                                fp = info.get('file')
+                                ln = int(info.get('loc') or 0)
+                                if fp and ln > 0 and os.path.exists(fp):
+                                    with open(fp, 'r', encoding='utf-8', errors='ignore') as _f:
+                                        lines = _f.read().splitlines()
+                                        s = max(0, ln - 6)
+                                        e = min(len(lines), ln + 6)
+                                        buf = []
+                                        for idx in range(s, e):
+                                            prefix = '> ' if (idx + 1) == ln else '  '
+                                            buf.append(f"{prefix}{idx+1}: {lines[idx]}")
+                                        context_code = "\n".join(buf)
+                            except Exception:
+                                context_code = ''
                         
-                        # HTML 转义
-                        if context_code:
+                        if context_code and not file_is_multi:
                             context_code = context_code.replace('<', '&lt;').replace('>', '&gt;')
                             
-                            # 1. 高亮 URL
                             url_val = info.get('url', '') or info.get('raw_url', '')
                             if url_val and len(str(url_val)) > 1:
-                                context_code = context_code.replace(str(url_val), f'<span class="highlight-url">{url_val}</span>')
+                                context_code = context_code.replace(str(url_val), f'<span class=\"highlight-url\">{url_val}</span>')
                             
-                            # 2. 高亮 Method
                             method_val = info.get('method', 'UNKNOWN')
                             if method_val and method_val != 'UNKNOWN':
-                                # 尝试高亮大写和小写形式
-                                context_code = context_code.replace(method_val.upper(), f'<span class="highlight-method">{method_val.upper()}</span>')
+                                context_code = context_code.replace(method_val.upper(), f'<span class=\"highlight-method\">{method_val.upper()}</span>')
                                 if method_val.lower() != method_val.upper():
-                                    context_code = context_code.replace(method_val.lower(), f'<span class="highlight-method">{method_val.lower()}</span>')
+                                    context_code = context_code.replace(method_val.lower(), f'<span class=\"highlight-method\">{method_val.lower()}</span>')
 
-                            # 3. 高亮 Params
-                            params = info.get('params', []) or info.get('args', []) # 兼容不同字段名
-                            if params and isinstance(params, list):
-                                for param in params:
+                            ps = info.get('param_sources', []) or []
+                            param_names = [p.get('name') for p in ps if isinstance(p, dict) and p.get('name')]
+                            params_list = param_names if param_names else (info.get('params', []) if isinstance(info.get('params', []), list) else [])
+                            if params_list:
+                                for param in params_list:
                                     if param and isinstance(param, str) and len(param) > 1:
-                                        context_code = context_code.replace(param, f'<span class="highlight-param">{param}</span>')
+                                        context_code = context_code.replace(param, f'<span class=\"highlight-param\">{param}</span>')
 
-                        # 构建 Params 展示 HTML
                         params_html = ""
-                        params = info.get('params', []) or info.get('args', [])
-                        if params:
-                             params_html = f"<div style='margin-bottom:5px'><span class='tag'>Params:</span> <code style='color:#e83e8c'>{params}</code></div>"
+                        ps = info.get('param_sources', []) or []
+                        param_names = [p.get('name') for p in ps if isinstance(p, dict) and p.get('name')]
+                        if not param_names and isinstance(info.get('params', []), list):
+                            param_names = info.get('params', [])
+                        if param_names:
+                             params_html = f"<div style='margin-bottom:5px'><span class='tag'>Params:</span> <code style='color:#e83e8c'>{param_names}</code></div>"
 
-                        details_html += f"""
-                        <div class="ast-item">
-                            <div class="source-file">File: {info.get('file', 'unknown')} (Line: {info.get('loc', 0)})</div>
-                            <div style="margin-bottom:5px">
-                                <span class="method method-{info.get('method', 'UNKNOWN')}">{info.get('method', 'UNKNOWN')}</span>
-                                <span style="font-family:monospace">{info.get('raw_url', '') or info.get('url', '')}</span>
-                                <button style="display:inline-block;margin-left:6px;padding:2px 6px;font-size:12px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fafafa;" onclick="copyText('{info.get('raw_url', '') or info.get('url', '')}')">复制</button>
+                        full_context_html = ""
+                        try:
+                            fp = info.get('file')
+                            ln = int(info.get('loc') or 0)
+                            if fp and ln > 0 and os.path.exists(fp):
+                                with open(fp, 'r', encoding='utf-8', errors='ignore') as _f:
+                                    lines = _f.read().splitlines()
+                                    s2 = max(0, ln - 30)
+                                    e2 = min(len(lines), ln + 30)
+                                    buf2 = []
+                                    for idx in range(s2, e2):
+                                        prefix2 = '> ' if (idx + 1) == ln else '  '
+                                        buf2.append(f"{prefix2}{idx+1}: {lines[idx]}")
+                                    fc = "\n".join(buf2)
+                                    fc = fc.replace('<', '&lt;').replace('>', '&gt;')
+                                    url_val2 = info.get('url', '') or info.get('raw_url', '')
+                                    if url_val2 and len(str(url_val2)) > 1:
+                                        fc = fc.replace(str(url_val2), f"<span class='highlight-url'>{url_val2}</span>")
+                                    method_val2 = info.get('method', 'UNKNOWN')
+                                    if method_val2 and method_val2 != 'UNKNOWN':
+                                        fc = fc.replace(method_val2.upper(), f"<span class='highlight-method'>{method_val2.upper()}</span>")
+                                        if method_val2.lower() != method_val2.upper():
+                                            fc = fc.replace(method_val2.lower(), f"<span class='highlight-method'>{method_val2.lower()}</span>")
+                                    ps2 = info.get('param_sources', []) or []
+                                    param_names2 = [p.get('name') for p in ps2 if isinstance(p, dict) and p.get('name')]
+                                    params_list2 = param_names2 if param_names2 else (info.get('params', []) if isinstance(info.get('params', []), list) else [])
+                                    if params_list2:
+                                        for param in params_list2:
+                                            if param and isinstance(param, str) and len(param) > 1:
+                                                fc = fc.replace(param, f"<span class='highlight-param'>{param}</span>")
+                                    full_context_html = f"<details><summary>查看完整上下文</summary><div class='code-block'>{fc}</div></details>"
+                        except Exception:
+                            full_context_html = ""
+
+                        if file_is_multi:
+                            card_id = f"card_{abs(hash(info.get('file')))}"
+                            details_html += f"""
+                            <div class="ast-item">
+                                <div class="source-file">File: {info.get('file', 'unknown')} (Line: {info.get('loc', 0)})</div>
+                                <div style="margin-bottom:5px">
+                                    <span class="method method-{info.get('method', 'UNKNOWN')}">{info.get('method', 'UNKNOWN')}</span>
+                                    <span style="font-family:monospace">{info.get('raw_url', '') or info.get('url', '')}</span>
+                                    <button style="display:inline-block;margin-left:6px;padding:2px 6px;font-size:12px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fafafa;" onclick="copyText('{info.get('raw_url', '') or info.get('url', '')}')">复制</button>
+                                    <button class="open-btn" style="margin-left:8px" onclick="openFileCardTarget('{card_id}', {int(info.get('loc') or 0)})">打开文件卡片</button>
+                                </div>
+                                {params_html}
                             </div>
-                            {params_html}
-                            <div class="code-block">{context_code}</div>
-                        </div>
-                        """
+                            """
+                        else:
+                            details_html += f"""
+                            <div class="ast-item">
+                                <div class="source-file">File: {info.get('file', 'unknown')} (Line: {info.get('loc', 0)})</div>
+                                <div style="margin-bottom:5px">
+                                    <span class="method method-{info.get('method', 'UNKNOWN')}">{info.get('method', 'UNKNOWN')}</span>
+                                    <span style="font-family:monospace">{info.get('raw_url', '') or info.get('url', '')}</span>
+                                    <button style="display:inline-block;margin-left:6px;padding:2px 6px;font-size:12px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fafafa;" onclick="copyText('{info.get('raw_url', '') or info.get('url', '')}')">复制</button>
+                                </div>
+                                {params_html}
+                                <div class="code-block">{context_code}</div>
+                                {full_context_html}
+                            </div>
+                            """
                     details_html += "</details>"
 
+                # data-sources 用于筛选，同步遵循显示规则（隐藏 regex 当 AST 覆盖）
                 html_content += f"""
-                <tr data-method="{api['method']}" data-sources="{','.join(api.get('sources', []))}" data-path="{api['path'].lower()}">
+                <tr data-method="{api['method']}" data-sources="{','.join(effective_sources)}" data-path="{api['path'].lower()}">
                     <td><span class="method {method_class}">{api['method']}</span></td>
                     <td>{api['path']} <button style="display:inline-block;margin-left:6px;padding:2px 6px;font-size:12px;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:#fafafa;" onclick="copyText('{api['path']}')">复制</button></td>
                     <td>{sources_html}</td>
@@ -524,6 +861,70 @@ class ContextDeduplicator:
                         if(srcAst) srcAst.addEventListener('input', applyFilter);
                         if(srcRegex) srcRegex.addEventListener('input', applyFilter);
                         applyFilter();
+                    </script>
+                    <script>
+                        function openFileCard(id){
+                            var m = document.getElementById(id);
+                            if(!m) return;
+                            m.style.display='flex';
+                            var rightList = m.querySelectorAll('.modal-right .iface-item');
+                            rightList.forEach(function(el){ el.classList.remove('active'); });
+                            var first = m.querySelector('.modal-right .iface-item');
+                            var viewer = document.getElementById(id+'_viewer');
+                            var status = document.getElementById(id+'_status');
+                            if(first && viewer){
+                                first.classList.add('active');
+                                var v = first.getAttribute('data-view-long') || '';
+                                viewer.innerHTML = v;
+                                var loc = first.getAttribute('data-loc') || '-';
+                                if(status){ status.textContent = '当前行: ' + loc; }
+                            }
+                        }
+                        function closeFileCard(id){
+                            var m = document.getElementById(id);
+                            if(m){ m.style.display='none'; }
+                        }
+                        function openFileCardTarget(id, loc){
+                            openFileCard(id);
+                            try{
+                                var m = document.getElementById(id);
+                                var items = m ? m.querySelectorAll('.modal-right .iface-item') : [];
+                                var target = null;
+                                items.forEach(function(el){
+                                    var locs = (el.getAttribute('data-locs') || '').split(',').map(function(x){ return parseInt(x || '0'); });
+                                    if(locs.indexOf(parseInt(loc || '0')) !== -1){ target = el; }
+                                });
+                                if(target){
+                                    var v = target.getAttribute('data-view-long') || '';
+                                    var viewer = document.getElementById(id+'_viewer');
+                                    var status = document.getElementById(id+'_status');
+                                    var rightList = m.querySelectorAll('.modal-right .iface-item');
+                                    rightList.forEach(function(el){ el.classList.remove('active'); });
+                                    target.classList.add('active');
+                                    if(viewer && v){ viewer.innerHTML = v; viewer.scrollTop = 0; }
+                                    if(status){ status.textContent = '当前行: ' + (loc || '-'); }
+                                    target.scrollIntoView({behavior:'smooth', block:'center'});
+                                }
+                            }catch(e){}
+                        }
+                        function switchInterface(id, loc){
+                            var m = document.getElementById(id);
+                            if(!m) return;
+                            var ev = window.event;
+                            var t = ev && ev.currentTarget;
+                            var v = t && t.getAttribute('data-view-long');
+                            var viewer = document.getElementById(id+'_viewer');
+                            var status = document.getElementById(id+'_status');
+                            if(viewer && v){ viewer.innerHTML = v; viewer.scrollTop = 0; }
+                            var rightList = m.querySelectorAll('.modal-right .iface-item');
+                            rightList.forEach(function(el){ el.classList.remove('active'); });
+                            if(t){ t.classList.add('active'); }
+                            if(status){ status.textContent = '当前行: ' + (loc || '-'); }
+                        }
+                        function jumpOnly(id, loc){
+                            var status = document.getElementById(id+'_status');
+                            if(status){ status.textContent = '当前行: ' + (loc || '-'); }
+                        }
                     </script>
                 </div>
             </body>

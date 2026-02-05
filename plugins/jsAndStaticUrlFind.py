@@ -122,7 +122,6 @@ def get_new_url(scheme, base, root_path, path):
     elif len(path_parts) > 1:
         new_url = base + '/' + path
     else:
-<<<<<<< HEAD
         rp = (root_path or '/')
         rp_clean = rp.rstrip('/')
         p_clean = path.lstrip('/')
@@ -130,9 +129,6 @@ def get_new_url(scheme, base, root_path, path):
             new_url = base + '/' + p_clean
         else:
             new_url = base + rp + path
-=======
-        new_url = base + root_path + path
->>>>>>> 7dff1b969333716e7fe04a0d35701b4c571571d3
 
     return new_url
  
@@ -167,7 +163,6 @@ def js_and_staticUrl_find(i, headers, js_and_staticUrl_info, urls, domain, js_an
         except Exception:
             break
 
-<<<<<<< HEAD
 def _process_content_for_urls_external(content, ref_url, domain, urls, js_and_staticUrl_info):
     try:
         parsed_url = urlparse(ref_url)
@@ -241,8 +236,6 @@ def _seed_urls_from_response_log(db_path, domain, urls, js_and_staticUrl_info, l
     except Exception:
         pass
 
-=======
->>>>>>> 7dff1b969333716e7fe04a0d35701b4c571571d3
 def get_js_and_staticUrl(i, headers, js_and_staticUrl_info, url, urls, domain, js_and_staticUrl_alive_info_tmp, folder_path, filePath_url_info, db_path=None, current_depth=0, max_depth=3, ast_tasks_list=None):
     try:
         GlobalRequestCounter.increment()
@@ -600,15 +593,12 @@ def js_find_api(domain, urls, cookies, folder_path, filePath_url_info, db_path=N
     if cookies:
         headers['Cookie'] = cookies
     
-<<<<<<< HEAD
     if db_path:
         try:
             _seed_urls_from_response_log(db_path, domain, urls, js_and_staticUrl_info)
         except Exception:
             pass
     
-=======
->>>>>>> 7dff1b969333716e7fe04a0d35701b4c571571d3
     # Use standard Queue
     queue = Queue()
     # Deduplication set for queue

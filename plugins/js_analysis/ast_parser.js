@@ -2,12 +2,12 @@ const fs = require('fs');
 const parser = require('@babel/parser');
 const traverse = require('@babel/traverse').default;
 
-// 辅助函数：获取代码上下文（前后各1行）
+// 辅助函数：获取代码上下文（前后各5行）
 function getContextCode(code, loc) {
     if (!loc) return '';
     const lines = code.split(/\r?\n/);
-    const startLine = Math.max(0, loc.start.line - 2); // loc.start.line is 1-based
-    const endLine = Math.min(lines.length, loc.end.line + 1);
+    const startLine = Math.max(0, loc.start.line - 6);
+    const endLine = Math.min(lines.length, loc.end.line + 6);
     // 添加行号前缀
     return lines.slice(startLine, endLine).map((line, idx) => {
         const lineNum = startLine + idx + 1;
