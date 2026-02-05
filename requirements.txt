@@ -1,0 +1,7 @@
+beautifulsoup4
+Requests
+selenium
+tldextract
+openpyxl
+PyYAML
+regex

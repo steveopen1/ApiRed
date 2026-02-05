@@ -1,0 +1,14 @@
+# ChkApi Configuration File
+
+# AI Engine Configuration
+ai_config:
+  # API Key for the LLM service (e.g., OpenAI, DeepSeek)
+  api_key: "sk-cbtd8ktoea8j2rtn04jyzu3p1orbs2rospdqjzhjcxgqk41z"
+  
+  # Base URL for the API (default: https://api.openai.com/v1)
+  # For DeepSeek: https://api.deepseek.com/v1
+  base_url: "https://api.xiaomimimo.com/v1"
+  
+  # Model name to use (default: gpt-3.5-turbo)
+  # Examples: gpt-4, deepseek-chat
+  model: "mimo-v2-flash"
