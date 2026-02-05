@@ -6,21 +6,25 @@ from hashlib import sha256
 import shutil
 import sqlite3
 import yaml
+import json
+import hashlib
+import os
 
 try:
     from plugins.nodeCommon import *
 except Exception as e:
     from nodeCommon import *
 
+unified_rules = []
 try:
-    with open('./plugins/rules.yaml', 'r', encoding='utf-8') as file:
-        unified_rules = yaml.safe_load(file).get('rules', [])
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    cfg_path = os.path.join(root_dir, 'config.yaml')
+    if os.path.exists(cfg_path):
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+            unified_rules = (cfg.get('rules') or [])
 except Exception:
-    try:
-        with open('./rules.yaml', 'r', encoding='utf-8') as file:
-            unified_rules = yaml.safe_load(file).get('rules', [])
-    except Exception:
-        unified_rules = []
+    pass
 
 def reconstruct_url_from_filename(filename):
     """
