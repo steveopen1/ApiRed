@@ -1,0 +1,277 @@
+rules:
+- id: shiro
+  name: Shiro
+  group: Fingerprint
+  pattern: (=deleteMe|rememberMe=)
+  severity: medium
+  enabled: true
+  source: custom
+- id: json_web_token
+  name: JSON Web Token
+  group: Fingerprint
+  pattern: (eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}|eyJ[A-Za-z0-9_\/+-]{10,}\.[A-Za-z0-9._\/+-]{10,}|eyJ[A-Za-z0-9_/+\-]{10,}={0,2}\.[A-Za-z0-9_/+\-\\]{15,}={0,2}\.[A-Za-z0-9_/+\-\\]{10,}={0,2})
+  severity: medium
+  enabled: true
+  source: custom
+- id: swagger_ui
+  name: Swagger UI
+  group: Fingerprint
+  pattern: ((swagger-ui.html)|(\"swagger\":)|(Swagger UI)|(swaggerUi)|(swaggerVersion))
+  severity: medium
+  enabled: true
+  source: custom
+- id: ueditor
+  name: Ueditor
+  group: Fingerprint
+  pattern: (ueditor\.(config|all)\.js)
+  severity: medium
+  enabled: true
+  source: custom
+- id: druid
+  name: Druid
+  group: Fingerprint
+  pattern: (Druid Stat Index)
+  severity: medium
+  enabled: true
+  source: custom
+- id: java_deserialization
+  name: Java Deserialization
+  group: Maybe Vulnerability
+  pattern: (javax\.faces\.ViewState)
+  severity: medium
+  enabled: true
+  source: custom
+- id: url_as_a_value
+  name: URL As A Value
+  group: Maybe Vulnerability
+  pattern: (=(https?)(://|%3a%2f%2f))
+  severity: medium
+  enabled: true
+  source: custom
+- id: upload_form
+  name: Upload Form
+  group: Maybe Vulnerability
+  pattern: (type\=\"file\")
+  severity: medium
+  enabled: true
+  source: custom
+- id: chinese_mobile_number
+  name: Chinese Mobile Number
+  group: Basic Information
+  pattern: '[^\w]((?:(?:\+|00)86)?1(?:(?:3[\d])|(?:4[5-79])|(?:5[0-35-9])|(?:6[5-7])|(?:7[0-8])|(?:8[\d])|(?:9[189]))\d{8})[^\w]'
+  severity: medium
+  enabled: true
+  source: custom
+- id: internal_ip_address
+  name: Internal IP Address
+  group: Basic Information
+  pattern: '[^0-9]((127\.0\.0\.1)|(10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(172\.((1[6-9])|(2\d)|(3[01]))\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3}))'
+  severity: medium
+  enabled: true
+  source: custom
+- id: mac_address
+  name: MAC Address
+  group: Basic Information
+  pattern: (^([a-fA-F0-9]{2}(:[a-fA-F0-9]{2}){5})|[^a-zA-Z0-9]([a-fA-F0-9]{2}(:[a-fA-F0-9]{2}){5}))
+  severity: medium
+  enabled: true
+  source: custom
+- id: cloud_key
+  name: Cloud Key
+  group: Sensitive Information
+  pattern: (((access)(|-|_)(key)(|-|_)(id|secret))|(LTAI[a-z0-9]{12,20})|\bLTAI[A-Za-z\d]{12,30}\b)
+  severity: medium
+  enabled: true
+  source: custom
+- id: username_field
+  name: Username Field
+  group: Sensitive Information
+  pattern: ((|'|")(|[\w]{1,10})(([u](ser|name|sername))|(account)|((((create|update)((d|r)|(by|on|at)))|(creator))))(|[\w]{1,10})(|'|")(:|=)(
+    |)('|")(.*?)('|")(|,))
+  severity: medium
+  enabled: true
+  source: custom
+- id: wecom_key
+  name: WeCom Key
+  group: Sensitive Information
+  pattern: ((corp)(id|secret))
+  severity: medium
+  enabled: true
+  source: custom
+- id: jdbc_connection
+  name: JDBC Connection
+  group: Sensitive Information
+  pattern: (jdbc:[a-z:]+://[a-z0-9\.\-_:;=/@?,&]+)
+  severity: medium
+  enabled: true
+  source: custom
+- id: authorization_header
+  name: Authorization Header
+  group: Sensitive Information
+  pattern: ((basic [a-z0-9=:_\+\/-]{5,100})|(bearer [a-z0-9_.=:_\+\/-]{5,100})|[Bb]earer\s+[a-zA-Z0-9\-=._+/\\]{20,500}|[Bb]asic\s+[A-Za-z0-9+/]{18,}={0,2}|['''\[]*[Aa]uthorization['''\]]*\s*[:=]\s*[''"]?\b(?:[Tt]oken\s+)?[a-zA-Z0-9\-_+/]{20,500}[''']?)
+  severity: medium
+  enabled: true
+  source: custom
+# - id: sensitive_field
+#   name: Sensitive Field
+#   group: Sensitive Information
+#   pattern: ((\[)?('|")?([\w]{0,10})((key)|(secret)|(token)|(config)|(auth)|(access)|(admin))([\w]{0,10})('|")?(\])?(
+#     |)(:|=)( |)('|")(.*?)('|")(|,))
+#   severity: medium
+#   enabled: true
+#   source: custom
+- id: source_map
+  name: Source Map
+  group: Other
+  pattern: (\.js\.map|//# sourceMappingURL=.*\.map|chunk\.\w+\.js\.map|bundle\.\w+\.js\.map|\w+-\w+\.js\.map|"version":\s*3.*"sources":\s*\[.*"mappings":\s*"[A-Za-z0-9+/])
+  severity: medium
+  enabled: true
+  source: custom
+- id: url_schemes
+  name: URL Schemes
+  group: Other
+  pattern: ((?![http]|[https])(([-A-Za-z0-9]{1,20})://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]))
+  severity: medium
+  enabled: true
+  source: custom
+- id: router_push
+  name: Router Push
+  group: Other
+  pattern: (\$router\.push)
+  severity: medium
+  enabled: true
+  source: custom
+- id: id_card
+  name: Chinese ID Card
+  group: Sensitive
+  pattern: (?<![0-9])((\d{8}(0\d|10|11|12)([0-2]\d|30|31)\d{3})|([1-9]\d{5}(19|20)\d{2}(0[1-9]|10|11|12)([0-2]\d|30|31)\d{3}[0-9Xx]))(?![0-9])
+  severity: high
+  enabled: true
+  source: custom
+- id: phone
+  name: Phone
+  group: Sensitive
+  pattern: \b1[3-9]\d{9}\b
+  severity: low
+  enabled: true
+  source: custom
+- id: QCloud_AK_ID
+  name: Qcloud Ak Id
+  group: Sensitive
+  pattern: \bAKID[A-Za-z\d]{13,40}\b
+  severity: high
+  enabled: true
+  source: custom
+- id: JDCloud_AK_ID
+  name: Jdcloud Ak Id
+  group: Sensitive
+  pattern: \bJDC_[0-9A-Z]{25,40}\b
+  severity: high
+  enabled: true
+  source: custom
+- id: AWS_AK_ID
+  name: Aws Ak Id
+  group: Sensitive
+  pattern: '["''](?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}["'']'
+  severity: high
+  enabled: true
+  source: custom
+- id: VolcanoEngine_AK_ID
+  name: Volcanoengine Ak Id
+  group: Sensitive
+  pattern: \b(?:AKLT|AKTP)[a-zA-Z0-9]{35,50}\b
+  severity: high
+  enabled: true
+  source: custom
+- id: Kingsoft_AK_ID
+  name: Kingsoft Ak Id
+  group: Sensitive
+  pattern: \bAKLT[a-zA-Z0-9-_]{16,28}\b
+  severity: high
+  enabled: true
+  source: custom
+- id: GCP_AK_ID
+  name: Gcp Ak Id
+  group: Sensitive
+  pattern: \bAIza[0-9A-Za-z_\-]{35}\b
+  severity: high
+  enabled: true
+  source: custom
+- id: private_key
+  name: Private Key
+  group: Sensitive
+  pattern: '-----\s*?BEGIN[ A-Z0-9_-]*?PRIVATE KEY\s*?-----[a-zA-Z0-9\/\n\r=+]*-----\s*?END[
+    A-Z0-9_-]*? PRIVATE KEY\s*?-----'
+  severity: high
+  enabled: true
+  source: custom
+- id: gitlab_v2_token
+  name: Gitlab V2 Token
+  group: Sensitive
+  pattern: \b(glpat-[a-zA-Z0-9\-=_]{20,22})\b
+  severity: high
+  enabled: true
+  source: custom
+- id: github_token
+  name: Github Token
+  group: Sensitive
+  pattern: \b((?:ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255})\b
+  severity: high
+  enabled: true
+  source: custom
+- id: qcloud_api_gateway_appkey
+  name: Qcloud Api Gateway Appkey
+  group: Sensitive
+  pattern: \bAPID[a-zA-Z0-9]{32,42}\b
+  severity: medium
+  enabled: true
+  source: custom
+- id: wechat_corpid
+  name: Wechat ID
+  group: Sensitive
+  pattern: (['''](wx[a-z0-9]{15,18})[''']|['''](ww[a-z0-9]{15,18})[''']|['''](gh_[a-z0-9]{11,13})['''])
+  severity: low
+  enabled: true
+  source: custom
+- id: password
+  name: Password
+  group: Sensitive Information
+  pattern: (?i)(?:admin_?pass|password|[a-z]{3,15}_?password|user_?pass|user_?pwd|admin_?pwd|[\w]{0,10}pass[\w]{0,10})\\?['"]*\s*[:=]\s*\\?['"][^'"]{1,100}\\?['"]
+  severity: high
+  enabled: true
+  source: custom
+- id: webhook_url
+  name: Webhook URL
+  group: Sensitive
+  pattern: (\bhttps://qyapi.weixin.qq.com/cgi-bin/webhook/send\?key=[a-zA-Z0-9\-]{25,50}\b|\bhttps://oapi.dingtalk.com/robot/send\?access_token=[a-z0-9]{50,80}\b|\bhttps://open.feishu.cn/open-apis/bot/v2/hook/[a-z0-9\-]{25,50}\b|\bhttps://hooks.slack.com/services/[a-zA-Z0-9\-_]{6,12}/[a-zA-Z0-9\-_]{6,12}/[a-zA-Z0-9\-_]{15,24}\b)
+  severity: medium
+  enabled: true
+  source: custom
+- id: grafana_token
+  name: Grafana Token
+  group: Sensitive
+  pattern: (\beyJrIjoi[a-zA-Z0-9\-_+/]{50,100}={0,2}\b|\bglc_[A-Za-z0-9\-_+/]{32,200}={0,2}\b|\bglsa_[A-Za-z0-9]{32}_[A-Fa-f0-9]{8}\b)
+  severity: medium
+  enabled: true
+  source: custom
+- id: app_key
+  name: App Key
+  group: Sensitive
+  pattern: \b(?:VUE|APP|REACT)_[A-Z_0-9]{1,15}_(?:KEY|PASS|PASSWORD|TOKEN|APIKEY)['"]*[:=]"(?:[A-Za-z0-9_\-]{15,50}|[a-z0-9/+]{50,100}==?)"
+  severity: medium
+  enabled: true
+  source: custom
+- id: js_wrapped_html
+  name: JS Wrapped HTML Page
+  group: Sensitive Information
+  pattern: (?i)(['"`]\s*(?:<!DOCTYPE\s+html|<html|<head|<body)[\s\S]{100,}</html>\s*['"`])
+  severity: high
+  enabled: true
+  source: custom
+- id: js_wrapped_html_url
+  name: JS Wrapped HTML Filename
+  group: Sensitive Information
+  pattern: \.html-[a-f0-9]{6,10}\.js
+  severity: high
+  enabled: true
+  source: custom
