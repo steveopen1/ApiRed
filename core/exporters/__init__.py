@@ -11,6 +11,11 @@ from .report_exporter import (
     ReportExporter,
     ExportConfig
 )
+from .attack_chain_exporter import (
+    AttackChainExporter,
+    AttackChainNode,
+    AttackChainEdge
+)
 
 __all__ = [
     'OpenAPIExporter',
@@ -18,5 +23,8 @@ __all__ = [
     'ExcelExporter',
     'HTMLReporter',
     'ReportExporter',
-    'ExportConfig'
+    'ExportConfig',
+    'AttackChainExporter',
+    'AttackChainNode',
+    'AttackChainEdge'
 ]

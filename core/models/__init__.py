@@ -221,3 +221,25 @@ class StageStats:
             'error_count': self.error_count,
             'success_rate': self.success_rate
         }
+
+
+@dataclass
+class AttackChain:
+    """攻击链"""
+    chain_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    entry_point: str = ""
+    api_path: List[str] = field(default_factory=list)
+    vulnerability: str = ""
+    severity: str = ""
+    remediation: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            'chain_id': self.chain_id,
+            'entry_point': self.entry_point,
+            'api_path': self.api_path,
+            'vulnerability': self.vulnerability,
+            'severity': self.severity,
+            'remediation': self.remediation
+        }

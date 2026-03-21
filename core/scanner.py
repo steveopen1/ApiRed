@@ -40,6 +40,15 @@ class ScanCheckpoint:
 
 
 @dataclass
+class MultiTargetConfig:
+    """多目标扫描配置"""
+    targets: List[str] = field(default_factory=list)
+    target_file: Optional[str] = None
+    max_concurrent_targets: int = 5
+    share_cache: bool = True
+
+
+@dataclass
 class ScannerConfig:
     """扫描器配置"""
     target: str
@@ -56,6 +65,9 @@ class ScannerConfig:
     output_format: str = "json"
     resume: bool = False
     checkpoint_file: Optional[str] = None
+    targets: List[str] = field(default_factory=list)
+    concurrent_targets: int = 5
+    aggregate: bool = False
 
 
 class ChkApiScanner:
@@ -701,6 +713,139 @@ class ChkApiScanner:
     def is_running(self) -> bool:
         """是否正在运行"""
         return self._running
+    
+    async def run_single_target(self, target: str) -> ScanResult:
+        """扫描单个目标"""
+        config = ScannerConfig(
+            target=target,
+            cookies=self.config.cookies,
+            chrome=self.config.chrome,
+            attack_mode=self.config.attack_mode,
+            no_api_scan=self.config.no_api_scan,
+            dedupe=self.config.dedupe,
+            store=self.config.store,
+            proxy=self.config.proxy,
+            js_depth=self.config.js_depth,
+            ai_scan=self.config.ai_scan,
+            concurrency=self.config.concurrency,
+            output_format=self.config.output_format,
+            resume=self.config.resume
+        )
+        scanner = ChkApiScanner(config)
+        return await scanner.run()
+    
+    async def run_multiple(self, targets: List[str]) -> List[ScanResult]:
+        """扫描多个目标"""
+        semaphore = asyncio.Semaphore(self.config.concurrency)
+        
+        async def scan_with_limit(target):
+            async with semaphore:
+                return await self.run_single_target(target)
+        
+        results = await asyncio.gather(*[scan_with_limit(t) for t in targets], return_exceptions=True)
+        
+        processed_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                error_result = ScanResult(
+                    target_url=targets[i],
+                    status="failed",
+                    errors=[str(result)]
+                )
+                processed_results.append(error_result)
+            else:
+                processed_results.append(result)
+        
+        return processed_results
+
+
+class ScanResultAggregator:
+    """扫描结果聚合器"""
+    
+    def aggregate(self, results: List[ScanResult]) -> Dict[str, Any]:
+        """聚合多个扫描结果"""
+        high_value_endpoints = self._aggregate_high_value_endpoints(results)
+        vulnerability_summary = self._aggregate_vulnerabilities(results)
+        
+        return {
+            'total_targets': len(results),
+            'successful_scans': sum(1 for r in results if r.status != "failed" and not r.errors),
+            'failed_scans': sum(1 for r in results if r.errors or r.status == "failed"),
+            'total_apis': sum(r.total_apis for r in results),
+            'alive_apis': sum(r.alive_apis for r in results),
+            'high_value_apis': sum(r.high_value_apis for r in results),
+            'total_vulnerabilities': sum(len(r.vulnerabilities) for r in results),
+            'total_sensitive_data': sum(len(r.sensitive_data) for r in results),
+            'high_value_endpoints': high_value_endpoints,
+            'vulnerability_summary': vulnerability_summary,
+            'target_results': [r.to_dict() for r in results]
+        }
+    
+    def _aggregate_high_value_endpoints(self, results: List[ScanResult]) -> List[Dict[str, Any]]:
+        """聚合高价值端点"""
+        high_value_endpoints = []
+        seen_urls = set()
+        
+        for result in results:
+            for endpoint in result.api_endpoints:
+                if endpoint.is_high_value and endpoint.full_url not in seen_urls:
+                    seen_urls.add(endpoint.full_url)
+                    high_value_endpoints.append({
+                        'target': result.target_url,
+                        'path': endpoint.path,
+                        'method': endpoint.method,
+                        'full_url': endpoint.full_url,
+                        'api_id': endpoint.api_id
+                    })
+        
+        return high_value_endpoints[:50]
+    
+    def _aggregate_vulnerabilities(self, results: List[ScanResult]) -> Dict[str, Any]:
+        """聚合漏洞信息"""
+        vuln_by_type: Dict[str, int] = {}
+        vuln_by_severity: Dict[str, int] = {}
+        vuln_by_target: Dict[str, List[str]] = {}
+        
+        for result in results:
+            for vuln in result.vulnerabilities:
+                vuln_type = vuln.vuln_type
+                severity = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+                
+                vuln_by_type[vuln_type] = vuln_by_type.get(vuln_type, 0) + 1
+                vuln_by_severity[severity] = vuln_by_severity.get(severity, 0) + 1
+                
+                if result.target_url not in vuln_by_target:
+                    vuln_by_target[result.target_url] = []
+                vuln_by_target[result.target_url].append(vuln_type)
+        
+        return {
+            'by_type': vuln_by_type,
+            'by_severity': vuln_by_severity,
+            'by_target': vuln_by_target
+        }
+
+
+async def run_multi_target(targets: List[str], config: MultiTargetConfig) -> List[ScanResult]:
+    """
+    并行扫描多个目标
+    
+    Args:
+        targets: 目标 URL 列表
+        config: 多目标配置
+    
+    Returns:
+        所有扫描结果的列表
+    """
+    scanner_config = ScannerConfig(
+        target=targets[0] if targets else "",
+        cookies="",
+        chrome=True,
+        attack_mode="all",
+        concurrency=config.max_concurrent_targets
+    )
+    
+    scanner = ChkApiScanner(scanner_config)
+    return await scanner.run_multiple(targets)
 
 
 async def run_scan(config: ScannerConfig) -> ScanResult:
