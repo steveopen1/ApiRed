@@ -23,7 +23,7 @@ from .analyzers.response_cluster import ResponseCluster
 from .analyzers.sensitive_detector import TwoTierSensitiveDetector
 from .testers.fuzz_tester import FuzzTester
 from .testers.vulnerability_tester import VulnerabilityTester
-from .models import ScanResult, APIEndpoint, Vulnerability, SensitiveData
+from .models import ScanResult, APIEndpoint, Vulnerability, SensitiveData, APIStatus
 
 
 @dataclass
@@ -345,19 +345,29 @@ class ChkApiScanner:
                         method=method
                     )
                     
-                    self.response_cluster.add_response(endpoint.api_id, response)
+                    from core.analyzers.response_cluster import TaskResult as RCTaskResult
+                    rc_task_result = RCTaskResult(
+                        status_code=response.status_code,
+                        content=response.content.encode() if isinstance(response.content, str) else response.content,
+                        content_hash=response.content_hash
+                    )
+                    self.response_cluster.add_response(endpoint.api_id, rc_task_result)
                     
-                    if not self.response_cluster.is_baseline_404(endpoint.api_id, response):
+                    if not self.response_cluster.is_baseline_404(endpoint.api_id):
                         endpoint.method = method
-                        endpoint.status = APIStatus.ALIVE.value
+                        endpoint.status = APIStatus.ALIVE
                         tested_endpoints.append(endpoint)
                         
-                        self.api_scorer.add_evidence(endpoint, 'http_test', response)
+                        self.api_scorer.add_evidence(
+                            endpoint.full_url,
+                            'http_test',
+                            {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                        )
                         break
                 except Exception:
                     error_count += 1
         
-        high_value_apis = self.api_scorer.get_high_value_apis() if self.api_scorer else []
+        high_value_apis = self.api_scorer.get_high_value() if self.api_scorer else []
         
         end_time = time.time()
         self._record_stage_stats(
@@ -611,8 +621,8 @@ class ChkApiScanner:
                 })
         
         tested_apis = []
-        if self.api_scorer and hasattr(self.api_scorer, 'get_high_value_apis'):
-            for api in self.api_scorer.get_high_value_apis():
+        if self.api_scorer and hasattr(self.api_scorer, 'get_high_value'):
+            for api in self.api_scorer.get_high_value():
                 tested_apis.append({
                     'path': api.path,
                     'method': api.method,

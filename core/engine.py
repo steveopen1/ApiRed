@@ -299,18 +299,28 @@ class ScanEngine:
                     endpoint.full_url,
                     method=endpoint.method
                 )
-                self._response_cluster.add_response(endpoint.api_id, response)
+                from .analyzers.response_cluster import TaskResult as RCTaskResult
+                rc_task_result = RCTaskResult(
+                    status_code=response.status_code,
+                    content=response.content.encode() if isinstance(response.content, str) else response.content,
+                    content_hash=response.content_hash
+                )
+                self._response_cluster.add_response(endpoint.api_id, rc_task_result)
                 
-                if not self._response_cluster.is_baseline_404(endpoint.api_id, response):
+                if not self._response_cluster.is_baseline_404(endpoint.api_id):
                     from .models import APIStatus
                     endpoint.status = APIStatus.ALIVE
                     
                     if self._api_scorer:
-                        self._api_scorer.add_evidence(endpoint, 'http_test', response)
+                        self._api_scorer.add_evidence(
+                            endpoint.full_url,
+                            'http_test',
+                            {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                        )
             except Exception:
                 pass
         
-        high_value_apis = self._api_scorer.get_high_value_apis() if self._api_scorer else []
+        high_value_apis = self._api_scorer.get_high_value() if self._api_scorer else []
         
         if self.result:
             self.result.alive_apis = len(high_value_apis)
