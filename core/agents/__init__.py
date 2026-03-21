@@ -7,6 +7,9 @@ from .base import BaseAgent, AgentResult, AgentConfig
 from .scanner_agent import ScannerAgent
 from .analyzer_agent import AnalyzerAgent
 from .tester_agent import TesterAgent
+from .orchestrator import Orchestrator, AgentInterface, ScanContext, Task, TaskStatus
+from .discover_agent import DiscoverAgent
+from .test_agent import TestAgent
 
 __all__ = [
     'BaseAgent',
@@ -15,4 +18,11 @@ __all__ = [
     'ScannerAgent',
     'AnalyzerAgent',
     'TesterAgent',
+    'Orchestrator',
+    'AgentInterface',
+    'ScanContext',
+    'Task',
+    'TaskStatus',
+    'DiscoverAgent',
+    'TestAgent',
 ]
