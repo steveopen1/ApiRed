@@ -29,9 +29,11 @@ AI_ENV_VARS = {
     'DEEPSEEK_API_KEY': 'DeepSeek API Key',
     'OPENAI_API_KEY': 'OpenAI API Key',
     'ANTHROPIC_API_KEY': 'Anthropic API Key',
+    'CUSTOM_API_KEY': 'Custom API Key',
     'AI_PROVIDER': 'AI Provider (deepseek/openai/anthropic/custom)',
-    'AI_BASE_URL': 'AI Base URL (支持自定义API)',
-    'AI_MODEL': 'AI Model ID (支持自定义模型)',
+    'AI_BASE_URL': 'AI Base URL',
+    'AI_MODEL': 'AI Model ID',
+    'AI_API_FORMAT': 'API Format (openai/anthropic)',
 }
 
 
@@ -67,6 +69,7 @@ def get_ai_config() -> Dict[str, str]:
         ),
         'base_url': os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
         'model': os.environ.get('AI_MODEL', 'deepseek-chat'),
+        'api_format': os.environ.get('AI_API_FORMAT', 'openai'),
     }
 
 
@@ -87,38 +90,40 @@ def print_ai_config_guide():
 ║    Provider: {provider}                                           ║
 ║    Base URL: {base_url}                                            ║
 ║    Model: {model}                                                ║
+║    API Format: {api_format}                                         ║
 ║    API Key: {api_key_display}                                    ║
 ║                                                                        ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  方式一: 使用 DeepSeek (推荐)                                          ║
+║  方式一: DeepSeek (推荐)                                            ║
 ║    export DEEPSEEK_API_KEY="sk-xxxxxxx"                             ║
+║    export AI_BASE_URL="https://api.deepseek.com/v1"                 ║
+║    export AI_MODEL="deepseek-chat"                                 ║
+║    export AI_API_FORMAT="openai"                                   ║
 ║                                                                        ║
-║  方式二: 使用 OpenAI                                                  ║
-║    export OPENAI_API_KEY="sk-xxxxxxx"                               ║
-║    export AI_BASE_URL="https://api.openai.com/v1"                     ║
-║    export AI_MODEL="gpt-4"                                          ║
+║  方式二: OpenAI                                                    ║
+║    export OPENAI_API_KEY="sk-xxxxxxx"                             ║
+║    export AI_BASE_URL="https://api.openai.com/v1"                   ║
+║    export AI_MODEL="gpt-4"                                        ║
+║    export AI_API_FORMAT="openai"                                     ║
 ║                                                                        ║
-║  方式三: 使用自定义 API (支持任意 LLM)                               ║
-║    export CUSTOM_API_KEY="your-api-key"                              ║
-║    export AI_BASE_URL="https://your-api.com/v1"                      ║
-║    export AI_MODEL="any-model-id"                                    ║
-║                                                                        ║
-║  方式四: 使用 Anthropic                                              ║
+║  方式三: Anthropic (Claude)                                        ║
 ║    export ANTHROPIC_API_KEY="sk-ant-xxxxxxx"                        ║
-║    export AI_BASE_URL="https://api.anthropic.com"                     ║
-║    export AI_MODEL="claude-3-sonnet"                               ║
+║    export AI_BASE_URL="https://api.anthropic.com"                   ║
+║    export AI_MODEL="claude-3-sonnet"                              ║
+║    export AI_API_FORMAT="anthropic"                                ║
 ║                                                                        ║
-║  方式五: 使用硅基流动/LocalAI 等第三方                               ║
-║    export CUSTOM_API_KEY="any-api-key"                               ║
-║    export AI_BASE_URL="http://your-endpoint/v1"                      ║
-║    export AI_MODEL="any-model-id"                                   ║
+║  方式四: 自定义 API (硅基流动/LocalAI/Ollama 等)              ║
+║    export CUSTOM_API_KEY="your-api-key"                             ║
+║    export AI_BASE_URL="https://your-api.com/v1"                   ║
+║    export AI_MODEL="Qwen/Qwen2.5-72B-Instruct"                    ║
+║    export AI_API_FORMAT="openai"    # 或 anthropic                     ║
 ║                                                                        ║
-║  提示: 设置 AI_PROVIDER=custom 使用自定义配置                         ║
+║  提示: AI_API_FORMAT 支持: openai / anthropic                       ║
 ║                                                                        ║
 ║  查看更多: https://github.com/chaitin/MonkeyCodeOfficialPlugins     ║
 ║                                                                        ║
-║  或者使用传统模式 (无需配置 AI):                                      ║
+║  或者使用传统模式 (无需配置 AI):                                  ║
 ║     python main.py scan -u http://example.com                         ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -126,6 +131,7 @@ def print_ai_config_guide():
         provider=current_config['provider'],
         base_url=current_config['base_url'],
         model=current_config['model'],
+        api_format=current_config['api_format'],
         api_key_display=api_key_display
     ))
 
