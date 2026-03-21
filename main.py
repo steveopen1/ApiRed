@@ -72,7 +72,7 @@ Examples:
         scan_parser.add_argument('--aggregate', action='store_true',
                                   help='Aggregate results from multiple targets')
         scan_parser.add_argument('--output', '-o', help='Output directory')
-        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html'], default='json')
+        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html', 'csv'], default='json')
         scan_parser.add_argument('--verbose', '-v', action='store_true')
 
         dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')

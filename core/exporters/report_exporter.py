@@ -124,7 +124,126 @@ class OpenAPIExporter:
                 "description": param.get('description', '')
             })
         
-        return params
+        return params 
+
+
+class CSVExporter:
+    """CSV 格式导出器
+    参考 URLFinder 的 CSV 导出格式
+    """
+
+    def export(self, data: Dict, output_path: str) -> bool:
+        """导出为 CSV 格式"""
+        try:
+            lines = []
+
+            lines.extend(self._export_summary_csv(data))
+            lines.append("")
+            lines.extend(self._export_apis_csv(data))
+            lines.append("")
+            lines.extend(self._export_vulnerabilities_csv(data))
+            lines.append("")
+            lines.extend(self._export_sensitive_csv(data))
+
+            with open(output_path, 'w', encoding='utf-8-sig', newline='') as f:
+                f.write('\n'.join(lines))
+
+            return True
+        except Exception as e:
+            print(f"CSV export error: {e}")
+            return False
+
+    def _export_summary_csv(self, data: Dict) -> List[str]:
+        """导出摘要为 CSV"""
+        lines = ["# ApiRed Scan Summary"]
+
+        summary = data.get('summary', {})
+        lines.append(f"Target,{data.get('target_url', '')}")
+        lines.append(f"Scan Time,{data.get('start_time', '')}")
+        lines.append(f"Duration,{data.get('duration', 0):.2f}s")
+        lines.append("")
+        lines.append("# API Statistics")
+        lines.append(f"Total APIs,{summary.get('total_apis', 0)}")
+        lines.append(f"Alive APIs,{summary.get('alive_apis', 0)}")
+        lines.append(f"High Value APIs,{summary.get('high_value_apis', 0)}")
+        lines.append(f"Vulnerabilities,{len(data.get('vulnerabilities', []))}")
+        lines.append(f"Sensitive Data,{len(data.get('sensitive_data', []))}")
+
+        return lines
+
+    def _export_apis_csv(self, data: Dict) -> List[str]:
+        """导出 API 列表为 CSV"""
+        lines = ["# API Endpoints"]
+
+        headers = ["URL", "Method", "Status", "Score", "Service", "Tags", "Source"]
+        lines.append(','.join(headers))
+
+        apis = data.get('api_endpoints', [])
+        for api in apis:
+            row = [
+                self._escape_csv(api.get('full_url', api.get('path', ''))),
+                api.get('method', 'GET'),
+                str(api.get('status', '')),
+                str(api.get('score', 0)),
+                self._escape_csv(api.get('service_key', '')),
+                self._escape_csv(', '.join(api.get('tags', []))),
+                api.get('source', '')
+            ]
+            lines.append(','.join(row))
+
+        return lines
+
+    def _export_vulnerabilities_csv(self, data: Dict) -> List[str]:
+        """导出漏洞为 CSV"""
+        lines = ["# Vulnerabilities"]
+
+        headers = ["Type", "Severity", "URL", "Method", "Evidence", "Payload", "Remediation"]
+        lines.append(','.join(headers))
+
+        vulns = data.get('vulnerabilities', [])
+        for vuln in vulns:
+            row = [
+                self._escape_csv(vuln.get('vuln_type', '')),
+                self._escape_csv(vuln.get('severity', '')),
+                self._escape_csv(vuln.get('url', '')),
+                vuln.get('method', ''),
+                self._escape_csv(vuln.get('evidence', '')[:200]),
+                self._escape_csv(vuln.get('payload', '')[:100]),
+                self._escape_csv(vuln.get('remediation', '')[:200])
+            ]
+            lines.append(','.join(row))
+
+        return lines
+
+    def _export_sensitive_csv(self, data: Dict) -> List[str]:
+        """导出敏感信息为 CSV"""
+        lines = ["# Sensitive Data"]
+
+        headers = ["Type", "Severity", "URL", "Content Type", "Matched Rule", "Context"]
+        lines.append(','.join(headers))
+
+        sensitive = data.get('sensitive_data', [])
+        for item in sensitive:
+            row = [
+                self._escape_csv(item.get('data_type', item.get('type', ''))),
+                self._escape_csv(item.get('severity', '')),
+                self._escape_csv(item.get('location', item.get('url', ''))),
+                self._escape_csv(item.get('content_type', '')),
+                self._escape_csv(item.get('rule_name', '')),
+                self._escape_csv(item.get('context', '')[:200])
+            ]
+            lines.append(','.join(row))
+
+        return lines
+
+    def _escape_csv(self, value: str) -> str:
+        """转义 CSV 值"""
+        if not value:
+            return ''
+        value = str(value)
+        if any(c in value for c in [',', '"', '\n', '\r']):
+            return '"' + value.replace('"', '""') + '"'
+        return value
 
 
 class JSONExporter:
@@ -511,6 +630,7 @@ class ReportExporter:
             'openapi': OpenAPIExporter(),
             'json': JSONExporter(),
             'excel': ExcelExporter(),
+            'csv': CSVExporter(),
             'html': HTMLReporter(),
             'junit': JUnitExporter()
         }
@@ -519,7 +639,7 @@ class ReportExporter:
         self,
         scan_result: Dict,
         target: str,
-        formats: List[str] = None
+        formats: Optional[List[str]] = None
     ) -> Dict[str, str]:
         """导出多种格式报告"""
         formats = formats or ['json', 'html']
