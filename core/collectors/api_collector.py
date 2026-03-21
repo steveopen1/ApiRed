@@ -1,11 +1,12 @@
 """
 API Collector Module
 API采集模块
+参考 0x727/ChkApi 实现的完整功能
 """
 
 import re
 import json
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, urljoin
 
@@ -21,8 +22,127 @@ class APIFindResult:
     url_type: str = "api_path"
 
 
+class ContentTypeDetector:
+    """
+    Content-Type 检测器
+    参考 0x727/ChkApi 的 contentTypeList
+    """
+    
+    CONTENT_TYPE_MAP = {
+        'text/html': 'html',
+        'application/json': 'json',
+        'text/plain': 'txt',
+        'text/xml': 'xml',
+        'text/javascript': 'js',
+        'image/gif': 'gif',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/x-icon': 'ico',
+        'application/xhtml+xml': 'xhtml',
+        'application/xml': 'xml',
+        'application/atom+xml': 'atom',
+        'application/octet-stream': 'bin',
+        'application/pdf': 'pdf',
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/zip': 'zip',
+        'application/x-zip-compressed': 'zip',
+        'application/x-tar': 'tar',
+        'multipart/form-data': 'form',
+        'application/ld+json': 'json-ld',
+        'application/javascript': 'js',
+        'text/css': 'css',
+        'application/xml-dtd': 'xml',
+    }
+    
+    @classmethod
+    def get_tag(cls, content_type: str) -> str:
+        """从 content-type 获取标签"""
+        for key, tag in cls.CONTENT_TYPE_MAP.items():
+            if key in content_type.lower():
+                return tag
+        return 'unknown'
+
+
+class URLBlacklist:
+    """
+    URL 黑名单过滤器
+    参考 0x727/ChkApi 的黑名单逻辑
+    """
+    
+    STATIC_FILE_EXT_BLACKLIST = [
+        '.js', '.css', '.scss', '.sass', '.less',
+        '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.webp', '.bmp', '.icon',
+        '.woff', '.woff2', '.ttf', '.eot', '.otf',
+        '.mp4', '.mp3', '.avi', '.mov', '.webm', '.flv', '.wmv',
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+        '.zip', '.tar', '.gz', '.rar', '.7z',
+        '.exe', '.dll', '.so', '.dmg', '.app',
+        '.swf', '.fla', '.psd', '.ai', '.eps',
+        '.mpp', '.vsd', '.vsdx', '.pub',
+    ]
+    
+    URL_BLACKLIST = [
+        'data:', 'blob:', 'javascript:', 'mailto:', 'tel:',
+        '#', '//', 'about:', 'chrome:', 'view-source:',
+    ]
+    
+    URL_EXT_BLACKLIST = [
+        '.html', '.htm', '.jsp', '.jspx', '.asp', '.aspx', '.php', '.php3', '.php4', '.php5',
+        '.vue', '.jsx', '.tsx', '.svelte',
+        '.xml', '.json', '.yaml', '.yml',
+        '.txt', '.md', '.markdown',
+    ]
+    
+    API_ROOT_BLACKLIST = [
+        '\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~',
+        '[', ']', '(', ')', '{', '}', '<', '>',
+    ]
+
+    @classmethod
+    def is_static_file(cls, url: str) -> bool:
+        """判断是否为静态文件"""
+        url_lower = url.lower()
+        for ext in cls.STATIC_FILE_EXT_BLACKLIST:
+            if url_lower.endswith(ext):
+                return True
+        return False
+    
+    @classmethod
+    def is_blacklisted_url(cls, url: str) -> bool:
+        """判断URL是否在黑名单中"""
+        url_stripped = url.strip("\"'").strip("/")
+        for prefix in cls.URL_BLACKLIST:
+            if url_stripped.startswith(prefix):
+                return True
+        return False
+    
+    @classmethod
+    def is_api_root_blacklisted(cls, path: str) -> bool:
+        """判断API根路径是否在黑名单中"""
+        path_stripped = path.strip("\"'").strip("/")
+        for char in cls.API_ROOT_BLACKLIST:
+            if path_stripped.startswith(char):
+                return True
+        return False
+    
+    @classmethod
+    def is_ext_blacklisted(cls, url: str) -> bool:
+        """判断URL扩展名是否在黑名单中"""
+        path_part = url.split("?")[0].lower()
+        for ext in cls.URL_EXT_BLACKLIST:
+            if path_part.endswith(ext):
+                return True
+        return False
+
+
 class APIRouter:
-    """API路由提取器"""
+    """
+    API路由提取器
+    参考 0x727/ChkApi 的 apiPathFind.py
+    """
     
     API_PATTERNS = {
         'axios': re.compile(r'''
@@ -49,6 +169,28 @@ class APIRouter:
             ['"`](?:/api|/v\d+/|/rest)[^\s'"`]+['"`]
         ''', re.VERBOSE | re.IGNORECASE),
     }
+    
+    API_FUZZ_PATTERNS = [
+        r'["\']http[^\s\'"\<\>\:\(\)\[\,]+?\.js\b',
+        r'["\']/[^\s\'"\<\>\:\(\)\[\,]+?\.js\b',
+        r'=["\'][^\s\'"\<\>\:\(\)\[\,]+?\.js\b',
+        r'["\']http[^\s\'"\<\>\)\(]+?["\']',
+        r'=http[^\s\'"\<\>\)\(]+',
+        r'["\']/[^\s\'"\<\>\:\)\(\u4e00-\u9fa5]+?["\']',
+    ]
+
+    API_PATH_PATTERNS = [
+        r'(?:"|\'|`)(\/[^"\'`<>\{\}\[\]\\]+)(?:"|\'|`)',
+        r'(?:path|url|route|pathname)\s*[:=]\s*[\'"]([^\'"]+)[\'"]',
+        r'(?:href|action|src)\s*=\s*["\']([^"\']+)["\']',
+        r'\.get\(\s*["\']([^"\']+)["\']',
+        r'\.post\(\s*["\']([^"\']+)["\']',
+        r'\.put\(\s*["\']([^"\']+)["\']',
+        r'\.delete\(\s*["\']([^"\']+)["\']',
+        r'import\s*\(["\']([^"\']+)["\']',
+        r'require\(["\']([^"\']+)["\']',
+        r'dynamicImport\(["\']([^"\']+)["\']',
+    ]
     
     HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head']
     
@@ -78,6 +220,107 @@ class APIRouter:
                     ))
         
         return results
+    
+    @classmethod
+    def extract_apis_with_fuzz(cls, js_content: str) -> List[APIFindResult]:
+        """
+        使用模糊匹配从JS内容提取API
+        参考 0x727/ChkApi 的完整 API 提取逻辑
+        """
+        results = []
+        found_paths: Set[str] = set()
+        
+        all_patterns = list(cls.API_PATTERNS.values()) + [
+            re.compile(p) for p in cls.API_PATH_PATTERNS
+        ]
+        
+        for pattern in all_patterns:
+            try:
+                matches = pattern.findall(js_content)
+                for match in matches:
+                    if isinstance(match, tuple):
+                        path = match[0] if match else ""
+                    else:
+                        path = match
+                    
+                    if not path or not isinstance(path, str):
+                        continue
+                    
+                    path = cls._clean_path(path)
+                    if not path:
+                        continue
+                    
+                    if path in found_paths:
+                        continue
+                    
+                    if URLBlacklist.is_static_file(path):
+                        continue
+                    if URLBlacklist.is_api_root_blacklisted(path):
+                        continue
+                    
+                    found_paths.add(path)
+                    method = cls._guess_method_from_path(path)
+                    
+                    results.append(APIFindResult(
+                        path=path,
+                        method=method,
+                        source_type="js_fuzz",
+                        url_type="api_path"
+                    ))
+            except Exception:
+                continue
+        
+        return results
+    
+    @classmethod
+    def _clean_path(cls, path: str) -> str:
+        """清理路径"""
+        path = path.strip("\"'").strip("/")
+        path = path.replace("\\/", "/")
+        path = path.replace(" ", "")
+        path = path.replace("%3A", ":")
+        path = path.replace("%2F", "/")
+        path = path.replace("\\", "")
+        
+        if path.endswith("\\"):
+            path = path.rstrip("\\")
+        if path.startswith("="):
+            path = path.lstrip("=")
+        
+        if not path or len(path) < 2:
+            return ""
+        
+        return "/" + path if not path.startswith("/") else path
+    
+    @classmethod
+    def _guess_method_from_path(cls, path: str) -> str:
+        """从路径猜测HTTP方法"""
+        path_lower = path.lower()
+        for method in cls.HTTP_METHODS:
+            if method in path_lower:
+                return method.upper()
+        return "GET"
+    
+    @classmethod
+    def url_filter(cls, paths: List[str]) -> List[str]:
+        """
+        URL过滤
+        参考 0x727/ChkApi 的 urlFilter 函数
+        """
+        filtered = []
+        for path in paths:
+            if URLBlacklist.is_blacklisted_url(path):
+                continue
+            if URLBlacklist.is_static_file(path):
+                continue
+            if URLBlacklist.is_ext_blacklisted(path):
+                continue
+            
+            cleaned = cls._clean_path(path)
+            if cleaned and cleaned not in filtered:
+                filtered.append(cleaned)
+        
+        return filtered
     
     @classmethod
     def extract_from_swagger(cls, swagger_content: str) -> List[APIFindResult]:
