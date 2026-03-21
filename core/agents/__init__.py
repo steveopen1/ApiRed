@@ -10,6 +10,7 @@ from .tester_agent import TesterAgent
 from .orchestrator import Orchestrator, AgentInterface, ScanContext, Task, TaskStatus
 from .discover_agent import DiscoverAgent
 from .test_agent import TestAgent
+from .reflect_agent import ReflectAgent
 
 __all__ = [
     'BaseAgent',
