@@ -12,6 +12,7 @@ from .api_collector import (
     APIPathCombiner,
     APIFindResult
 )
+from .browser_collector import HeadlessBrowserCollector, BrowserResource
 
 __all__ = [
     'JSFingerprintCache',
@@ -22,5 +23,7 @@ __all__ = [
     'BaseURLAnalyzer',
     'ServiceAnalyzer',
     'APIPathCombiner',
-    'APIFindResult'
+    'APIFindResult',
+    'HeadlessBrowserCollector',
+    'BrowserResource'
 ]

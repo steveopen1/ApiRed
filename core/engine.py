@@ -6,14 +6,14 @@ ScanEngine - 统一扫描引擎
 import asyncio
 import time
 import os
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from urllib.parse import urlparse
 
 from .utils.config import Config
 from .storage import DBStorage, FileStorage
-from .collectors import JSFingerprintCache, JSParser, APIAggregator
+from .collectors import JSFingerprintCache, JSParser, APIAggregator, HeadlessBrowserCollector
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
@@ -134,6 +134,20 @@ class ScanEngine:
         self._fuzz_tester = FuzzTester(self._http_client)
         self._vulnerability_tester = VulnerabilityTester(self._http_client)
         
+        self._browser_collector: Optional[HeadlessBrowserCollector] = None
+        self._browser_enabled = getattr(self.config, 'chrome', False)
+        
+        if self._browser_enabled:
+            try:
+                self._browser_collector = HeadlessBrowserCollector()
+                browser_initialized = await self._browser_collector.initialize(headless=True)
+                if not browser_initialized:
+                    self._browser_collector = None
+                    print("Warning: Browser initialization failed, continuing without browser")
+            except Exception as e:
+                print(f"Warning: Browser not available: {e}")
+                self._browser_collector = None
+        
         if self.config.ai_enabled:
             from .ai.ai_engine import AIEngine
             llm_client = AIEngine()
@@ -198,36 +212,53 @@ class ScanEngine:
         self._collector_results = collector_results
     
     async def _collect_js(self) -> Dict[str, Any]:
-        """采集JS资源 + 框架检测"""
+        """采集JS资源 + 框架检测 + 浏览器动态采集"""
         from .utils.http_client import AsyncHttpClient
+        
+        js_urls = []
+        alive_js = []
+        js_content_all = ""
+        browser_routes = []
+        browser_api_endpoints = []
+        
+        if self._browser_collector:
+            try:
+                browser_result = await self._collect_with_browser()
+                if browser_result:
+                    js_urls.extend(browser_result.get('js_urls', []))
+                    alive_js.extend(browser_result.get('alive_js', []))
+                    browser_routes = browser_result.get('spa_routes', [])
+                    browser_api_endpoints = browser_result.get('browser_apis', [])
+            except Exception as e:
+                print(f"Browser collection failed: {e}")
         
         response = await self._http_client.request(
             self.config.target,
             headers={'Cookie': self.config.cookies} if self.config.cookies else None
         )
         
-        js_urls = self._extract_js_urls(response.content)
-        alive_js = []
+        http_js_urls = self._extract_js_urls(response.content)
         js_parser = JSParser(self._js_cache)
-        js_content_all = ""
         
-        for js_url in js_urls:
-            try:
-                js_response = await self._http_client.request(js_url)
-                if js_response.status_code == 200:
-                    js_content = js_response.content
-                    js_content_all += js_content + "\n"
-                    alive_js.append({'url': js_url, 'content': js_content})
-                    try:
-                        js_parser.parse(js_content, js_url)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+        for js_url in http_js_urls:
+            if js_url not in js_urls:
+                js_urls.append(js_url)
+                try:
+                    js_response = await self._http_client.request(js_url)
+                    if js_response.status_code == 200:
+                        js_content = js_response.content
+                        js_content_all += js_content + "\n"
+                        alive_js.append({'url': js_url, 'content': js_content})
+                        try:
+                            js_parser.parse(js_content, js_url)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
         
         target_info = {
             'js_files': ','.join(js_urls),
-            'api_paths': js_content_all[:1000],
+            'api_paths': js_content_all[:1000] + ','.join(browser_api_endpoints),
             'response_content': response.content[:500] if response.content else '',
             'headers': str(response.headers) if hasattr(response, 'headers') else ''
         }
@@ -242,6 +273,43 @@ class ScanEngine:
             'js_urls': alive_js,
             'detected_framework': self._detected_framework
         }
+    
+    async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
+        """使用无头浏览器采集 JS 和 API"""
+        if not self._browser_collector:
+            return None
+        
+        try:
+            await self._browser_collector.navigate(self.config.target)
+            await self._browser_collector.scroll_page()
+            
+            page_content = await self._browser_collector.collect_page_content()
+            
+            js_urls = page_content.get('js_files', [])
+            api_endpoints = page_content.get('api_endpoints', [])
+            spa_routes = page_content.get('routes', [])
+            
+            alive_js = []
+            for js_url in js_urls:
+                try:
+                    js_response = await self._http_client.request(js_url)
+                    if js_response.status_code == 200:
+                        alive_js.append({
+                            'url': js_url,
+                            'content': js_response.content
+                        })
+                except Exception:
+                    pass
+            
+            return {
+                'js_urls': js_urls,
+                'alive_js': alive_js,
+                'spa_routes': spa_routes,
+                'browser_apis': api_endpoints
+            }
+        except Exception as e:
+            print(f"Browser collection error: {e}")
+            return None
     
     async def _extract_apis(self) -> Dict[str, Any]:
         """提取API端点 + 基于框架生成更多端点"""
