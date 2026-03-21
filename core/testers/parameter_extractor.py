@@ -285,16 +285,16 @@ class DangerousAPIFilter:
     ]
 
     CRITICAL_DANGEROUS_PATTERNS = [
-        r'delete\s*all',
-        r'drop\s*table',
-        r'drop\s*database',
-        r'shutdown\s*now',
-        r'reboot\s*now',
-        r'truncate\s*table',
-        r'exec\s*\(',
-        r'execute\s*\(',
+        r'delete[_\s]?all',
+        r'drop[_\s]?table',
+        r'drop[_\s]?database',
+        r'shutdown[_\s]?now',
+        r'reboot[_\s]?now',
+        r'truncate[_\s]?table',
+        r'exec',
+        r'execute',
         r'shell_exec',
-        r'eval\s*\(',
+        r'eval',
         r'system\s*\(',
     ]
 
