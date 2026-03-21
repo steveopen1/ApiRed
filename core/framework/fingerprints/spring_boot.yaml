@@ -1,0 +1,47 @@
+# Spring Boot Framework Fingerprint
+
+framework:
+  name: "Spring Boot"
+  version_pattern: "spring-boot.*?v?([\\d.]+)"
+  confidence_threshold: 50
+
+detection:
+  indicators:
+    - type: "file"
+      pattern: "spring-boot.*\\.jar|org\\.springframework"
+      weight: 30
+      description: "Spring Boot JAR/Spring Framework"
+    
+    - type: "header"
+      pattern: "X-Application-Context"
+      weight: 25
+      description: "Spring Boot 特有头"
+    
+    - type: "content"
+      pattern: "org\\.springframework|@RestController|@RequestMapping"
+      weight: 20
+      description: "Spring 注解"
+    
+    - type: "response"
+      pattern: "\\{.*\\}\\.json|application/json"
+      weight: 10
+
+api_pattern:
+  base_path: "/api/"
+  structure: "v{version}/{resource}"
+  common_versions: ["v1", "v2", "v3"]
+  common_resources:
+    - users
+    - orders
+    - products
+    - auth
+    - admin
+
+response_behavior:
+  standard_status_codes:
+    200: "OK"
+    201: "Created"
+    401: "Unauthorized"
+    403: "Forbidden"
+    404: "Not Found"
+    500: "Server Error"

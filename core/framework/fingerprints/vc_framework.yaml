@@ -1,0 +1,91 @@
+# VC Framework Fingerprint
+# 智慧小区等企业管理系统常用框架
+
+framework:
+  name: "VC Framework"
+  version_pattern: "vcFramework\\.js.*?v([\\d.]+)"
+  confidence_threshold: 40
+
+detection:
+  indicators:
+    - type: "file"
+      pattern: "vcFramework\\.js|vc-lang\\.js|vc-core\\.js"
+      weight: 30
+      description: "VC Framework JS 文件"
+    
+    - type: "path"
+      pattern: "/callComponent/"
+      weight: 25
+      description: "VC Framework API 路径"
+    
+    - type: "content"
+      pattern: "vcFramework|VC Framework|智慧小区"
+      weight: 15
+      description: "VC Framework 内容特征"
+    
+    - type: "response"
+      pattern: "module.*require|vc\\.require|\\.callComponent"
+      weight: 15
+      description: "VC Framework 模块调用"
+    
+    - type: "header"
+      pattern: "X-Powered-By.*VC|X-VC-Framework"
+      weight: 10
+      description: "VC Framework 响应头"
+
+api_pattern:
+  base_path: "/callComponent/"
+  structure: "{component}/{action}"
+  
+  components:
+    - login
+    - admin
+    - system
+    - user
+    - role
+    - config
+    - dict
+    - log
+    - attachment
+    - sms
+  
+  actions:
+    - getSysInfo
+    - getConfig
+    - getUserInfo
+    - list
+    - get
+    - add
+    - edit
+    - delete
+    - query
+    - export
+    - import
+
+response_behavior:
+  default_page_indicators:
+    - "智慧小区"
+    - "VC Framework"
+    - "<title>智慧小区</title>"
+    - "vc-ui"
+    - "vc Framework"
+  
+  auth_indicators:
+    - "login"
+    - "登录"
+    - "password"
+    - "未登录"
+    - "session expired"
+  
+  api_content_patterns:
+    - '"success"'
+    - '"code":0'
+    - '"data":'
+    - '"total"'
+    - '"rows":'
+  
+  non_api_content_patterns:
+    - "<html"
+    - "<!DOCTYPE"
+    - "<title>"
+    - ".html"

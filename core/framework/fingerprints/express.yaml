@@ -1,0 +1,42 @@
+# Express.js Framework Fingerprint
+
+framework:
+  name: "Express.js"
+  version_pattern: "express.*?v?([\\d.]+)"
+  confidence_threshold: 40
+
+detection:
+  indicators:
+    - type: "header"
+      pattern: "X-Powered-By.*Express"
+      weight: 30
+      description: "Express 响应头"
+    
+    - type: "file"
+      pattern: "node_modules/express"
+      weight: 20
+    
+    - type: "content"
+      pattern: "Express|node_modules|connect"
+      weight: 15
+
+api_pattern:
+  base_path: "/api/"
+  structure: "{resource}"
+  common_resources:
+    - users
+    - auth
+    - login
+    - products
+    - orders
+
+response_behavior:
+  standard_status_codes:
+    200: "OK"
+    201: "Created"
+    204: "No Content"
+    400: "Bad Request"
+    401: "Unauthorized"
+    403: "Forbidden"
+    404: "Not Found"
+    500: "Internal Server Error"
