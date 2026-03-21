@@ -14,8 +14,11 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
 from ..testers.api_tester import APIRequestTester
 from ..testers.parameter_extractor import DangerousAPIFilter
 from ..testers.bypass_techniques import BypassTechniques
+from ..testers.vulnerability_tester import VulnerabilityTester
 from ..rules.sensitive_detector import SensitiveRuleEngine
 from ..analyzers.response_baseline import ResponseDifferentiator
+from ..analyzers.response_cluster import ResponseCluster
+from ..analyzers.api_scorer import APIScorer
 
 logger = logging.getLogger(__name__)
 
@@ -25,52 +28,77 @@ class TestAgent(AgentInterface):
     测试代理
     负责对发现的 API 端点进行漏洞测试
     """
-
+    
     def __init__(self):
         super().__init__("test")
         self._tester = None
+        self._vulnerability_tester = None
         self._bypass_techniques = None
         self._sensitive_detector = None
         self._differentiator = None
+        self._response_cluster = None
+        self._api_scorer = None
         self._tested_urls = set()
-
+        self._http_client = None
+    
     def _get_tester(self) -> APIRequestTester:
         """延迟初始化 tester"""
         if self._tester is None:
             self._tester = APIRequestTester()
         return self._tester
-
+    
+    def _get_vulnerability_tester(self):
+        """获取漏洞测试器"""
+        if self._vulnerability_tester is None:
+            self._vulnerability_tester = VulnerabilityTester(self._http_client)
+        return self._vulnerability_tester
+    
     def _get_bypass_techniques(self):
         """获取 bypass techniques 列表"""
         if self._bypass_techniques is None:
             self._bypass_techniques = BypassTechniques.get_all_techniques()
         return self._bypass_techniques
-
+    
     def _get_sensitive_detector(self) -> SensitiveRuleEngine:
         """获取敏感信息检测器"""
         if self._sensitive_detector is None:
             self._sensitive_detector = SensitiveRuleEngine()
         return self._sensitive_detector
-
+    
     def _get_differentiator(self) -> ResponseDifferentiator:
         """获取响应差异化器"""
         if self._differentiator is None:
             self._differentiator = ResponseDifferentiator()
         return self._differentiator
+    
+    def _get_response_cluster(self) -> ResponseCluster:
+        """获取响应聚类器"""
+        if self._response_cluster is None:
+            self._response_cluster = ResponseCluster()
+        return self._response_cluster
+    
+    def _get_api_scorer(self) -> APIScorer:
+        """获取 API 评分器"""
+        if self._api_scorer is None:
+            self._api_scorer = APIScorer()
+        return self._api_scorer
 
     async def execute(self, context: ScanContext) -> Dict[str, Any]:
         """
         执行测试任务
-
+        
         测试流程:
         1. 获取待测试端点
-        2. 三种方式请求 (GET/POST/JSON)
-        3. 敏感信息检测
-        4. Bypass 测试
-        5. Fuzz 测试
+        2. ResponseCluster 响应聚类
+        3. APIScorer API 评分
+        4. 三种方式请求 (GET/POST/JSON)
+        5. 敏感信息检测
+        6. Bypass 测试
+        7. VulnerabilityTester 漏洞测试
+        8. ResponseDifferentiator 响应差异化
         """
         endpoints = self.knowledge_base.get_endpoints() if self.knowledge_base else []
-
+        
         if not endpoints:
             logger.warning("TestAgent: No endpoints to test")
             return {
@@ -78,37 +106,40 @@ class TestAgent(AgentInterface):
                 'vulnerabilities': [],
                 'sensitive_data': []
             }
-
+        
         logger.info(f"TestAgent: Starting tests for {len(endpoints)} endpoints")
-
+        
         vulnerabilities = []
         sensitive_data = []
         alive_apis = []
-
+        
         dangerous_paths = set()
         for endpoint in endpoints:
             if DangerousAPIFilter.is_dangerous(endpoint.path):
                 dangerous_paths.add(endpoint.path)
-
+        
         safe_endpoints = [ep for ep in endpoints if ep.path not in dangerous_paths]
-
+        
+        response_cluster = self._get_response_cluster()
+        api_scorer = self._get_api_scorer()
+        
         for endpoint in safe_endpoints[:100]:
             full_url = endpoint.full_url or f"{context.target.rstrip('/')}{endpoint.path}"
-
+            
             if full_url in self._tested_urls:
                 continue
-
+            
             self._tested_urls.add(full_url)
-
+            
             try:
                 result = await self._test_endpoint(endpoint, context)
-
+                
                 if result.get('alive'):
                     alive_apis.append(result)
-
+                    
                     vulns = result.get('vulnerabilities', [])
                     vulnerabilities.extend(vulns)
-
+                    
                     sensitive = result.get('sensitive_data', [])
                     sensitive_data.extend(sensitive)
 

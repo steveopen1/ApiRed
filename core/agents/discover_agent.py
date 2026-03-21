@@ -13,6 +13,8 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint
 from ..collectors.api_collector import APIRouter, BaseURLAnalyzer, COMMON_API_PATHS
 from ..collectors.js_collector import JSParser, WebpackAnalyzer
 from ..collectors.browser_collector import HeadlessBrowserCollector
+from ..framework import FrameworkDetector
+from ..analyzers.response_cluster import ResponseCluster
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +30,16 @@ class DiscoverAgent(AgentInterface):
         self.discovered_endpoints: List[APIEndpoint] = []
         self.js_urls: Set[str] = set()
         self.base_urls: Set[str] = set()
-        self._browser: Optional[HeadlessBrowserCollector] = None
+        self._browser = None
+        self._framework_detector = None
+        self._response_cluster = None
     
     async def initialize(self, context: ScanContext) -> None:
         """初始化发现代理"""
         await super().initialize(context)
         self._browser = HeadlessBrowserCollector(context.target)
+        self._framework_detector = FrameworkDetector()
+        self._response_cluster = ResponseCluster()
     
     async def execute(self, context: ScanContext) -> List[APIEndpoint]:
         """
@@ -42,9 +48,11 @@ class DiscoverAgent(AgentInterface):
         发现流程:
         1. Headless Browser 采集 JS URL
         2. JS 静态分析提取 API 路径
-        3. Swagger/OpenAPI 解析
-        4. Webpack 打包分析
-        5. Base URL 发现和组合
+        3. FrameworkDetector 框架识别
+        4. Swagger/OpenAPI 解析
+        5. Webpack 打包分析
+        6. Base URL 发现和组合
+        7. ResponseCluster 响应聚类
         """
         target = context.target
         cookies = context.cookies
@@ -57,6 +65,11 @@ class DiscoverAgent(AgentInterface):
             js_endpoints = await self._discover_from_js(target, cookies)
             all_endpoints.extend(js_endpoints)
             logger.info(f"DiscoverAgent: Found {len(js_endpoints)} endpoints from JS")
+            
+            if self._framework_detector:
+                framework_info = await self._detect_framework(target, js_endpoints)
+                if framework_info:
+                    logger.info(f"DiscoverAgent: Detected framework: {framework_info}")
             
             swagger_endpoints = await self._discover_from_swagger(target)
             all_endpoints.extend(swagger_endpoints)
@@ -234,6 +247,43 @@ class DiscoverAgent(AgentInterface):
                 endpoints.append(endpoint)
         
         return endpoints
+    
+    async def _detect_framework(
+        self,
+        target: str,
+        endpoints: List[APIEndpoint]
+    ) -> Optional[str]:
+        """使用 FrameworkDetector 检测框架"""
+        if not self._framework_detector:
+            return None
+        
+        try:
+            js_contents = []
+            for ep in endpoints[:10]:
+                if ep.source and 'js' in ep.source.lower():
+                    js_url = ep.source.split(':')[1] if ':' in ep.source else None
+                    if js_url:
+                        content = await self._fetch_js(js_url, "")
+                        if content:
+                            js_contents.append(content)
+            
+            target_info = {
+                'js_files': ','.join([e.source for e in endpoints[:5] if e.source]),
+                'api_paths': ','.join([e.path for e in endpoints[:10]]),
+                'response_content': '',
+                'headers': ''
+            }
+            
+            matches = self._framework_detector.detect(target_info)
+            if matches:
+                best_match = matches[0]
+                logger.info(f"Framework detected: {best_match.name} (confidence: {best_match.confidence})")
+                return best_match.name
+                
+        except Exception as e:
+            logger.debug(f"Framework detection error: {e}")
+        
+        return None
     
     async def _fetch_js(self, js_url: str, cookies: str) -> Optional[str]:
         """获取 JS 内容"""
