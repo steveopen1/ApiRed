@@ -72,7 +72,19 @@ class ScannerConfig:
 
 
 class ChkApiScanner:
-    """主扫描器"""
+    """
+    主扫描器
+
+    .. deprecated::
+        ChkApiScanner 已废弃，请使用 ScanEngine 代替。
+        ScanEngine 提供了更完整的架构、更好的性能和更多功能。
+        
+        示例::
+            from core.engine import ScanEngine, EngineConfig
+            config = EngineConfig(target="http://example.com")
+            engine = ScanEngine(config)
+            result = await engine.run()
+    """
     
     def __init__(self, config: ScannerConfig):
         self.config = config

@@ -3,11 +3,19 @@ ApiRed Core Module
 Red Team API Security Scanner Core
 """
 
-__version__ = "2.0"
-__author__ = "0x727 Team"
+__version__ = "3.1"
+__author__ = "ApiRed Team"
 
+from .engine import ScanEngine, EngineConfig, run_engine, run_multi_target, ScanResultAggregator
 from .scanner import ChkApiScanner
-from .dispatcher import TaskDispatcher
-from .pipeline import ScanPipeline
 
-__all__ = ['ChkApiScanner', 'TaskDispatcher', 'ScanPipeline']
+__all__ = [
+    'ScanEngine',
+    'EngineConfig', 
+    'run_engine',
+    'run_multi_target',
+    'ScanResultAggregator',
+    'ChkApiScanner',
+    'TaskDispatcher',
+    'ScanPipeline'
+]

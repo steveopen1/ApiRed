@@ -7,7 +7,7 @@ import asyncio
 import time
 import os
 from typing import Dict, List, Optional, Any, Set
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -37,6 +37,14 @@ class EngineConfig:
     proxy: Optional[str] = None
     js_depth: int = 3
     output_dir: str = "./results"
+    attack_mode: str = "all"
+    no_api_scan: bool = False
+    chrome: bool = True
+    verify_ssl: bool = True
+    resume: bool = False
+    targets: List[str] = field(default_factory=list)
+    concurrent_targets: int = 5
+    aggregate: bool = False
 
 
 @dataclass
@@ -81,8 +89,28 @@ class ScanEngine:
         self._current_stage = 0
         self._running = False
         self._checkpoint: Optional[ScanCheckpoint] = None
+        self._callbacks: Dict[str, List[Any]] = {
+            'stage_start': [],
+            'stage_progress': [],
+            'stage_complete': [],
+            'finding': [],
+            'error': []
+        }
         
         self._stage_names = ["collect", "analyze", "test"]
+    
+    def on(self, event: str, callback: Any):
+        """注册事件回调"""
+        if event in self._callbacks:
+            self._callbacks[event].append(callback)
+    
+    def _emit(self, event: str, data: Any):
+        """触发事件"""
+        for callback in self._callbacks.get(event, []):
+            try:
+                callback(data)
+            except Exception:
+                pass
     
     @property
     def current_stage_name(self) -> str:
@@ -114,7 +142,8 @@ class ScanEngine:
             max_concurrent=self.config.concurrency,
             max_retries=3,
             timeout=30,
-            proxy=self.config.proxy
+            proxy=self.config.proxy,
+            verify_ssl=getattr(self.config, 'verify_ssl', True)
         )
         
         self._js_cache = JSFingerprintCache(self.db_storage)
@@ -167,20 +196,31 @@ class ScanEngine:
         """运行扫描流程"""
         await self.initialize()
         
+        attack_mode = getattr(self.config, 'attack_mode', 'all')
+        no_api_scan = getattr(self.config, 'no_api_scan', False)
+        
+        self._emit('stage_start', {'stage': 'initialization', 'status': 'complete'})
+        
         try:
-            await self._run_collectors()
-            if self.config.checkpoint_enabled:
-                await self._save_checkpoint()
+            if attack_mode in ['collect', 'all']:
+                await self._run_collectors()
+                if self.config.checkpoint_enabled:
+                    await self._save_checkpoint()
+                self._emit('stage_complete', {'stage': 'collect', 'status': 'complete'})
             
-            await self._run_analyzers()
-            if self.config.checkpoint_enabled:
-                await self._save_checkpoint()
-            
-            await self._run_testers()
-            if self.config.checkpoint_enabled:
-                await self._save_checkpoint()
+            if attack_mode in ['scan', 'all'] and not no_api_scan:
+                await self._run_analyzers()
+                if self.config.checkpoint_enabled:
+                    await self._save_checkpoint()
+                self._emit('stage_complete', {'stage': 'analyze', 'status': 'complete'})
+                
+                await self._run_testers()
+                if self.config.checkpoint_enabled:
+                    await self._save_checkpoint()
+                self._emit('stage_complete', {'stage': 'test', 'status': 'complete'})
             
             await self._stage_reporting()
+            self._emit('stage_complete', {'stage': 'reporting', 'status': 'complete'})
             
             if self.result:
                 self.result.status = "completed"
@@ -189,6 +229,7 @@ class ScanEngine:
             if self.result:
                 self.result.errors.append(str(e))
                 self.result.status = "failed"
+            self._emit('error', {'error': str(e)})
         
         finally:
             await self.cleanup()
@@ -747,3 +788,112 @@ async def run_engine(config: EngineConfig) -> ScanResult:
     """运行扫描引擎的便捷函数"""
     engine = ScanEngine(config)
     return await engine.run()
+
+
+async def run_multi_target(targets: List[str], base_config: EngineConfig) -> List[ScanResult]:
+    """并行扫描多个目标"""
+    semaphore = asyncio.Semaphore(getattr(base_config, 'concurrent_targets', 5))
+    
+    async def scan_with_limit(target: str) -> ScanResult:
+        async with semaphore:
+            config = EngineConfig(
+                target=target,
+                collectors=base_config.collectors,
+                analyzers=base_config.analyzers,
+                testers=base_config.testers,
+                ai_enabled=base_config.ai_enabled,
+                checkpoint_enabled=base_config.checkpoint_enabled,
+                cookies=base_config.cookies,
+                concurrency=base_config.concurrency,
+                proxy=base_config.proxy,
+                js_depth=base_config.js_depth,
+                output_dir=base_config.output_dir,
+                attack_mode=base_config.attack_mode,
+                no_api_scan=base_config.no_api_scan,
+                chrome=base_config.chrome,
+                verify_ssl=base_config.verify_ssl
+            )
+            engine = ScanEngine(config)
+            return await engine.run()
+    
+    results = await asyncio.gather(*[scan_with_limit(t) for t in targets], return_exceptions=True)
+    
+    processed_results = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            error_result = ScanResult(
+                target_url=targets[i],
+                status="failed",
+                errors=[str(result)]
+            )
+            processed_results.append(error_result)
+        else:
+            processed_results.append(result)
+    
+    return processed_results
+
+
+class ScanResultAggregator:
+    """扫描结果聚合器"""
+    
+    def aggregate(self, results: List[ScanResult]) -> Dict[str, Any]:
+        """聚合多个扫描结果"""
+        high_value_endpoints = self._aggregate_high_value_endpoints(results)
+        vulnerability_summary = self._aggregate_vulnerabilities(results)
+        
+        return {
+            'total_targets': len(results),
+            'successful_scans': sum(1 for r in results if r.status != "failed" and not r.errors),
+            'failed_scans': sum(1 for r in results if r.errors or r.status == "failed"),
+            'total_apis': sum(r.total_apis for r in results),
+            'alive_apis': sum(r.alive_apis for r in results),
+            'high_value_apis': sum(r.high_value_apis for r in results),
+            'total_vulnerabilities': sum(len(r.vulnerabilities) for r in results),
+            'total_sensitive_data': sum(len(r.sensitive_data) for r in results),
+            'high_value_endpoints': high_value_endpoints,
+            'vulnerability_summary': vulnerability_summary,
+            'target_results': [r.to_dict() for r in results]
+        }
+    
+    def _aggregate_high_value_endpoints(self, results: List[ScanResult]) -> List[Dict[str, Any]]:
+        """聚合高价值端点"""
+        high_value_endpoints = []
+        seen_urls = set()
+        
+        for result in results:
+            for endpoint in result.api_endpoints:
+                if endpoint.is_high_value and endpoint.full_url not in seen_urls:
+                    seen_urls.add(endpoint.full_url)
+                    high_value_endpoints.append({
+                        'target': result.target_url,
+                        'path': endpoint.path,
+                        'method': endpoint.method,
+                        'full_url': endpoint.full_url,
+                        'api_id': endpoint.api_id
+                    })
+        
+        return high_value_endpoints[:50]
+    
+    def _aggregate_vulnerabilities(self, results: List[ScanResult]) -> Dict[str, Any]:
+        """聚合漏洞信息"""
+        vuln_by_type: Dict[str, int] = {}
+        vuln_by_severity: Dict[str, int] = {}
+        vuln_by_target: Dict[str, List[str]] = {}
+        
+        for result in results:
+            for vuln in result.vulnerabilities:
+                vuln_type = vuln.vuln_type
+                severity = vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity)
+                
+                vuln_by_type[vuln_type] = vuln_by_type.get(vuln_type, 0) + 1
+                vuln_by_severity[severity] = vuln_by_severity.get(severity, 0) + 1
+                
+                if result.target_url not in vuln_by_target:
+                    vuln_by_target[result.target_url] = []
+                vuln_by_target[result.target_url].append(vuln_type)
+        
+        return {
+            'by_type': vuln_by_type,
+            'by_severity': vuln_by_severity,
+            'by_target': vuln_by_target
+        }
