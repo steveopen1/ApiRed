@@ -54,22 +54,27 @@ def check_ai_config() -> Dict[str, str]:
 
 def get_ai_config() -> Dict[str, str]:
     """
-    获取 AI 配置（从环境变量）
+    获取 AI 配置（优先环境变量，其次配置文件）
     
     Returns:
         Dict of AI configuration
     """
+    from ..utils.config import Config
+    
+    yaml_config = Config()._config.get('ai', {})
+    
     return {
-        'provider': os.environ.get('AI_PROVIDER', 'deepseek'),
+        'provider': os.environ.get('AI_PROVIDER') or yaml_config.get('provider', 'deepseek'),
         'api_key': (
             os.environ.get('DEEPSEEK_API_KEY') or
             os.environ.get('OPENAI_API_KEY') or
             os.environ.get('ANTHROPIC_API_KEY') or
-            os.environ.get('CUSTOM_API_KEY', '')
+            os.environ.get('CUSTOM_API_KEY') or
+            yaml_config.get('api_key', '')
         ),
-        'base_url': os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
-        'model': os.environ.get('AI_MODEL', 'deepseek-chat'),
-        'api_format': os.environ.get('AI_API_FORMAT', 'openai'),
+        'base_url': os.environ.get('AI_BASE_URL') or yaml_config.get('base_url', 'https://api.deepseek.com/v1'),
+        'model': os.environ.get('AI_MODEL') or yaml_config.get('model', 'deepseek-chat'),
+        'api_format': os.environ.get('AI_API_FORMAT') or yaml_config.get('api_format', 'openai'),
     }
 
 
