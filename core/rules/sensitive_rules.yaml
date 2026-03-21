@@ -1,0 +1,263 @@
+# ApiRed Sensitive Information Detection Rules
+# 基于 0x727/ChkApi 规则库
+# 用于检测响应中的敏感信息
+
+rules:
+  # ==================== Fingerprint 指纹 ====================
+  - group: Fingerprint
+    rule:
+      - name: Shiro
+        loaded: true
+        f_regex: (=deleteMe|rememberMe=)
+        scope: any
+        sensitive: true
+        description: Shiro 认证框架指纹
+
+      - name: JSON Web Token
+        loaded: true
+        f_regex: (eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}|eyJ[A-Za-z0-9_\/+-]{10,}\.[A-Za-z0-9._\/+-]{10,})
+        scope: any
+        sensitive: true
+        description: JWT 令牌
+
+      - name: Swagger UI
+        loaded: true
+        f_regex: ((swagger-ui\.html)|(\"swagger\":)|(Swagger UI)|(swaggerUi)|(swaggerVersion))
+        scope: response body
+        sensitive: false
+        description: Swagger API 文档
+
+      - name: Ueditor
+        loaded: true
+        f_regex: (ueditor\.(config|all)\.js)
+        scope: response body
+        sensitive: false
+        description: Ueditor 编辑器
+
+      - name: Druid
+        loaded: true
+        f_regex: (Druid Stat Index)
+        scope: response body
+        sensitive: false
+        description: Druid 监控
+
+  # ==================== Maybe Vulnerability 潜在漏洞 ====================
+  - group: Maybe Vulnerability
+    rule:
+      - name: Java Deserialization
+        loaded: true
+        f_regex: (javax\.faces\.ViewState)
+        scope: response body
+        sensitive: false
+        description: Java 反序列化漏洞
+
+      - name: Debug Logic Parameters
+        loaded: true
+        f_regex: ((access=)|(adm=)|(admin=)|(alter=)|(cfg=)|(clone=)|(config=)|(create=)|(dbg=)|(debug=)|(delete=)|(disable=)|(edit=)|(enable=)|(exec=)|(execute=)|(grant=)|(load=)|(make=)|(modify=)|(rename=)|(reset=)|(root=)|(shell=)|(test=)|(toggl=))
+        scope: request
+        sensitive: false
+        description: 调试参数
+
+      - name: URL As A Value
+        loaded: true
+        f_regex: (=(https?)(://|%3a%2f%2f))
+        scope: any
+        sensitive: false
+        description: URL 作为参数值
+
+      - name: Upload Form
+        loaded: true
+        f_regex: (type=\"file\")
+        scope: response body
+        sensitive: false
+        description: 文件上传表单
+
+  # ==================== Basic Information 基础信息 ====================
+  - group: Basic Information
+    rule:
+      - name: Chinese IDCard
+        loaded: true
+        f_regex: '[^0-9]((\d{8}(0\d|10|11|12)([0-2]\d|30|31)\d{3}[^\dXx])|(\d{6}(18|19|20)\d{2}(0[1-9]|10|11|12)([0-2]\d|30|31)\d{3}(\d|X|x))[^^0-9]'
+        scope: response body
+        sensitive: true
+        description: 中国身份证号
+
+      - name: Chinese Mobile Number
+        loaded: true
+        f_regex: '[^\w]((?:(?:\+|00)86)?1(?:(?:3[\d])|(?:4[5-79])|(?:5[0-35-9])|(?:6[5-7])|(?:7[0-8])|(?:8[\d])|(?:9[189]))\d{8})[^\w]'
+        scope: response body
+        sensitive: true
+        description: 中国手机号
+
+      - name: Internal IP Address
+        loaded: true
+        f_regex: '[^0-9]((127\.0\.0\.1)|(10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(172\.((1[6-9])|(2\d)|(3[01]))\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3}))[^0-9]'
+        scope: response
+        sensitive: true
+        description: 内网 IP 地址
+
+      - name: MAC Address
+        loaded: true
+        f_regex: (^([a-fA-F0-9]{2}(:[a-fA-F0-9]{2}){5})|[^a-zA-Z0-9]([a-fA-F0-9]{2}(:[a-fA-F0-9]{2}){5}))
+        scope: response
+        sensitive: true
+        description: MAC 地址
+
+  # ==================== Sensitive Information 敏感信息 ====================
+  - group: Sensitive Information
+    rule:
+      - name: Cloud Key
+        loaded: true
+        f_regex: (((access)(|-|_)(key)(|-|_)(id|secret))|(LTAI[a-z0-9]{12,20}))
+        scope: any
+        sensitive: true
+        description: 云服务 Key (阿里云等)
+
+      - name: AWS Access Key
+        loaded: true
+        f_regex: (AKIA[0-9A-Z]{16})
+        scope: any
+        sensitive: true
+        description: AWS Access Key ID
+
+      - name: AWS Secret Key
+        loaded: true
+        f_regex: ([a-zA-Z0-9/+=]{40})
+        scope: any
+        sensitive: true
+        description: AWS Secret Access Key
+
+      - name: Windows File/Dir Path
+        loaded: true
+        f_regex: '[^\w](([a-zA-Z]:\\(?:\w+\\?)*)|([a-zA-Z]:\\(?:\w+\\)*\w+\.\w+))'
+        scope: response
+        sensitive: true
+        description: Windows 文件路径
+
+      - name: Password Field
+        loaded: true
+        f_regex: ((|'|")(|[\w]{1,10})([p](ass|wd|asswd|assword))(|[\w]{1,10})(|'|")(:|=)(
+          |)('|")(.*?)('|")(|,))
+        scope: response body
+        sensitive: true
+        description: 密码字段
+
+      - name: Username Field
+        loaded: true
+        f_regex: ((|'|")(|[\w]{1,10})([u](ser|name|sername))|(account)|((((create|update)((d|r)|(by|on|at)))|(creator))))(|[\w]{1,10})(|'|")(:|=)(
+          |)('|")(.*?)('|")(|,))
+        scope: response body
+        sensitive: true
+        description: 用户名字段
+
+      - name: WeCom Key
+        loaded: true
+        f_regex: ((corp)(id|secret))
+        scope: response body
+        sensitive: true
+        description: 企业微信 Key
+
+      - name: JDBC Connection
+        loaded: true
+        f_regex: (jdbc:[a-z:]+://[a-z0-9.\-_:;=/@?,&]+)
+        scope: any
+        sensitive: true
+        description: JDBC 连接字符串
+
+      - name: Authorization Header
+        loaded: true
+        f_regex: ((basic [a-z0-9=:_\+\/-]{5,100})|(bearer [a-z0-9_.=:\+\/-]{5,100}))
+        scope: response body
+        sensitive: true
+        description: Authorization 认证头
+
+      - name: Sensitive Field
+        loaded: true
+        f_regex: ((\[)?('|")?([\w]{0,10})((key)|(secret)|(token)|(config)|(auth)|(access)|(admin))([\w]{0,10})('|")?(\])?(
+          |)(:|=)( |)('|")(.*?)('|")(|,))
+        scope: response
+        sensitive: true
+        description: 敏感字段
+
+  # ==================== Other 其他 ====================
+  - group: Other
+    rule:
+      - name: Source Map
+        loaded: true
+        f_regex: (\.js\.map)
+        scope: response body
+        sensitive: false
+        description: Source Map 文件
+
+      - name: URL Schemes
+        loaded: true
+        f_regex: ((?![http]|[https])(([-A-Za-z0-9]{1,20})://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]))
+        scope: response body
+        sensitive: false
+        description: URL Schemes
+
+      - name: Router Push
+        loaded: true
+        f_regex: (\$router\.push)
+        scope: response body
+        sensitive: false
+        description: Vue Router 路由
+
+      - name: API Path Pattern
+        loaded: true
+        f_regex: (/api/[a-zA-Z0-9_/-]+)
+        scope: any
+        sensitive: false
+        description: API 路径模式
+
+      - name: Internal Host
+        loaded: true
+        f_regex: (host\.internal)|(corp\.local)|(company\.local)
+        scope: any
+        sensitive: true
+        description: 内部主机名
+
+      - name: Stack Trace
+        loaded: true
+        f_regex: (at\s+[\w.$]+\([^)]+\))
+        scope: response body
+        sensitive: false
+        description: 堆栈跟踪
+
+  # ==================== API Security API 安全 ====================
+  - group: API Security
+    rule:
+      - name: SQL Error
+        loaded: true
+        f_regex: (sql|syntax|error|mysql|postgres|oracle|sqlite)
+        scope: response body
+        sensitive: false
+        description: SQL 错误信息
+
+      - name: Java StackTrace
+        loaded: true
+        f_regex: (java\.|Exception|at\s+com\.)
+        scope: response body
+        sensitive: false
+        description: Java 堆栈跟踪
+
+      - name: .NET StackTrace
+        loaded: true
+        f_regex: (System\.|at\s+[\w]+\.[\w]+\()
+        scope: response body
+        sensitive: false
+        description: .NET 堆栈跟踪
+
+      - name: PHP Error
+        loaded: true
+        f_regex: (PHP (Warning|Error|Fatal)|stack trace)
+        scope: response body
+        sensitive: false
+        description: PHP 错误
+
+      - name: Python Error
+        loaded: true
+        f_regex: (Traceback \(most recent call last\)|(Python\.\w+Error)
+        scope: response body
+        sensitive: false
+        description: Python 错误
