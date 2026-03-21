@@ -14,8 +14,8 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
 from ..testers.api_tester import APIRequestTester
 from ..testers.parameter_extractor import DangerousAPIFilter
 from ..testers.bypass_techniques import BypassTechniques
-from ..testers.fuzz_tester import FuzzTester
 from ..rules.rule_engine import SensitiveRuleEngine
+from ..analyzers.response_baseline import ResponseDifferentiator
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +25,43 @@ class TestAgent(AgentInterface):
     测试代理
     负责对发现的 API 端点进行漏洞测试
     """
-    
+
     def __init__(self):
         super().__init__("test")
-        self.tester = APIRequestTester()
-        self.parameter_extractor = ParameterExtractor()
-        self.bypass_techniques = BypassTechniques()
-        self.fuzz_tester = FuzzTester()
-        self.sensitive_detector = SensitiveRuleEngine()
-        self.differentiator = ResponseDifferentiator()
+        self._tester = None
+        self._bypass_techniques = None
+        self._sensitive_detector = None
+        self._differentiator = None
         self._tested_urls = set()
-    
+
+    def _get_tester(self) -> APIRequestTester:
+        """延迟初始化 tester"""
+        if self._tester is None:
+            self._tester = APIRequestTester()
+        return self._tester
+
+    def _get_bypass_techniques(self):
+        """获取 bypass techniques 列表"""
+        if self._bypass_techniques is None:
+            self._bypass_techniques = BypassTechniques.get_all_techniques()
+        return self._bypass_techniques
+
+    def _get_sensitive_detector(self) -> SensitiveRuleEngine:
+        """获取敏感信息检测器"""
+        if self._sensitive_detector is None:
+            self._sensitive_detector = SensitiveRuleEngine()
+        return self._sensitive_detector
+
+    def _get_differentiator(self) -> ResponseDifferentiator:
+        """获取响应差异化器"""
+        if self._differentiator is None:
+            self._differentiator = ResponseDifferentiator()
+        return self._differentiator
+
     async def execute(self, context: ScanContext) -> Dict[str, Any]:
         """
         执行测试任务
-        
+
         测试流程:
         1. 获取待测试端点
         2. 三种方式请求 (GET/POST/JSON)
@@ -48,7 +70,7 @@ class TestAgent(AgentInterface):
         5. Fuzz 测试
         """
         endpoints = self.knowledge_base.get_endpoints() if self.knowledge_base else []
-        
+
         if not endpoints:
             logger.warning("TestAgent: No endpoints to test")
             return {
@@ -56,50 +78,51 @@ class TestAgent(AgentInterface):
                 'vulnerabilities': [],
                 'sensitive_data': []
             }
-        
+
         logger.info(f"TestAgent: Starting tests for {len(endpoints)} endpoints")
-        
+
         vulnerabilities = []
         sensitive_data = []
         alive_apis = []
-        
+
         dangerous_paths = set()
         for endpoint in endpoints:
             if DangerousAPIFilter.is_dangerous(endpoint.path):
                 dangerous_paths.add(endpoint.path)
-        
+
         safe_endpoints = [ep for ep in endpoints if ep.path not in dangerous_paths]
-        
+
         for endpoint in safe_endpoints[:100]:
             full_url = endpoint.full_url or f"{context.target.rstrip('/')}{endpoint.path}"
-            
+
             if full_url in self._tested_urls:
                 continue
-            
+
             self._tested_urls.add(full_url)
-            
+
             try:
                 result = await self._test_endpoint(endpoint, context)
-                
+
                 if result.get('alive'):
                     alive_apis.append(result)
-                    
+
                     vulns = result.get('vulnerabilities', [])
                     vulnerabilities.extend(vulns)
-                    
+
                     sensitive = result.get('sensitive_data', [])
                     sensitive_data.extend(sensitive)
-                    
-                    for vuln in vulns:
-                        self.knowledge_base.add_vulnerability(vuln)
-                    
-                    for data in sensitive:
-                        self.knowledge_base.add_sensitive_data(data)
-                
+
+                    if self.knowledge_base:
+                        for vuln in vulns:
+                            self.knowledge_base.add_vulnerability(vuln)
+
+                        for data in sensitive:
+                            self.knowledge_base.add_sensitive_data(data)
+
             except Exception as e:
                 logger.debug(f"Test error for {full_url}: {e}")
                 continue
-        
+
         return {
             'tested': len(self._tested_urls),
             'alive_apis': len(alive_apis),
@@ -107,15 +130,15 @@ class TestAgent(AgentInterface):
             'sensitive_data': sensitive_data,
             'dangerous_filtered': len(endpoints) - len(safe_endpoints),
         }
-    
+
     async def _test_endpoint(
-        self, 
-        endpoint: APIEndpoint, 
+        self,
+        endpoint: APIEndpoint,
         context: ScanContext
     ) -> Dict[str, Any]:
         """测试单个端点"""
         full_url = endpoint.full_url or f"{context.target.rstrip('/')}{endpoint.path}"
-        
+
         result = {
             'url': full_url,
             'path': endpoint.path,
@@ -125,174 +148,96 @@ class TestAgent(AgentInterface):
             'vulnerabilities': [],
             'sensitive_data': [],
         }
-        
-        methods_to_test = ['GET', 'POST', 'JSON']
-        alive = False
-        
-        for method in methods_to_test:
-            try:
-                response = await self.tester.test_endpoint(
-                    full_url,
-                    method=method,
-                    cookies=context.cookies,
-                    headers=context.headers
-                )
-                
-                if response and response.get('status_code') in [200, 201, 204, 401, 403]:
-                    alive = True
-                    result['status_code'] = response.get('status_code')
-                    result['method'] = method
-                    break
-                    
-            except Exception:
-                continue
-        
-        if not alive:
-            return result
-        
-        result['alive'] = True
-        
+
+        tester = self._get_tester()
+
         try:
-            response_content = response.get('content', '')
-            content_hash = hashlib.md5(response_content[:1000].encode()).hexdigest()
-            self.differentiator.add_response(
-                full_url,
-                endpoint.method,
-                result['status_code'],
-                response_content,
-                len(response_content)
-            )
-            
-            if self.differentiator.is_duplicate_response(content_hash, threshold=10):
-                logger.debug(f"Skipping duplicate response: {full_url}")
-            
-            sensitive_results = self.sensitive_detector.scan(response_content)
-            for sr in sensitive_results:
-                result['sensitive_data'].append({
-                    'type': sr.get('rule_name', 'unknown'),
-                    'severity': 'medium',
-                    'url': full_url,
-                    'context': sr.get('match', '')[:100],
-                })
-            
-            bypass_result = await self._test_bypass(full_url, endpoint.method, context)
-            if bypass_result.get('bypassed'):
-                result['vulnerabilities'].append({
-                    'type': 'Bypass',
-                    'severity': 'high',
-                    'url': full_url,
-                    'evidence': bypass_result.get('evidence', ''),
-                    'payload': bypass_result.get('payload', ''),
-                })
-            
-            fuzz_result = await self._test_fuzz(full_url, endpoint.method, context)
-            if fuzz_result.get('vulnerable'):
-                result['vulnerabilities'].append({
-                    'type': 'Fuzz',
-                    'severity': 'medium',
-                    'url': full_url,
-                    'evidence': fuzz_result.get('evidence', ''),
-                    'payload': fuzz_result.get('payload', ''),
-                })
-            
+            responses = tester.test_endpoint(full_url, params=None, headers=context.headers)
+
+            if responses:
+                first_response = responses[0]
+                result['status_code'] = first_response.status_code
+                result['alive'] = first_response.status_code in [200, 201, 204, 401, 403]
+
+                if result['alive']:
+                    content = first_response.content
+                    content_hash = hashlib.md5(content[:1000].encode()).hexdigest()
+
+                    differentiator = self._get_differentiator()
+                    differentiator.add_response(
+                        full_url,
+                        endpoint.method,
+                        first_response.status_code,
+                        content,
+                        len(content)
+                    )
+
+                    if differentiator.is_duplicate_response(content_hash, threshold=10):
+                        logger.debug(f"Skipping duplicate response: {full_url}")
+
+                    sensitive_detector = self._get_sensitive_detector()
+                    try:
+                        sensitive_results = sensitive_detector.scan(content)
+                        for sr in sensitive_results:
+                            result['sensitive_data'].append({
+                                'type': sr.get('rule_name', 'unknown'),
+                                'severity': 'medium',
+                                'url': full_url,
+                                'context': str(sr.get('match', ''))[:100],
+                            })
+                    except Exception:
+                        pass
+
+                    bypass_results = tester.test_with_bypass(full_url, params=None, headers=context.headers)
+                    for bypass_resp in bypass_results:
+                        if bypass_resp.bypass_performed:
+                            result['vulnerabilities'].append({
+                                'type': 'Bypass',
+                                'severity': 'high',
+                                'url': full_url,
+                                'evidence': f"Status: {bypass_resp.status_code}",
+                                'payload': bypass_resp.bypass_technique,
+                            })
+
         except Exception as e:
             logger.debug(f"Analysis error: {e}")
-        
+
         return result
-    
-    async def _test_bypass(
-        self,
-        url: str,
-        method: str,
-        context: ScanContext
-    ) -> Dict[str, Any]:
-        """测试 Bypass 技术"""
-        result = {
-            'bypassed': False,
-            'technique': '',
-            'evidence': '',
-            'payload': '',
-        }
-        
-        techniques = self.bypass_techniques.get_by_type('header')[:3]
-        
-        for technique in techniques:
-            try:
-                headers = context.headers.copy()
-                technique.apply(headers)
-                
-                response = await self.tester.test_endpoint(
-                    url,
-                    method=method,
-                    headers=headers,
-                    cookies=context.cookies
-                )
-                
-                if response and response.get('status_code') == 200:
-                    result['bypassed'] = True
-                    result['technique'] = technique.name
-                    result['evidence'] = f"Status: {response.get('status_code')}"
-                    result['payload'] = str(headers)
-                    break
-                    
-            except Exception:
-                continue
-        
-        return result
-    
-    async def _test_fuzz(
-        self,
-        url: str,
-        method: str,
-        context: ScanContext
-    ) -> Dict[str, Any]:
-        """测试 Fuzz"""
-        result = {
-            'vulnerable': False,
-            'evidence': '',
-            'payload': '',
-        }
-        
-        try:
-            fuzz_result = await self.fuzz_tester.test_url(
-                url,
-                method=method,
-                cookies=context.cookies
-            )
-            
-            if fuzz_result and fuzz_result.get('vulnerable'):
-                result['vulnerable'] = True
-                result['evidence'] = fuzz_result.get('evidence', '')
-                result['payload'] = fuzz_result.get('payload', '')
-                
-        except Exception:
-            pass
-        
-        return result
-    
+
     async def extract_parameters(self, context: ScanContext) -> Dict[str, Set[str]]:
         """提取参数"""
         endpoints = self.knowledge_base.get_endpoints() if self.knowledge_base else []
         all_params = {}
-        
+
+        tester = self._get_tester()
+
         for endpoint in endpoints[:50]:
             try:
-                params = await self.parameter_extractor.extract_from_endpoint(
-                    endpoint.path,
-                    context.target
+                responses = tester.test_endpoint(
+                    f"{context.target.rstrip('/')}{endpoint.path}",
+                    params=None,
+                    headers=context.headers
                 )
-                
-                if params:
-                    all_params[endpoint.path] = set(params)
-                    
-                    for param in params:
-                        self.knowledge_base.add_parameter(endpoint.path, param)
-                        
+
+                if responses:
+                    content = responses[0].content
+                    params = tester.parameter_extractor.extract_from_response(content)
+
+                    if params:
+                        all_params[endpoint.path] = set(params)
+
+                        if self.knowledge_base:
+                            for param in params:
+                                self.knowledge_base.add_parameter(endpoint.path, param)
+
             except Exception:
                 continue
-        
+
         return all_params
-    
+
     async def cleanup(self) -> None:
         """清理资源"""
         self._tested_urls.clear()
+        self._tester = None
+        self._sensitive_detector = None
+        self._differentiator = None
