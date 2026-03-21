@@ -25,7 +25,7 @@ class ScanConfig:
     js_depth: int = 3
     
     ai_scan: bool = False
-    concurrency: int = 50
+    concurrency: int = 300
     output_format: str = "json"
     
     resume: bool = False

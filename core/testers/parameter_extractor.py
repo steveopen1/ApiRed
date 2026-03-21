@@ -182,8 +182,9 @@ class DangerousAPIFilter:
     """
     危险 API 过滤器
     过滤可能造成破坏的 API 操作
+    参考 0x727/ChkApi 规则
     """
-    
+
     DANGEROUS_PATTERNS = [
         r'delete',
         r'drop',
@@ -218,8 +219,39 @@ class DangerousAPIFilter:
         r'submit',
         r'publish',
         r'unpublish',
+        r'clear',
+        r'wipe',
+        r'destroy',
+        r'revoke',
+        r'黑名单',
+        r'白名单',
+        r'ban',
+        r'unban',
+        r'lock',
+        r'unlock',
+        r'close',
+        r'open',
+        r'start',
+        r'suspend',
+        r'resume',
+        r'approve',
+        r'reject',
+        r'confirm',
+        r'verify',
+        r'sync',
+        r'push',
+        r'pull',
+        r'connect',
+        r'disconnect',
+        r'install',
+        r'deploy',
+        r'undeploy',
+        r'compile',
+        r'build',
+        r'test',
+        r'debug',
     ]
-    
+
     SAFE_PATTERNS = [
         r'get',
         r'list',
@@ -233,27 +265,84 @@ class DangerousAPIFilter:
         r'info',
         r'profile',
         r'status',
+        r'check',
+        r'validate',
+        r'verify',
+        r'stats',
+        r'stastics',
+        r'metrics',
+        r'health',
+        r'ping',
+        r'count',
+        r'sum',
+        r'avg',
+        r'min',
+        r'max',
+        r'config',
+        r'setting',
+        r'options',
+        r'preferences',
     ]
-    
+
+    CRITICAL_DANGEROUS_PATTERNS = [
+        r'delete\s*all',
+        r'drop\s*table',
+        r'drop\s*database',
+        r'shutdown\s*now',
+        r'reboot\s*now',
+        r'truncate\s*table',
+        r'exec\s*\(',
+        r'execute\s*\(',
+        r'shell_exec',
+        r'eval\s*\(',
+        r'system\s*\(',
+    ]
+
+    @classmethod
+    def is_critical_dangerous(cls, api_path: str) -> bool:
+        """判断是否为极度危险的API（直接拒绝）"""
+        path_lower = api_path.lower()
+        for pattern in cls.CRITICAL_DANGEROUS_PATTERNS:
+            if re.search(pattern, path_lower):
+                return True
+        return False
+
     @classmethod
     def is_dangerous(cls, api_path: str) -> bool:
         """判断 API 是否危险"""
+        if cls.is_critical_dangerous(api_path):
+            return True
+
         path_lower = api_path.lower()
-        
+        dangerous_count = 0
+        safe_count = 0
+
         for pattern in cls.DANGEROUS_PATTERNS:
             if re.search(pattern, path_lower):
-                safe_count = sum(1 for p in cls.SAFE_PATTERNS if re.search(p, path_lower))
-                dangerous_count = sum(1 for p in cls.DANGEROUS_PATTERNS if re.search(p, path_lower))
-                
-                if dangerous_count > safe_count:
-                    return True
-        
+                dangerous_count += 1
+
+        for pattern in cls.SAFE_PATTERNS:
+            if re.search(pattern, path_lower):
+                safe_count += 1
+
+        if dangerous_count > safe_count:
+            return True
+
         return False
-    
+
     @classmethod
     def is_safe(cls, api_path: str) -> bool:
         """判断 API 是否安全"""
         return not cls.is_dangerous(api_path)
+
+    @classmethod
+    def get_danger_level(cls, api_path: str) -> str:
+        """获取危险等级: safe/low/medium/high/critical"""
+        if cls.is_critical_dangerous(api_path):
+            return "critical"
+        if cls.is_dangerous(api_path):
+            return "high"
+        return "safe"
 
 
 def create_parameter_extractor() -> APIParameterExtractor:

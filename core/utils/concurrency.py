@@ -52,8 +52,8 @@ class SemaphorePool:
 
 class ThreadPool:
     """线程池封装"""
-    
-    def __init__(self, max_workers: int = 10, name: str = 'ThreadPool'):
+
+    def __init__(self, max_workers: int = 300, name: str = 'ThreadPool'):
         self.max_workers = max_workers
         self.name = name
         self.executor = ThreadPoolExecutor(

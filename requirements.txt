@@ -10,3 +10,4 @@ pygments>=2.10.0
 playwright>=1.40.0
 pyyaml>=6.0
 lxml>=4.9.0
+pymysql>=1.0.0

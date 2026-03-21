@@ -51,7 +51,8 @@ Examples:
         scan_parser.add_argument('-c', '--cookies', metavar='COOKIES', help='Cookies')
         scan_parser.add_argument('--chrome', choices=['on', 'off'], default='on',
                                   help='Enable Chrome browser (default: on)')
-        scan_parser.add_argument('--concurrency', '-cn', type=int, default=50)
+        scan_parser.add_argument('--concurrency', '-cn', type=int, default=300,
+                                  help='Max concurrent HTTP requests (default: 300)')
         scan_parser.add_argument('--js-depth', type=int, default=3)
         scan_parser.add_argument('--at', '--attack-type', dest='attack_type',
                                   choices=['0', '1'], default='0',

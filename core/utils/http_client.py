@@ -43,10 +43,10 @@ class TaskResult:
 
 class AsyncHttpClient:
     """异步HTTP客户端"""
-    
+
     def __init__(
         self,
-        max_concurrent: int = 50,
+        max_concurrent: int = 300,
         max_retries: int = 3,
         timeout: int = 30,
         proxy: Optional[str] = None,

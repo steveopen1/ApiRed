@@ -351,3 +351,351 @@ class FileStorage:
         except Exception as e:
             print(f"Append text error: {e}")
             return False
+
+
+class MySQLStorage:
+    """
+    MySQL 存储封装
+    提供完整的 MySQL 数据库存储功能
+    参考 0x727/ChkApi 的数据存储设计
+    """
+
+    def __init__(self, host: str = "localhost", port: int = 3306,
+                 user: str = "root", password: str = "",
+                 database: str = "apired", charset: str = "utf8mb4"):
+        self.config = {
+            'host': host,
+            'port': port,
+            'user': user,
+            'password': password,
+            'database': database,
+            'charset': charset
+        }
+        self._conn = None
+        self._connect()
+
+    def _connect(self):
+        """连接 MySQL"""
+        try:
+            import pymysql
+            self._conn = pymysql.connect(**self.config)
+        except ImportError:
+            print("Warning: pymysql not installed, MySQL storage unavailable")
+            self._conn = None
+        except Exception as e:
+            print(f"MySQL connection failed: {e}")
+            self._conn = None
+
+    def _ensure_database(self):
+        """确保数据库存在"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.config['database']} "
+                             f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Create database error: {e}")
+            return False
+
+    def init_tables(self):
+        """初始化表结构"""
+        if not self._conn:
+            return False
+
+        tables = [
+            """
+            CREATE TABLE IF NOT EXISTS load_urls (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL地址',
+                load_url VARCHAR(2048) COMMENT '自动加载的URL地址',
+                load_url_type VARCHAR(50) COMMENT 'js/static_url/no_js',
+                referer VARCHAR(2048) COMMENT '来源URL',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_load_url (load_url(255))
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS js_static_urls (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                js_static_url VARCHAR(2048) COMMENT 'JS地址或静态URL',
+                url_type VARCHAR(50) COMMENT 'js_url/static_url',
+                status_code INT COMMENT '响应状态码',
+                res_length BIGINT COMMENT '响应长度',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_type (url_type)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS api_paths (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                api_path VARCHAR(2048) COMMENT '提取的API接口',
+                method VARCHAR(10) DEFAULT 'GET' COMMENT '请求方法',
+                source_type VARCHAR(50) COMMENT 'js_fingerprint/swagger/fuzz',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_api_path (api_path(255))
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS base_urls (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                tree_url VARCHAR(2048) COMMENT 'Tree URL',
+                base_url VARCHAR(255) COMMENT 'Base URL (微服务名)',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_base_url (base_url)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS parameters (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                api_path VARCHAR(2048) COMMENT 'API路径',
+                parameter VARCHAR(255) COMMENT '参数名',
+                param_source VARCHAR(50) COMMENT '来源: response_key/error_msg',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_param (parameter)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS api_results (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                api_url VARCHAR(2048) COMMENT 'API完整路径',
+                method VARCHAR(10) DEFAULT 'GET' COMMENT '请求方法',
+                parameter TEXT COMMENT '请求参数',
+                res_type VARCHAR(50) COMMENT '响应格式: json/html/xml',
+                status_code INT COMMENT '响应状态码',
+                res_length BIGINT COMMENT '响应长度',
+                response_content LONGTEXT COMMENT '响应内容(摘要)',
+                content_hash VARCHAR(64) COMMENT '响应内容哈希',
+                hash_count INT DEFAULT 1 COMMENT '相同哈希出现次数',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_api_url (api_url(255)),
+                INDEX idx_content_hash (content_hash)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS sensitive_data (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                api_url VARCHAR(2048) COMMENT '来源API',
+                sensitive_type VARCHAR(100) COMMENT '敏感信息类型',
+                sensitive_content TEXT COMMENT '敏感内容(脱敏)',
+                rule_name VARCHAR(100) COMMENT '匹配规则名',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_sensitive_type (sensitive_type)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS vulnerabilities (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                url VARCHAR(2048) NOT NULL COMMENT '被检测的URL',
+                api_url VARCHAR(2048) COMMENT '漏洞API',
+                vuln_type VARCHAR(100) COMMENT '漏洞类型',
+                severity VARCHAR(20) COMMENT '严重程度',
+                evidence TEXT COMMENT '证据',
+                payload TEXT COMMENT 'payload',
+                remediation TEXT COMMENT '修复建议',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_url (url(255)),
+                INDEX idx_vuln_type (vuln_type)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        ]
+
+        try:
+            with self._conn.cursor() as cursor:
+                for table_sql in tables:
+                    cursor.execute(table_sql)
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Init tables error: {e}")
+            return False
+
+    def insert_load_url(self, url: str, load_url: str, load_url_type: str, referer: str = "") -> bool:
+        """插入自动加载URL"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO load_urls (url, load_url, load_url_type, referer) VALUES (%s, %s, %s, %s)",
+                    (url, load_url, load_url_type, referer)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert load_url error: {e}")
+            return False
+
+    def insert_js_url(self, url: str, js_url: str, url_type: str, status_code: int = 200,
+                     res_length: int = 0) -> bool:
+        """插入JS/静态URL"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO js_static_urls (url, js_static_url, url_type, status_code, res_length) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (url, js_url, url_type, status_code, res_length)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert js_url error: {e}")
+            return False
+
+    def insert_api_path(self, url: str, api_path: str, method: str = "GET",
+                       source_type: str = "js_fingerprint") -> bool:
+        """插入API路径"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO api_paths (url, api_path, method, source_type) VALUES (%s, %s, %s, %s)",
+                    (url, api_path, method, source_type)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert api_path error: {e}")
+            return False
+
+    def insert_base_url(self, url: str, tree_url: str = "", base_url: str = "") -> bool:
+        """插入Base URL"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO base_urls (url, tree_url, base_url) VALUES (%s, %s, %s)",
+                    (url, tree_url, base_url)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert base_url error: {e}")
+            return False
+
+    def insert_parameter(self, url: str, api_path: str, parameter: str,
+                        param_source: str = "response_key") -> bool:
+        """插入参数"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO parameters (url, api_path, parameter, param_source) VALUES (%s, %s, %s, %s)",
+                    (url, api_path, parameter, param_source)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert parameter error: {e}")
+            return False
+
+    def insert_api_result(self, url: str, api_url: str, method: str, parameter: str = "",
+                         res_type: str = "json", status_code: int = 200, res_length: int = 0,
+                         content_hash: str = "", hash_count: int = 1) -> bool:
+        """插入API测试结果"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO api_results (url, api_url, method, parameter, res_type, status_code, "
+                    "res_length, content_hash, hash_count) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (url, api_url, method, parameter, res_type, status_code, res_length, content_hash, hash_count)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert api_result error: {e}")
+            return False
+
+    def insert_sensitive_data(self, url: str, api_url: str, sensitive_type: str,
+                              sensitive_content: str, rule_name: str = "") -> bool:
+        """插入敏感数据"""
+        if not self._conn:
+            return False
+        masked_content = sensitive_content[:50] + "***" if len(sensitive_content) > 50 else "***"
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO sensitive_data (url, api_url, sensitive_type, sensitive_content, rule_name) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (url, api_url, sensitive_type, masked_content, rule_name)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert sensitive_data error: {e}")
+            return False
+
+    def insert_vulnerability(self, url: str, api_url: str, vuln_type: str, severity: str,
+                            evidence: str = "", payload: str = "", remediation: str = "") -> bool:
+        """插入漏洞"""
+        if not self._conn:
+            return False
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO vulnerabilities (url, api_url, vuln_type, severity, evidence, payload, remediation) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (url, api_url, vuln_type, severity, evidence[:500], payload, remediation)
+                )
+            self._conn.commit()
+            return True
+        except Exception as e:
+            print(f"Insert vulnerability error: {e}")
+            return False
+
+    def query_sensitive_keywords(self, keywords: str) -> List[Dict]:
+        """查询敏感信息（RCE相关关键词）"""
+        if not self._conn:
+            return []
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT * FROM api_results WHERE api_url LIKE %s OR parameter LIKE %s",
+                    (f"%{keywords}%", f"%{keywords}%")
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Query sensitive keywords error: {e}")
+            return []
+
+    def query_similar_responses(self, content_hash: str) -> List[Dict]:
+        """查询相同响应的数量（响应差异化）"""
+        if not self._conn:
+            return []
+        try:
+            with self._conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT content_hash, COUNT(*) as count FROM api_results GROUP BY content_hash HAVING count > 1"
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Query similar responses error: {e}")
+            return []
+
+    def close(self):
+        """关闭连接"""
+        if self._conn:
+            self._conn.close()
+            self._conn = None

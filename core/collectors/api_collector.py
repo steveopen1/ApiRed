@@ -81,53 +81,261 @@ class APIRouter:
     
     @classmethod
     def extract_from_swagger(cls, swagger_content: str) -> List[APIFindResult]:
-        """从Swagger JSON提取API"""
+        """
+        从Swagger/OpenAPI JSON/YAML提取API
+        支持 Swagger 2.0, OpenAPI 3.0, 3.1
+        """
         results = []
-        
+
         try:
             data = json.loads(swagger_content)
-            paths = data.get('paths', {})
-            
-            for path, methods in paths.items():
-                for method, details in methods.items():
-                    if method.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
-                        results.append(APIFindResult(
-                            path=path,
-                            method=method.upper(),
-                            source_type="swagger",
-                            url_type="api_path"
-                        ))
         except json.JSONDecodeError:
-            pass
-        
+            return results
+
+        if 'swagger' in data:
+            results.extend(cls._parse_swagger2(data))
+        elif 'openapi' in data:
+            results.extend(cls._parse_openapi3(data))
+
         return results
+
+    @classmethod
+    def _parse_swagger2(cls, data: Dict) -> List[APIFindResult]:
+        """解析 Swagger 2.0"""
+        results = []
+
+        paths = data.get('paths', {})
+        base_path = data.get('basePath', '')
+
+        for path, methods in paths.items():
+            full_path = base_path + path if base_path else path
+
+            for method, details in methods.items():
+                if method.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']:
+
+                    parameters = details.get('parameters', [])
+                    param_names = []
+                    for param in parameters:
+                        if isinstance(param, dict):
+                            param_names.append(param.get('name', ''))
+
+                    results.append(APIFindResult(
+                        path=full_path,
+                        method=method.upper(),
+                        source_type="swagger2",
+                        url_type="api_path"
+                    ))
+
+        return results
+
+    @classmethod
+    def _parse_openapi3(cls, data: Dict) -> List[APIFindResult]:
+        """解析 OpenAPI 3.0/3.1"""
+        results = []
+
+        paths = data.get('paths', {})
+        servers = data.get('servers', [])
+        base_url = servers[0].get('url', '') if servers else ''
+
+        for path, methods in paths.items():
+            if not isinstance(methods, dict):
+                continue
+
+            for method, details in methods.items():
+                if method.upper() not in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']:
+                    continue
+
+                if not isinstance(details, dict):
+                    continue
+
+                parameters = details.get('parameters', [])
+                request_body = details.get('requestBody', {})
+
+                param_names = []
+                for param in parameters:
+                    if isinstance(param, dict):
+                        param_names.append(param.get('name', ''))
+
+                if isinstance(request_body, dict):
+                    content = request_body.get('content', {})
+                    if 'application/json' in content:
+                        schema = content['application/json'].get('schema', {})
+                        param_names.extend(cls._extract_schema_params(schema))
+
+                results.append(APIFindResult(
+                    path=path,
+                    method=method.upper(),
+                    source_type="openapi3",
+                    url_type="api_path"
+                ))
+
+        return results
+
+    @classmethod
+    def _extract_schema_params(cls, schema: Dict, prefix: str = '') -> List[str]:
+        """从 OpenAPI schema 提取参数名"""
+        params = []
+
+        if not isinstance(schema, dict):
+            return params
+
+        if '$ref' in schema:
+            return params
+
+        properties = schema.get('properties', {})
+        for prop_name in properties.keys():
+            full_name = f"{prefix}{prop_name}" if prefix else prop_name
+            params.append(full_name)
+
+        additional_props = schema.get('additionalProperties')
+        if isinstance(additional_props, dict):
+            params.extend(cls._extract_schema_params(additional_props, prefix))
+
+        return params
+
+    @classmethod
+    def find_swagger_endpoints(cls, target: str) -> List[str]:
+        """
+        查找可能的 Swagger 端点
+        参考 0x727/ChkApi 的 Swagger 各版本解析
+        """
+        endpoints = [
+            '/swagger-ui.html',
+            '/swagger-ui/index.html',
+            '/swagger-ui/',
+            '/api-docs',
+            '/api-docs/',
+            '/swagger.json',
+            '/swagger.yaml',
+            '/v2/api-docs',
+            '/v3/api-docs',
+            '/doc.html',
+            '/swagger/swagger-ui.html',
+            '/api/swagger.json',
+            '/api-docs.json',
+            '/swagger/v2/swagger.json',
+            '/swagger/v3/swagger.json',
+            '/api/documentation',
+            '/docs',
+            '/documentation',
+            '/openapi.json',
+            '/openapi.yaml',
+            '/openapi.yml',
+        ]
+
+        return [target.rstrip('/') + ep for ep in endpoints]
 
 
 class BaseURLAnalyzer:
-    """Base URL分析器"""
-    
+    """
+    Base URL 分析器
+    参考 0x727/ChkApi 的 Base URL 发现逻辑
+    Base URL 可以理解为每个微服务的服务名称
+    """
+
     BASE_URL_PATTERNS = [
         re.compile(r'''(?:baseUrl|baseURL|BASE_URL|API_BASE)\s*[:=]\s*['"`]([^'"`]+)['"`]'''),
         re.compile(r'''(?:apiUrl|apiURL|API_URL)\s*[:=]\s*['"`]([^'"`]+)['"`]'''),
         re.compile(r'''host\s*[:=]\s*['"`]([^'"`]+)['"`]''', re.IGNORECASE),
+        re.compile(r'''origin\s*[:=]\s*['"`]([^'"`]+)['"`]''', re.IGNORECASE),
+        re.compile(r'''domain\s*[:=]\s*['"`]([^'"`]+)['"`]''', re.IGNORECASE),
     ]
-    
+
+    SERVICE_PATH_PATTERNS = [
+        re.compile(r'''/(?:api|v\d+|rest|service|gateway|g)/(?:[\w-]+)/(?:[\w-]+)''', re.IGNORECASE),
+        re.compile(r'''/(?:[\w]+/){2,}(?:[\w]+)''', re.IGNORECASE),
+    ]
+
     @classmethod
     def extract_base_urls(cls, js_content: str) -> List[str]:
         """提取Base URL"""
         base_urls = []
-        
+
         for pattern in cls.BASE_URL_PATTERNS:
             matches = pattern.findall(js_content)
             base_urls.extend(matches)
-        
+
         return list(set(base_urls))
-    
+
     @classmethod
     def extract_from_url(cls, url: str) -> str:
         """从完整URL提取Base URL"""
         parsed = urlparse(url)
         return f"{parsed.scheme}://{parsed.netloc}"
+
+    @classmethod
+    def extract_base_from_auto_loaded(cls, url: str, load_url: str) -> Optional[str]:
+        """
+        从自动加载的URL提取Base URL
+        例如: url=http://example.com, load_url=http://example.com/authControl
+        则 authControl 是 Base URL
+        """
+        if not url or not load_url:
+            return None
+
+        parsed_main = urlparse(url)
+        parsed_load = urlparse(load_url)
+
+        if parsed_main.netloc != parsed_load.netloc:
+            return None
+
+        main_path = parsed_main.path.rstrip('/')
+        load_path = parsed_load.path.rstrip('/')
+
+        if load_path.startswith(main_path):
+            remaining = load_path[len(main_path):].strip('/')
+            if remaining and '/' not in remaining:
+                return remaining
+
+        return None
+
+    @classmethod
+    def extract_base_from_api_path(cls, api_path: str) -> Optional[str]:
+        """
+        从API路径提取Base URL
+        例如: /ophApi/checkCode/getCheckCode -> ophApi 是 Base URL
+        """
+        if not api_path:
+            return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        if len(parts) >= 2:
+            return parts[0]
+
+        return None
+
+    @classmethod
+    def extract_base_from_paths(cls, paths: List[str]) -> List[str]:
+        """
+        从多个路径批量提取 Base URL
+        返回所有发现的 Base URL
+        """
+        base_urls = set()
+
+        for path in paths:
+            base = cls.extract_base_from_api_path(path)
+            if base:
+                base_urls.add(base)
+
+        return list(base_urls)
+
+    @classmethod
+    def build_service_urls(cls, base_urls: List[str], target: str) -> List[str]:
+        """
+        构建完整的服务URL列表
+        用于后续API发现
+        """
+        parsed = urlparse(target)
+        scheme = parsed.scheme
+        netloc = parsed.netloc
+
+        service_urls = []
+        for base in base_urls:
+            service_urls.append(f"{scheme}://{netloc}/{base}")
+
+        return service_urls
 
 
 class ServiceAnalyzer:

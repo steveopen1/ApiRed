@@ -31,6 +31,104 @@ class APIResponseSignature:
     is_api: bool
 
 
+class ResponseDifferentiator:
+    """
+    响应差异化分析器
+    参考 0x727/ChkApi 的 content_hash 差异化功能
+
+    功能：
+    1. 计算响应内容哈希
+    2. 统计相同哈希出现次数
+    3. 识别响应差异化（过滤重复的"缺少凭证"响应）
+    """
+
+    def __init__(self):
+        self.content_hashes: Dict[str, int] = {}
+        self.hash_to_responses: Dict[str, List[Dict]] = {}
+
+    def add_response(self, url: str, method: str, status_code: int,
+                    content: str, content_length: int) -> str:
+        """
+        添加响应并计算哈希
+
+        Returns:
+            content_hash
+        """
+        content_hash = hashlib.md5(content[:1000].encode()).hexdigest()
+
+        self.content_hashes[content_hash] = self.content_hashes.get(content_hash, 0) + 1
+
+        if content_hash not in self.hash_to_responses:
+            self.hash_to_responses[content_hash] = []
+
+        self.hash_to_responses[content_hash].append({
+            'url': url,
+            'method': method,
+            'status_code': status_code,
+            'length': content_length,
+            'hash_count': self.content_hashes[content_hash]
+        })
+
+        return content_hash
+
+    def get_hash_count(self, content_hash: str) -> int:
+        """获取相同哈希出现次数"""
+        return self.content_hashes.get(content_hash, 0)
+
+    def is_duplicate_response(self, content_hash: str, threshold: int = 5) -> bool:
+        """
+        判断是否为重复响应
+        如果相同哈希出现次数超过阈值，认为是重复响应
+        """
+        return self.content_hashes.get(content_hash, 0) > threshold
+
+    def get_rare_responses(self, min_count: int = 1, max_count: int = 3) -> List[str]:
+        """
+        获取稀有响应（出现次数较少的哈希）
+        这些响应更可能是有效的 API 响应
+        """
+        return [
+            h for h, count in self.content_hashes.items()
+            if min_count <= count <= max_count
+        ]
+
+    def get_duplicate_groups(self) -> Dict[str, List[Dict]]:
+        """
+        获取重复响应组
+        用于过滤大量相同的"缺少凭证"等默认响应
+        """
+        return {
+            h: responses for h, responses in self.hash_to_responses.items()
+            if len(responses) > 3
+        }
+
+    def analyze_response_diversity(self) -> Dict[str, Any]:
+        """
+        分析响应多样性
+
+        返回：
+        - unique_count: 唯一响应数
+        - duplicate_count: 重复响应数
+        - total_count: 总响应数
+        - diversity_rate: 多样性比率
+        """
+        total = sum(self.content_hashes.values())
+        unique = len(self.content_hashes)
+        duplicates = sum(c - 1 for c in self.content_hashes.values())
+
+        return {
+            'unique_count': unique,
+            'duplicate_count': duplicates,
+            'total_count': total,
+            'diversity_rate': unique / total if total > 0 else 0,
+            'hash_distribution': dict(sorted(
+                self.content_hashes.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:10])
+        }
+
+
 class ResponseBaselineLearner:
     """
     响应基线学习器
