@@ -1,4 +1,4 @@
-# ChkApi - API Security Scanner
+# ApiRed	
 
 [![GitHub release](https://img.shields.io/github/release/0x727/ChkApi_0x727.svg)](https://github.com/0x727/ChkApi_0x727/releases)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
