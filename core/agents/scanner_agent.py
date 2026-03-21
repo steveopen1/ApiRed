@@ -84,14 +84,19 @@ class ScannerAgent(BaseAgent):
     
     async def _discover_js(self, target: str) -> AgentResult:
         """JS资源发现"""
-        import requests
+        import aiohttp
         from bs4 import BeautifulSoup
+        import asyncio
         
         js_urls = []
         
         try:
-            response = requests.get(target, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(target) as response:
+                    text = await response.text()
+            
+            soup = BeautifulSoup(text, 'html.parser')
             
             scripts = soup.find_all('script', src=True)
             for script in scripts:

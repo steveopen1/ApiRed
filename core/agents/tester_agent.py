@@ -141,11 +141,3 @@ class TesterAgent(BaseAgent):
             success=True,
             data={'validated_tests': validated}
         )
-    
-    async def think(self, prompt: str, context: Dict = None) -> str:
-        """LLM增强测试"""
-        return ""
-    
-    async def chat(self, messages: List[Dict], system: str = "") -> str:
-        """LLM对话"""
-        return ""

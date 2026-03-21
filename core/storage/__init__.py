@@ -20,7 +20,6 @@ class DBStorage:
         self.db_path = db_path
         self.wal_mode = wal_mode
         self._ensure_dir()
-        self.conn: Optional[sqlite3.Connection] = None
         self._local = threading.local()
         self._init_db()
     

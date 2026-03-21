@@ -128,11 +128,3 @@ class AnalyzerAgent(BaseAgent):
             success=True,
             data={'vulnerabilities': vulnerabilities}
         )
-    
-    async def think(self, prompt: str, context: Dict = None) -> str:
-        """LLM增强分析"""
-        return ""
-    
-    async def chat(self, messages: List[Dict], system: str = "") -> str:
-        """LLM对话"""
-        return ""
