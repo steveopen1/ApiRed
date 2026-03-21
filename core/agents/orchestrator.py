@@ -29,9 +29,9 @@ AI_ENV_VARS = {
     'DEEPSEEK_API_KEY': 'DeepSeek API Key',
     'OPENAI_API_KEY': 'OpenAI API Key',
     'ANTHROPIC_API_KEY': 'Anthropic API Key',
-    'AI_PROVIDER': 'AI Provider (deepseek/openai/anthropic)',
-    'AI_BASE_URL': 'AI Base URL',
-    'AI_MODEL': 'AI Model',
+    'AI_PROVIDER': 'AI Provider (deepseek/openai/anthropic/custom)',
+    'AI_BASE_URL': 'AI Base URL (支持自定义API)',
+    'AI_MODEL': 'AI Model ID (支持自定义模型)',
 }
 
 
@@ -50,8 +50,32 @@ def check_ai_config() -> Dict[str, str]:
     return missing
 
 
+def get_ai_config() -> Dict[str, str]:
+    """
+    获取 AI 配置（从环境变量）
+    
+    Returns:
+        Dict of AI configuration
+    """
+    return {
+        'provider': os.environ.get('AI_PROVIDER', 'deepseek'),
+        'api_key': (
+            os.environ.get('DEEPSEEK_API_KEY') or
+            os.environ.get('OPENAI_API_KEY') or
+            os.environ.get('ANTHROPIC_API_KEY') or
+            os.environ.get('CUSTOM_API_KEY', '')
+        ),
+        'base_url': os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
+        'model': os.environ.get('AI_MODEL', 'deepseek-chat'),
+    }
+
+
 def print_ai_config_guide():
     """打印 AI 配置指南"""
+    current_config = get_ai_config()
+    
+    api_key_display = ('*' * 20) if current_config['api_key'] else 'NOT SET'
+    
     print("""
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                     AI Configuration Required                          ║
@@ -59,24 +83,51 @@ def print_ai_config_guide():
 ║                                                                        ║
 ║  Agent 模式需要配置 AI API 密钥才能使用 LLM 功能。                     ║
 ║                                                                        ║
-║  配置方式:                                                              ║
+║  当前配置:                                                              ║
+║    Provider: {provider}                                           ║
+║    Base URL: {base_url}                                            ║
+║    Model: {model}                                                ║
+║    API Key: {api_key_display}                                    ║
 ║                                                                        ║
-║  1. DeepSeek (推荐):                                                   ║
-║     export DEEPSEEK_API_KEY="sk-xxxxxxx"                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  2. OpenAI:                                                            ║
-║     export OPENAI_API_KEY="sk-xxxxxxx"                               ║
+║  方式一: 使用 DeepSeek (推荐)                                          ║
+║    export DEEPSEEK_API_KEY="sk-xxxxxxx"                             ║
 ║                                                                        ║
-║  3. Anthropic:                                                         ║
-║     export ANTHROPIC_API_KEY="sk-ant-xxxxxxx"                         ║
+║  方式二: 使用 OpenAI                                                  ║
+║    export OPENAI_API_KEY="sk-xxxxxxx"                               ║
+║    export AI_BASE_URL="https://api.openai.com/v1"                     ║
+║    export AI_MODEL="gpt-4"                                          ║
 ║                                                                        ║
-║  查看更多: https://github.com/chaitin/MonkeyCodeOfficialPlugins         ║
+║  方式三: 使用自定义 API (支持任意 LLM)                               ║
+║    export CUSTOM_API_KEY="your-api-key"                              ║
+║    export AI_BASE_URL="https://your-api.com/v1"                      ║
+║    export AI_MODEL="any-model-id"                                    ║
 ║                                                                        ║
-║  或者使用传统模式 (无需配置 AI):                                        ║
-║     python main.py scan -u http://example.com                           ║
+║  方式四: 使用 Anthropic                                              ║
+║    export ANTHROPIC_API_KEY="sk-ant-xxxxxxx"                        ║
+║    export AI_BASE_URL="https://api.anthropic.com"                     ║
+║    export AI_MODEL="claude-3-sonnet"                               ║
+║                                                                        ║
+║  方式五: 使用硅基流动/LocalAI 等第三方                               ║
+║    export CUSTOM_API_KEY="any-api-key"                               ║
+║    export AI_BASE_URL="http://your-endpoint/v1"                      ║
+║    export AI_MODEL="any-model-id"                                   ║
+║                                                                        ║
+║  提示: 设置 AI_PROVIDER=custom 使用自定义配置                         ║
+║                                                                        ║
+║  查看更多: https://github.com/chaitin/MonkeyCodeOfficialPlugins     ║
+║                                                                        ║
+║  或者使用传统模式 (无需配置 AI):                                      ║
+║     python main.py scan -u http://example.com                         ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-""")
+""".format(
+        provider=current_config['provider'],
+        base_url=current_config['base_url'],
+        model=current_config['model'],
+        api_key_display=api_key_display
+    ))
 
 
 @dataclass
