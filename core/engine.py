@@ -250,6 +250,25 @@ class ScanEngine:
     
     async def _run_agent_mode(self) -> ScanResult:
         """使用 Agent 系统运行扫描"""
+        from .agents.orchestrator import check_ai_config, print_ai_config_guide
+        
+        missing_config = check_ai_config()
+        if missing_config:
+            print_ai_config_guide()
+            print(f"错误: Agent 模式需要配置 AI API 密钥")
+            print(f"缺少: {', '.join(missing_config.keys())}")
+            print()
+            print("提示: 也可以使用传统模式，无需配置 AI:")
+            print(f"  python main.py scan -u {self.config.target}")
+            
+            self.result = ScanResult(
+                target_url=self.config.target,
+                start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                status="failed",
+                errors=["AI API key not configured"]
+            )
+            return self.result
+        
         self._knowledge_base = KnowledgeBase()
         
         context = ScanContext(

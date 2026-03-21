@@ -4,6 +4,7 @@ Agent 编排器 - 负责协调多个 Agent 的任务执行
 """
 
 import asyncio
+import os
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,6 +23,60 @@ class TaskStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+AI_ENV_VARS = {
+    'DEEPSEEK_API_KEY': 'DeepSeek API Key',
+    'OPENAI_API_KEY': 'OpenAI API Key',
+    'ANTHROPIC_API_KEY': 'Anthropic API Key',
+    'AI_PROVIDER': 'AI Provider (deepseek/openai/anthropic)',
+    'AI_BASE_URL': 'AI Base URL',
+    'AI_MODEL': 'AI Model',
+}
+
+
+def check_ai_config() -> Dict[str, str]:
+    """
+    检查 AI 配置环境变量
+    
+    Returns:
+        Dict of missing env vars and their descriptions
+    """
+    missing = {}
+    for var, desc in AI_ENV_VARS.items():
+        value = os.environ.get(var, '').strip()
+        if not value and var.endswith('_API_KEY'):
+            missing[var] = desc
+    return missing
+
+
+def print_ai_config_guide():
+    """打印 AI 配置指南"""
+    print("""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                     AI Configuration Required                          ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  Agent 模式需要配置 AI API 密钥才能使用 LLM 功能。                     ║
+║                                                                        ║
+║  配置方式:                                                              ║
+║                                                                        ║
+║  1. DeepSeek (推荐):                                                   ║
+║     export DEEPSEEK_API_KEY="sk-xxxxxxx"                              ║
+║                                                                        ║
+║  2. OpenAI:                                                            ║
+║     export OPENAI_API_KEY="sk-xxxxxxx"                               ║
+║                                                                        ║
+║  3. Anthropic:                                                         ║
+║     export ANTHROPIC_API_KEY="sk-ant-xxxxxxx"                         ║
+║                                                                        ║
+║  查看更多: https://github.com/chaitin/MonkeyCodeOfficialPlugins         ║
+║                                                                        ║
+║  或者使用传统模式 (无需配置 AI):                                        ║
+║     python main.py scan -u http://example.com                           ║
+║                                                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+""")
 
 
 @dataclass
