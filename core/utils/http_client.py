@@ -24,6 +24,7 @@ class AsyncTask:
     priority: int = 0
     retry_count: int = 3
     timeout: int = 30
+    verify_ssl: bool = True
 
 
 @dataclass
@@ -48,12 +49,14 @@ class AsyncHttpClient:
         max_concurrent: int = 50,
         max_retries: int = 3,
         timeout: int = 30,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        verify_ssl: bool = True
     ):
         self.max_concurrent = max_concurrent
         self.max_retries = max_retries
         self.default_timeout = aiohttp.ClientTimeout(total=timeout)
         self.proxy = proxy
+        self.verify_ssl = verify_ssl
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.session: Optional[aiohttp.ClientSession] = None
         self._request_count = 0
@@ -67,12 +70,15 @@ class AsyncHttpClient:
         if self.session:
             await self.session.close()
     
-    async def _ensure_session(self):
+    async def _ensure_session(self, verify_ssl: bool = True):
         """确保Session存在"""
         if self.session is None or self.session.closed:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
+            if verify_ssl:
+                ssl_context = ssl.create_default_context()
+            else:
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
             
             connector = aiohttp.TCPConnector(
                 ssl=ssl_context,
@@ -90,14 +96,15 @@ class AsyncHttpClient:
         method: str = 'GET',
         headers: Optional[Dict[str, str]] = None,
         data: Any = None,
-        retry: int = None,
-        timeout: int = None
+        retry: Optional[int] = None,
+        timeout: Optional[int] = None,
+        verify_ssl: bool = True
     ) -> TaskResult:
         """发起异步请求"""
-        await self._ensure_session()
+        await self._ensure_session(verify_ssl)
         
         retry = retry if retry is not None else self.max_retries
-        timeout = timeout if timeout else self.default_timeout.total
+        timeout = int(timeout) if timeout is not None else int(self.default_timeout.total)
         
         result = TaskResult(url=url, method=method)
         start_time = time.time()
@@ -151,8 +158,6 @@ class AsyncHttpClient:
         progress_callback: Optional[Callable] = None
     ) -> List[TaskResult]:
         """批量异步请求"""
-        await self._ensure_session()
-        
         async def execute_task(task: AsyncTask) -> TaskResult:
             result = await self.request(
                 task.url,
@@ -160,7 +165,8 @@ class AsyncHttpClient:
                 task.headers,
                 task.data,
                 task.retry_count,
-                task.timeout
+                task.timeout,
+                task.verify_ssl
             )
             
             if task.callback:

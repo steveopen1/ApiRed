@@ -1,0 +1,38 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+
+test:
+  stage: test
+  image: python:3.10
+  script:
+    - pip install -r requirements.txt
+    - pytest tests/ -v --tb=short
+  artifacts:
+    reports:
+      junit: results/junit.xml
+
+lint:
+  stage: test
+  image: python:3.10
+  script:
+    - pip install pylint
+    - pylint core/ --disable=all --enable=E,F
+
+build:
+  stage: build
+  image: python:3.10
+  script:
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/

@@ -13,7 +13,7 @@ import argparse
 import asyncio
 from typing import Optional
 
-from core.scanner import ChkApiScanner, ScannerConfig
+from core.scanner import ChkApiScanner, ScannerConfig, ScanResultAggregator, MultiTargetConfig
 from core.utils.config import Config
 from core.dashboard.web_dashboard import WebDashboard
 
@@ -56,6 +56,14 @@ Examples:
         scan_parser.add_argument('--na', '--no-api', dest='no_api', choices=['0', '1'], default='0')
         scan_parser.add_argument('--ai', action='store_true')
         scan_parser.add_argument('--proxy', help='Proxy server')
+        scan_parser.add_argument('--no-ssl-verify', action='store_true',
+                                  help='Disable SSL verification (not recommended)')
+        scan_parser.add_argument('--resume', action='store_true',
+                                  help='Resume from previous scan checkpoint')
+        scan_parser.add_argument('--concurrent-targets', '-ct', type=int, default=5,
+                                  help='Maximum concurrent targets for multi-target scan')
+        scan_parser.add_argument('--aggregate', action='store_true',
+                                  help='Aggregate results from multiple targets')
         scan_parser.add_argument('--output', '-o', help='Output directory')
         scan_parser.add_argument('--format', '-fmt', choices=['json', 'html'], default='json')
         scan_parser.add_argument('--verbose', '-v', action='store_true')
@@ -66,12 +74,13 @@ Examples:
         
         return parser
     
-    def parse_args(self, args=None) -> ScannerConfig:
+    def parse_args(self, args=None):
         parsed = self.parser.parse_args(args)
         
         if parsed.command == 'dashboard':
             return None
         
+        targets = []
         target = parsed.url
         
         if parsed.file:
@@ -90,15 +99,75 @@ Examples:
             js_depth=parsed.js_depth,
             ai_scan=parsed.ai,
             concurrency=parsed.concurrency,
-            output_format=parsed.format
+            output_format=parsed.format,
+            resume=parsed.resume,
+            verify_ssl=not parsed.no_ssl_verify
         )
+        
+        config.targets = targets
+        config.concurrent_targets = getattr(parsed, 'concurrent_targets', 5)
+        config.aggregate = getattr(parsed, 'aggregate', False)
         
         return config
     
     async def run_scan(self, config: ScannerConfig) -> int:
-        scanner = ChkApiScanner(config)
-        result = await scanner.run()
+        if config.targets and len(config.targets) > 1:
+            return await self._run_multi_target_scan(config)
+        else:
+            scanner = ChkApiScanner(config)
+            result = await scanner.run()
+            
+            self._print_single_result(result)
+            return 0
+    
+    async def _run_multi_target_scan(self, config: ScannerConfig) -> int:
+        """执行多目标扫描"""
+        print(f"\n{'='*60}")
+        print(f"Multi-Target Scan")
+        print(f"{'='*60}")
+        print(f"Targets: {len(config.targets)}")
+        print(f"Concurrent: {config.concurrent_targets}")
+        print(f"{'='*60}\n")
         
+        multi_config = MultiTargetConfig(
+            targets=config.targets,
+            max_concurrent_targets=config.concurrent_targets,
+            share_cache=False
+        )
+        
+        scanner = ChkApiScanner(config)
+        results = await scanner.run_multiple(config.targets)
+        
+        print(f"\n{'='*60}")
+        print(f"Multi-Target Scan Complete")
+        print(f"{'='*60}")
+        print(f"Total Targets: {len(results)}")
+        print(f"Successful: {sum(1 for r in results if not r.errors)}")
+        print(f"Failed: {sum(1 for r in results if r.errors)}")
+        print(f"Total APIs Found: {sum(r.total_apis for r in results)}")
+        print(f"Total Vulnerabilities: {sum(len(r.vulnerabilities) for r in results)}")
+        
+        if config.aggregate:
+            aggregator = ScanResultAggregator()
+            aggregated = aggregator.aggregate(results)
+            print(f"\n{'='*60}")
+            print(f"Aggregated Results")
+            print(f"{'='*60}")
+            print(f"High Value Endpoints: {len(aggregated['high_value_endpoints'])}")
+            print(f"Vulnerabilities by Type: {aggregated['vulnerability_summary']['by_type']}")
+            print(f"Vulnerabilities by Severity: {aggregated['vulnerability_summary']['by_severity']}")
+        
+        for i, result in enumerate(results):
+            print(f"\n--- Target {i+1}: {result.target_url} ---")
+            if result.errors:
+                print(f"Failed: {result.errors[0]}")
+            else:
+                print(f"APIs: {result.total_apis}, Vulnerabilities: {len(result.vulnerabilities)}")
+        
+        return 0
+    
+    def _print_single_result(self, result) -> None:
+        """打印单目标扫描结果"""
         print(f"\n{'='*60}")
         print(f"Scan Complete")
         print(f"{'='*60}")
@@ -114,8 +183,6 @@ Examples:
             print(f"\nErrors: {len(result.errors)}")
             for error in result.errors[:5]:
                 print(f"  - {error}")
-        
-        return 0
     
     async def run(self, args=None) -> int:
         parsed = self.parser.parse_args(args)

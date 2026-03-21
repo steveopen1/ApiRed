@@ -1,6 +1,7 @@
 """
 Observability Module
 可观测性模块 - 阶段埋点、运行画像、转化率追踪
+性能监控：操作耗时记录与性能报告生成
 """
 
 import time
@@ -9,6 +10,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from collections import defaultdict
+import threading
 
 
 @dataclass
@@ -302,3 +304,199 @@ class MetricsCollector:
                 for k, v in self.histograms.items()
             }
         }
+
+
+class PerformanceMonitor:
+    """
+    性能监控器
+    
+    记录操作耗时并生成性能报告。
+    支持多线程安全操作。
+    """
+    
+    def __init__(self):
+        self._durations: Dict[str, List[float]] = defaultdict(list)
+        self._operation_counts: Dict[str, int] = defaultdict(int)
+        self._start_times: Dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._enabled = True
+    
+    def enable(self):
+        """启用性能监控"""
+        self._enabled = True
+    
+    def disable(self):
+        """禁用性能监控"""
+        self._enabled = False
+    
+    def record_duration(self, operation: str, duration: float):
+        """
+        记录操作耗时
+        
+        Args:
+            operation: 操作名称
+            duration: 耗时（秒）
+        """
+        if not self._enabled:
+            return
+        
+        with self._lock:
+            self._durations[operation].append(duration)
+            self._operation_counts[operation] += 1
+    
+    def start_operation(self, operation: str) -> float:
+        """
+        开始记录操作
+        
+        Args:
+            operation: 操作名称
+            
+        Returns:
+            开始时间戳
+        """
+        start_time = time.time()
+        with self._lock:
+            self._start_times[operation] = start_time
+        return start_time
+    
+    def end_operation(self, operation: str) -> Optional[float]:
+        """
+        结束记录操作
+        
+        Args:
+            operation: 操作名称
+            
+        Returns:
+            耗时，如果操作未开始返回 None
+        """
+        with self._lock:
+            if operation not in self._start_times:
+                return None
+            start_time = self._start_times.pop(operation)
+        
+        duration = time.time() - start_time
+        self.record_duration(operation, duration)
+        return duration
+    
+    def get_operation_stats(self, operation: str) -> Dict[str, float]:
+        """
+        获取操作的统计信息
+        
+        Args:
+            operation: 操作名称
+            
+        Returns:
+            包含 count, total, avg, min, max 的字典
+        """
+        with self._lock:
+            durations = self._durations.get(operation, [])
+            count = len(durations)
+            
+            if count == 0:
+                return {
+                    'count': 0,
+                    'total': 0.0,
+                    'avg': 0.0,
+                    'min': 0.0,
+                    'max': 0.0
+                }
+            
+            return {
+                'count': count,
+                'total': round(sum(durations), 3),
+                'avg': round(sum(durations) / count, 3),
+                'min': round(min(durations), 3),
+                'max': round(max(durations), 3)
+            }
+    
+    def get_report(self) -> Dict[str, Any]:
+        """
+        获取性能报告
+        
+        Returns:
+            包含所有操作统计的字典
+        """
+        with self._lock:
+            operations = list(self._durations.keys())
+        
+        report = {
+            'total_operations': len(operations),
+            'operations': {}
+        }
+        
+        total_duration = 0.0
+        slowest_operation = None
+        slowest_duration = 0.0
+        
+        for operation in operations:
+            stats = self.get_operation_stats(operation)
+            report['operations'][operation] = stats
+            total_duration += stats['total']
+            
+            if stats['total'] > slowest_duration:
+                slowest_duration = stats['total']
+                slowest_operation = operation
+        
+        report['total_duration'] = round(total_duration, 3)
+        report['slowest_operation'] = slowest_operation
+        report['slowest_duration'] = slowest_duration
+        
+        return report
+    
+    def get_top_slowest(self, n: int = 5) -> List[Dict[str, Any]]:
+        """
+        获取最慢的 N 个操作
+        
+        Args:
+            n: 返回的操作数量
+            
+        Returns:
+            按耗时排序的操作列表
+        """
+        report = self.get_report()
+        operations = [
+            {'operation': op, **stats}
+            for op, stats in report['operations'].items()
+        ]
+        
+        operations.sort(key=lambda x: x['total'], reverse=True)
+        return operations[:n]
+    
+    def reset(self):
+        """重置所有性能数据"""
+        with self._lock:
+            self._durations.clear()
+            self._operation_counts.clear()
+            self._start_times.clear()
+    
+    def export_json(self) -> str:
+        """
+        导出 JSON 格式的性能报告
+        
+        Returns:
+            JSON 字符串
+        """
+        return json.dumps(self.get_report(), ensure_ascii=False, indent=2)
+
+
+class OperationTimer:
+    """
+    操作计时器上下文管理器
+    
+    Usage:
+        with OperationTimer(monitor, 'my_operation'):
+            # do something
+    """
+    
+    def __init__(self, monitor: PerformanceMonitor, operation: str):
+        self.monitor = monitor
+        self.operation = operation
+        self.start_time: Optional[float] = None
+    
+    def __enter__(self):
+        self.start_time = self.monitor.start_operation(self.operation)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.start_time is not None:
+            self.monitor.end_operation(self.operation)

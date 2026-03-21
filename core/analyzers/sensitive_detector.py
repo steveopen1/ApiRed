@@ -111,7 +111,33 @@ class TwoTierSensitiveDetector:
     
     def _load_custom_rules(self):
         """加载自定义规则"""
-        pass
+        import json
+        import os
+        from pathlib import Path
+        
+        custom_rules_path = Path(__file__).parent.parent.parent / 'config' / 'custom_sensitive_rules.json'
+        
+        if custom_rules_path.exists():
+            try:
+                with open(custom_rules_path, 'r', encoding='utf-8') as f:
+                    custom_rules = json.load(f)
+                
+                for rule_name, rule_info in custom_rules.items():
+                    if isinstance(rule_info, dict) and 'pattern' in rule_info:
+                        self.tier1_rules[rule_name] = rule_info
+                        
+            except Exception:
+                pass
+        
+        env_rules = os.environ.get('SENSITIVE_RULES')
+        if env_rules:
+            try:
+                env_custom_rules = json.loads(env_rules)
+                for rule_name, rule_info in env_custom_rules.items():
+                    if isinstance(rule_info, dict) and 'pattern' in rule_info:
+                        self.tier1_rules[rule_name] = rule_info
+            except Exception:
+                pass
     
     def tier1_scan(self, content: str, url: str = "") -> List[SensitiveFinding]:
         """第一层：正则扫描"""

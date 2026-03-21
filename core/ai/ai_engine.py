@@ -215,7 +215,7 @@ API信息：
 响应内容片段:
 {response_content[:1500]}
 
-{SELF.LOGIN_ANALYSIS_PROMPT}"""
+        {self.LOGIN_ANALYSIS_PROMPT}"""
         
         return self.ai_client.chat(
             [{"role": "user", "content": content}],
@@ -357,6 +357,109 @@ class SensitiveInfoAnalyzer:
             [{"role": "user", "content": prompt}],
             system=self.SYSTEM_PROMPT
         )
+
+
+class AIEngine:
+    """
+    AI引擎 - 统一的AI客户端接口
+    整合所有AI分析能力，提供简单的调用接口
+    """
+    
+    def __init__(self, config: Optional[AIConfig] = None):
+        self.config = config or self._load_default_config()
+        self.client = AIFactory.create_client(self.config)
+        self.profiler = SiteProfiler(self.client)
+        self.api_analyzer = APIAnalyzer(self.client)
+        self.dynamic_analyzer = DynamicPathAnalyzer(self.client)
+        self.param_inferrer = ParameterInferrer(self.client)
+        self.sensitive_analyzer = SensitiveInfoAnalyzer(self.client)
+        self._cache: Dict[str, AIResponse] = {}
+    
+    def _load_default_config(self) -> AIConfig:
+        """从环境变量或配置加载默认配置"""
+        import os
+        return AIConfig(
+            provider=os.environ.get('AI_PROVIDER', 'deepseek'),
+            api_key=os.environ.get('DEEPSEEK_API_KEY', ''),
+            base_url=os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
+            model=os.environ.get('AI_MODEL', 'deepseek-chat'),
+            max_tokens=int(os.environ.get('AI_MAX_TOKENS', '2000')),
+            temperature=float(os.environ.get('AI_TEMPERATURE', '0.7'))
+        )
+    
+    def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
+        """简单的聊天接口"""
+        return self.client.chat(messages, system)
+    
+    def predict_endpoints(self, js_content: str, known_endpoints: List[str]) -> List[str]:
+        """
+        使用LLM预测可能的API端点
+        
+        Args:
+            js_content: JS文件内容
+            known_endpoints: 已知的端点列表
+        
+        Returns:
+            预测的新端点列表
+        """
+        cache_key = f"predict_{hash(js_content[:1000])}"
+        if cache_key in self._cache:
+            return self._parse_endpoints_from_response(self._cache[cache_key])
+        
+        prompt = f"""Based on this JavaScript code and known API endpoints, predict other API endpoints that might exist on this server.
+
+Known endpoints:
+{chr(10).join(known_endpoints[:15])}
+
+JavaScript code (first 2500 chars):
+{js_content[:2500]}
+
+Consider RESTful naming patterns, common CRUD operations, authentication endpoints, and admin interfaces.
+
+List only the most likely endpoints, one per line, format: /path or /v1/path"""
+        
+        response = self.client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            system="You are an API security researcher. Predict likely API endpoints based on patterns."
+        )
+        
+        self._cache[cache_key] = response
+        return self._parse_endpoints_from_response(response)
+    
+    def _parse_endpoints_from_response(self, response: AIResponse) -> List[str]:
+        """从AI响应中解析端点列表"""
+        if not response.success:
+            return []
+        
+        endpoints = []
+        for line in response.result.strip().split('\n'):
+            line = line.strip()
+            if line.startswith('/'):
+                endpoints.append(line)
+        return list(set(endpoints))
+    
+    def analyze_js_patterns(self, js_content: str) -> Dict[str, Any]:
+        """分析JS代码中的API模式"""
+        cache_key = f"patterns_{hash(js_content[:1000])}"
+        if cache_key in self._cache:
+            cached = self._cache[cache_key]
+            return {'patterns': [], 'thinking': getattr(cached, 'thinking', ''), 'judgment': getattr(cached, 'judgment', '')}
+        
+        response = self.dynamic_analyzer.analyze(js_content)
+        self._cache[cache_key] = response
+        
+        patterns = []
+        if response.success and response.result:
+            for pattern in response.result.split('$$$$'):
+                pattern = pattern.strip()
+                if pattern:
+                    patterns.append(pattern)
+        
+        return {
+            'patterns': patterns,
+            'thinking': response.thinking,
+            'judgment': response.judgment
+        }
 
 
 class AIFactory:

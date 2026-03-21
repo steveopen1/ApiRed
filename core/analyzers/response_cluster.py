@@ -1,12 +1,13 @@
 """
 Response Cluster Module
 响应指纹聚类模块 - 404基线过滤
+性能优化：使用哈希索引代替全量比较
 """
 
 import hashlib
 import re
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass
+from typing import Dict, List, Any, Optional, Tuple, Set
+from dataclasses import dataclass, field
 from collections import defaultdict
 import json
 
@@ -22,8 +23,21 @@ class ResponseFingerprint:
     url: str
 
 
+@dataclass
+class TaskResult:
+    """任务结果（用于哈希索引）"""
+    status_code: int
+    content: bytes
+    content_hash: str
+
+
 class ResponseCluster:
-    """响应指纹聚类"""
+    """
+    响应指纹聚类 - 优化版
+    
+    使用哈希索引优化 O(n²) 的相似度比较问题。
+    通过预计算的指纹映射实现 O(1) 的 404 基线检查。
+    """
     
     LENGTH_BUCKETS = [
         (0, "empty"),
@@ -46,6 +60,87 @@ class ResponseCluster:
         self.similarity_threshold = similarity_threshold
         self._clusters: Dict[str, List[ResponseFingerprint]] = defaultdict(list)
         self._cluster_stats: Dict[str, Dict] = {}
+        
+        self._responses: Dict[str, TaskResult] = {}
+        self._fingerprints: Dict[str, str] = {}
+        self._baseline_404: Set[str] = set()
+        self._404_family_clusters: Set[str] = set()
+    
+    def add_response(self, endpoint_id: str, response: TaskResult):
+        """
+        添加响应，使用哈希索引代替全量比较
+        
+        Args:
+            endpoint_id: 端点标识符
+            response: 任务结果对象
+        """
+        self._responses[endpoint_id] = response
+        fingerprint = self._generate_fingerprint(response)
+        self._fingerprints[endpoint_id] = fingerprint
+        
+        fp = ResponseFingerprint(
+            status_code=response.status_code,
+            length_bucket=self._get_length_bucket(len(response.content)),
+            template_hash=self._extract_template_hash(response.content[:2000]),
+            raw_hash=response.content_hash[:16] if response.content_hash else "",
+            content_preview=self._extract_preview(response.content),
+            url=endpoint_id
+        )
+        self.add_response(fp)
+    
+    def _generate_fingerprint(self, response: TaskResult) -> str:
+        """
+        生成响应指纹
+        
+        使用状态码 + 内容长度 + 内容哈希前8位作为指纹。
+        这样可以快速判断两个响应是否属于同一类型。
+        
+        Args:
+            response: 任务结果对象
+            
+        Returns:
+            指纹字符串，格式：status_code:content_length:content_hash[:8]
+        """
+        content_hash = response.content_hash[:8] if response.content_hash else hashlib.md5(response.content[:5000]).hexdigest()[:8]
+        return f"{response.status_code}:{len(response.content)}:{content_hash}"
+    
+    def is_baseline_404(self, endpoint_id: str) -> bool:
+        """
+        检查是否是 404 基线
+        
+        使用哈希索引实现 O(1) 查找，而不是遍历所有响应。
+        
+        Args:
+            endpoint_id: 端点标识符
+            
+        Returns:
+            如果该端点的指纹在 404 基线集合中返回 True
+        """
+        if endpoint_id not in self._fingerprints:
+            return False
+        return self._fingerprints[endpoint_id] in self._baseline_404
+    
+    def add_to_baseline_404(self, endpoint_id: str):
+        """
+        将端点添加到 404 基线集合
+        
+        Args:
+            endpoint_id: 端点标识符
+        """
+        if endpoint_id in self._fingerprints:
+            self._baseline_404.add(self._fingerprints[endpoint_id])
+    
+    def get_fingerprint(self, endpoint_id: str) -> Optional[str]:
+        """
+        获取端点的指纹
+        
+        Args:
+            endpoint_id: 端点标识符
+            
+        Returns:
+            指纹字符串，如果不存在返回 None
+        """
+        return self._fingerprints.get(endpoint_id)
     
     def compute_fingerprint(self, url: str, status_code: int, content: str) -> ResponseFingerprint:
         """计算响应指纹"""

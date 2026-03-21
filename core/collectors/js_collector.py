@@ -6,7 +6,7 @@ JS指纹缓存模块 - 避免重复AST解析
 import hashlib
 import json
 import re
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass
 
 
@@ -88,6 +88,18 @@ class JSFingerprintCache:
     def clear_memory(self):
         """清空内存缓存"""
         self._memory_cache.clear()
+    
+    def get_all(self) -> List[ParsedJSResult]:
+        """获取所有缓存的解析结果"""
+        results = []
+        seen_hashes = set()
+        
+        for cache_key, result in self._memory_cache.items():
+            if cache_key not in seen_hashes:
+                seen_hashes.add(cache_key)
+                results.append(result)
+        
+        return results
 
 
 class APIRouter:
@@ -117,7 +129,7 @@ class APIRouter:
         """提取路由"""
         routes = []
         
-        for pattern in [cls.ROUTER_PATTERN, cls.FETCH_PATTERN, cls.AXIOS_PATTERN]:
+        for pattern in [cls.ROUTE_PATTERN, cls.FETCH_PATTERN, cls.AXIOS_PATTERN]:
             matches = pattern.findall(js_content)
             routes.extend(matches)
         
@@ -183,13 +195,37 @@ class DynamicImportAnalyzer:
 
 
 class JSParser:
-    """JS内容解析器"""
+    """
+    JS内容解析器 - 增强版
+    
+    支持 AST 解析优先，正则作为后备方案。
+    """
     
     def __init__(self, cache: Optional[JSFingerprintCache] = None):
         self.cache = cache
+        self._ast_parser = None
+        self._use_ast = self._check_esprima_available()
+    
+    def _check_esprima_available(self) -> bool:
+        """检查 esprima 是否可用"""
+        try:
+            import esprima
+            self._ast_parser = esprima
+            return True
+        except ImportError:
+            return False
     
     def parse(self, js_content: str, js_url: str = "") -> ParsedJSResult:
-        """解析JS内容"""
+        """
+        解析JS内容
+        
+        Args:
+            js_content: JS 内容
+            js_url: JS 文件 URL
+            
+        Returns:
+            解析结果
+        """
         content_bytes = js_content.encode('utf-8', errors='ignore')
         
         if self.cache:
@@ -197,10 +233,15 @@ class JSParser:
             if cached:
                 return cached
         
-        apis = APIRouter.extract_routes(js_content)
-        urls = APIRouter.extract_base_urls(js_content)
-        dynamic_imports = DynamicImportAnalyzer.extract_imports(js_content)
-        base_urls = APIRouter.extract_base_urls(js_content)
+        if self._use_ast:
+            apis = self._extract_with_ast(js_content)
+            if apis:
+                urls = APIRouter.extract_base_urls(js_content)
+                dynamic_imports = DynamicImportAnalyzer.extract_imports(js_content)
+            else:
+                urls, dynamic_imports, apis = self._fallback_parse(js_content)
+        else:
+            urls, dynamic_imports, apis = self._fallback_parse(js_content)
         
         chunks = WebpackAnalyzer.extract_chunks(js_content)
         modules = WebpackAnalyzer.extract_modules(js_content)
@@ -211,7 +252,7 @@ class JSParser:
             apis=apis,
             urls=all_urls,
             dynamic_imports=dynamic_imports,
-            base_urls=base_urls,
+            base_urls=APIRouter.extract_base_urls(js_content),
             content_hash="",
             file_size=len(content_bytes)
         )
@@ -220,3 +261,108 @@ class JSParser:
             self.cache.set(content_bytes, result, js_url)
         
         return result
+    
+    def _extract_with_ast(self, js_content: str) -> List[str]:
+        """
+        使用 AST 解析提取 API 路由
+        
+        Args:
+            js_content: JS 内容
+            
+        Returns:
+            提取的 API 路由列表
+        """
+        try:
+            tree = self._ast_parser.parse(js_content, js_content_type='script')
+            return self._traverse_ast(tree.body)
+        except Exception:
+            return []
+    
+    def _traverse_ast(self, nodes: List) -> List[str]:
+        """
+        遍历 AST 节点提取调用表达式
+        
+        Args:
+            nodes: AST 节点列表
+            
+        Returns:
+            提取的 URL 列表
+        """
+        urls = []
+        
+        for node in nodes:
+            if hasattr(node, 'expression') and hasattr(node.expression, 'callee'):
+                callee = node.expression.callee
+                if hasattr(callee, 'property') and hasattr(callee.property, 'name'):
+                    method_name = callee.property.name
+                    
+                    if method_name in ('get', 'post', 'put', 'delete', 'patch'):
+                        args = node.expression.arguments
+                        if args and hasattr(args[0], 'value'):
+                            urls.append(args[0].value)
+            
+            if hasattr(node, 'body'):
+                if isinstance(node.body, list):
+                    urls.extend(self._traverse_ast(node.body))
+        
+        return urls
+    
+    def _fallback_parse(self, js_content: str) -> Tuple[List[str], List[str], List[str]]:
+        """
+        使用正则表达式解析作为后备方案
+        
+        Args:
+            js_content: JS 内容
+            
+        Returns:
+            (urls, dynamic_imports, apis) 元组
+        """
+        urls = APIRouter.extract_base_urls(js_content)
+        dynamic_imports = DynamicImportAnalyzer.extract_imports(js_content)
+        apis = APIRouter.extract_routes(js_content)
+        
+        return urls, dynamic_imports, apis
+    
+    def parse_with_fallback(self, js_content: str) -> List[str]:
+        """
+        先尝试 AST 解析，失败后使用正则
+        
+        Args:
+            js_content: JS 内容
+            
+        Returns:
+            提取的 API 列表
+        """
+        if self._use_ast:
+            result = self._extract_with_ast(js_content)
+            if result:
+                return result
+        
+        return self._parse_with_regex(js_content)
+    
+    def _parse_with_regex(self, js_content: str) -> List[str]:
+        """
+        使用正则表达式解析
+        
+        Args:
+            js_content: JS 内容
+            
+        Returns:
+            提取的 API 列表
+        """
+        patterns = {
+            'fetch': r'fetch\s*\(\s*["\']([^"\']+)["\']',
+            'axios': r'axios\.(get|post|put|delete)\s*\(\s*["\']([^"\']+)["\']',
+            'router': r'router\.(get|post|put|delete)\s*\(\s*["\']([^"\']+)["\']',
+        }
+        
+        urls = []
+        for pattern in patterns.values():
+            matches = re.findall(pattern, js_content)
+            if matches:
+                if isinstance(matches[0], tuple):
+                    urls.extend([m[1] if len(m) > 1 else m[0] for m in matches])
+                else:
+                    urls.extend(matches)
+        
+        return list(set(urls))

@@ -23,7 +23,7 @@ class VulnType(Enum):
     UNAUTHORIZED = "unauthorized_access"
     IDOR = "idor"
     SENSITIVE_DATA = "sensitive_data_exposure"
-    Broken_AUTH = "broken_authentication"
+    BROKEN_AUTH = "broken_authentication"
     BIZ_LOGIC = "business_logic_error"
 
 
@@ -55,6 +55,16 @@ class IDORResult:
 
 
 @dataclass
+class BypassAttempt:
+    """绕过尝试结果"""
+    technique: str
+    original_status: int
+    bypass_status: int
+    is_successful: bool
+    evidence: str
+
+
+@dataclass
 class SensitiveFinding:
     """敏感信息发现"""
     data_type: str
@@ -80,9 +90,95 @@ class UnauthorizedDetector:
         'login', '注册', 'register', 'forget', '忘记密码'
     ]
     
+    BYPASS_TECHNIQUES = [
+        {'name': 'path_case', 'headers': {}, 'path_mod': lambda p: p.upper()},
+        {'name': 'path_trailing_slash', 'headers': {}, 'path_mod': lambda p: p.rstrip('/') + '/'},
+        {'name': 'path_append', 'headers': {}, 'path_mod': lambda p: p + '/..'},
+        {'name': 'header_x_original_url', 'headers': {'X-Original-URL': ''}, 'path_mod': None},
+        {'name': 'header_x_rewrite_url', 'headers': {'X-Rewrite-URL': ''}, 'path_mod': None},
+        {'name': 'header_x_forwarded_for', 'headers': {'X-Forwarded-For': '127.0.0.1'}, 'path_mod': None},
+        {'name': 'header_x_real_ip', 'headers': {'X-Real-IP': '127.0.0.1'}, 'path_mod': None},
+        {'name': 'header_referer_spoof', 'headers': {'Referer': 'https://trusted-site.com'}, 'path_mod': None},
+    ]
+    
     def __init__(self, ai_analyzer=None):
         self.ai_analyzer = ai_analyzer
         self.results: List[UnauthorizedResult] = []
+    
+    async def detect(
+        self,
+        endpoint: str,
+        response,
+        bypass_response: Optional[object] = None
+    ) -> bool:
+        """检测是否存在未授权访问"""
+        if hasattr(response, 'status_code'):
+            status_code = response.status_code
+            content = getattr(response, 'content', '')
+        else:
+            status_code = 200
+            content = str(response)
+        
+        if status_code == 200:
+            content_lower = content.lower() if isinstance(content, str) else str(content).lower()
+            
+            sensitive_patterns = ['admin', 'dashboard', 'config', 'user list', 'settings']
+            if any(pattern in content_lower for pattern in sensitive_patterns):
+                if 'please login' not in content_lower and 'login required' not in content_lower:
+                    return True
+        
+        if bypass_response and hasattr(bypass_response, 'status_code'):
+            if bypass_response.status_code == 200:
+                return True
+        
+        return False
+    
+    async def detect_with_bypass(
+        self,
+        endpoint: str,
+        http_client,
+        original_response
+    ) -> List[BypassAttempt]:
+        """检测 401/403 绕过尝试"""
+        bypass_results = []
+        
+        status_code = getattr(original_response, 'status_code', 200)
+        content = getattr(original_response, 'content', '')
+        
+        if status_code not in [401, 403]:
+            return bypass_results
+        
+        for technique in self.BYPASS_TECHNIQUES:
+            try:
+                path = endpoint
+                headers = technique['headers'].copy()
+                
+                if technique['path_mod']:
+                    if technique['name'] == 'path_case':
+                        path = technique['path_mod'](path)
+                    else:
+                        path = technique['path_mod'](path)
+                
+                if technique['name'] in ['header_x_original_url', 'header_x_rewrite_url']:
+                    headers[list(technique['headers'].keys())[0]] = endpoint
+                
+                bypass_response = await http_client.request(path, 'GET', headers=headers)
+                bypass_status = getattr(bypass_response, 'status_code', 0)
+                
+                bypass_result = BypassAttempt(
+                    technique=technique['name'],
+                    original_status=status_code,
+                    bypass_status=bypass_status,
+                    is_successful=(bypass_status == 200),
+                    evidence=f"Original: {status_code}, Bypass: {bypass_status}"
+                )
+                
+                bypass_results.append(bypass_result)
+            
+            except Exception:
+                continue
+        
+        return bypass_results
     
     def check_auth_response(
         self,
@@ -220,7 +316,7 @@ class UnauthorizedDetector:
 
 
 class IDORDetector:
-    """越权检测器"""
+    """越权漏洞检测器"""
     
     ID_PARAM_PATTERNS = [
         r'(?:id|user_id|order_id|admin_id|role_id|page_id|file_id|card_id|token_id)',
@@ -230,6 +326,36 @@ class IDORDetector:
     
     def __init__(self):
         self.results: List[IDORResult] = []
+    
+    async def detect(
+        self,
+        endpoint: str,
+        cookies1,
+        cookies2,
+        http_client=None
+    ) -> bool:
+        """检测水平/垂直越权"""
+        if http_client is None:
+            return False
+        
+        is_vuln = False
+        
+        try:
+            resp1 = await http_client.request(endpoint, 'GET', cookies=cookies1)
+            resp2 = await http_client.request(endpoint, 'GET', cookies=cookies2)
+            
+            if resp1.status_code == 200 and resp2.status_code == 200:
+                content1 = getattr(resp1, 'content', '')
+                content2 = getattr(resp2, 'content', '')
+                
+                if content1 == content2:
+                    if any(priv_marker in content1.lower() for priv_marker in ['admin', 'delete', 'update', 'role']):
+                        is_vuln = True
+        
+        except Exception:
+            pass
+        
+        return is_vuln
     
     def extract_id_params(self, api_path: str, response_content: str) -> List[str]:
         """提取可能的ID参数"""
@@ -247,14 +373,99 @@ class IDORDetector:
         
         return list(params)
     
-    def detect(
+    async def detect_horizontal(
+        self,
+        endpoint: str,
+        resource_ids: List[str],
+        http_client,
+        cookies: Optional[Dict] = None
+    ) -> Optional[IDORResult]:
+        """检测水平越权"""
+        responses = {}
+        
+        for resource_id in resource_ids:
+            test_path = endpoint.replace('{id}', resource_id).replace('{resource_id}', resource_id)
+            
+            try:
+                resp = await http_client.request(test_path, 'GET', cookies=cookies or {})
+                
+                responses[resource_id] = {
+                    'status': resp.status_code,
+                    'content': getattr(resp, 'content', '')[:500],
+                    'length': len(getattr(resp, 'content', ''))
+                }
+            except Exception:
+                continue
+        
+        if len(responses) < 2:
+            return None
+        
+        all_same_content = len(set(r['content'] for r in responses.values())) == 1
+        all_same_status = len(set(r['status'] for r in responses.values())) == 1
+        
+        if all_same_content and all_same_status:
+            evidence = "不同用户访问不同资源返回相同内容"
+            
+            result = IDORResult(
+                api_path=endpoint,
+                method='GET',
+                param_name='resource_id',
+                tested_ids=resource_ids,
+                responses_different=False,
+                evidence=evidence,
+                severity="high"
+            )
+            self.results.append(result)
+            return result
+        
+        return None
+    
+    async def detect_vertical(
+        self,
+        endpoint: str,
+        http_client,
+        user_cookies: Dict,
+        admin_cookies: Dict
+    ) -> Optional[IDORResult]:
+        """检测垂直越权"""
+        try:
+            user_resp = await http_client.request(endpoint, 'GET', cookies=user_cookies)
+            admin_resp = await http_client.request(endpoint, 'GET', cookies=admin_cookies)
+            
+            user_content = getattr(user_resp, 'content', '')
+            admin_content = getattr(admin_resp, 'content', '')
+            
+            if user_resp.status_code == 200 and admin_resp.status_code == 200:
+                if user_content == admin_content:
+                    admin_markers = ['admin', 'delete', 'update', 'role', 'permission', 'config']
+                    if any(marker in admin_content.lower() for marker in admin_markers):
+                        evidence = "普通用户获得了管理员权限访问"
+                        
+                        result = IDORResult(
+                            api_path=endpoint,
+                            method='GET',
+                            param_name='cookies',
+                            tested_ids=['user', 'admin'],
+                            responses_different=False,
+                            evidence=evidence,
+                            severity="critical"
+                        )
+                        self.results.append(result)
+                        return result
+        
+        except Exception:
+            pass
+        
+        return None
+    
+    def detect_idor(
         self,
         api_path: str,
         method: str,
         base_url: str,
         id_params: List[str],
         http_client,
-        test_ids: List[str] = None
+        test_ids: Optional[List[str]] = None
     ) -> Optional[IDORResult]:
         """检测越权漏洞"""
         if not id_params:

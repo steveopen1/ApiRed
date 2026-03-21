@@ -26,13 +26,16 @@
 | 特性 | 红队价值 |
 |------|----------|
 | **影子 API 发现** | 从 JS/Webpack 挖掘未公开端点，攻击面 +40% |
-| **智能路径猜测** | Base URL + API 字典 Fuzz，补全业务链路 |
+| **智能路径猜测** | LLM 驱动端点预测，补全业务链路 |
 | **服务指纹** | 识别微服务架构，发现认证绕过点 |
 | **Bypass 能力** | 绕过 401/403/404，获取隐藏资源 |
 | **响应差异分析** | 快速定位未授权访问、可越权端点 |
 | **敏感凭证挖掘** | JS/响应中提取 AK/SK/Token/JWT |
-| **漏洞验证** | 自动验证 SQLi/XSS/SSRF/RCE 等 |
+| **漏洞验证** | 自动验证 SQLi/XSS/SSRF/JWT/OAuth2 |
 | **攻击链生成** | 从入口到漏洞的完整调用链路 |
+| **OpenAPI 生成** | 自动导出 OpenAPI 3.0 规范 |
+| **增量扫描** | 断点续扫，支持检查点恢复 |
+| **多目标并行** | 支持 100+ 目标并发扫描 |
 
 ---
 
@@ -48,28 +51,37 @@ pip install -r requirements.txt
 
 ```bash
 # 目标侦察 - 收集所有 API 攻击面
-python3 apired.py -u https://target.com
+python3 main.py scan -u https://target.com
 
 # 携带认证 Cookie - 测试会话安全
-python3 apired.py -u https://target.com -c "session=xxx"
+python3 main.py scan -u https://target.com -c "session=xxx"
 
 # 批量目标 - 快速资产覆盖
-python3 apired.py -f targets.txt
+python3 main.py scan -f targets.txt
 
 # 激进扫描 - 高并发突破限制
-python3 apired.py -u https://target.com --concurrency 100
+python3 main.py scan -u https://target.com --concurrency 100
 
 # 隐蔽侦察 - 只收集不攻击
-python3 apired.py -u https://target.com --at 1 --chrome off
+python3 main.py scan -u https://target.com --at 1 --chrome off
 
 # AI 辅助 - 智能漏洞研判
-python3 apired.py -u https://target.com --ai
+python3 main.py scan -u https://target.com --ai
+
+# 多目标并行扫描
+python3 main.py scan -f targets.txt --concurrent-targets 10
+
+# 增量扫描 - 断点续扫
+python3 main.py scan -u https://target.com --resume
+
+# 禁用 SSL 验证（不推荐）
+python3 main.py scan -u https://target.com --no-ssl-verify
 ```
 
 ### 查看帮助
 
 ```bash
-python3 apired.py -h
+python3 main.py scan --help
 ```
 
 ---
@@ -77,27 +89,40 @@ python3 apired.py -h
 ## 架构设计
 
 ```
-ChkApi v2.0
-├── core/                      # 核心引擎
-│   ├── collectors/             # 信息采集
-│   │   ├── js_collector.py     # JS指纹缓存 + AST解析
-│   │   └── api_collector.py   # API多源采集
-│   ├── analyzers/             # 分析引擎
-│   │   ├── api_scorer.py      # 统一评分模型
-│   │   ├── response_cluster.py # 响应聚类/404过滤
-│   │   └── sensitive_detector.py # 两级敏感检测
-│   ├── testers/               # 测试模块
-│   │   ├── fuzz_tester.py     # 模糊测试
-│   │   └── vulnerability_tester.py # 漏洞测试
-│   ├── storage/              # 存储层
-│   ├── models/               # 数据模型
-│   ├── utils/                # 工具类
-│   ├── scanner.py             # 主扫描器
+ApiRed v3.0
+├── main.py                     # 统一入口
+├── core/
+│   ├── scanner.py             # 主扫描器 (Stage1-5)
+│   ├── engine.py              # ScanEngine 统一引擎
 │   ├── pipeline.py            # 处理流水线
-│   └── dispatcher.py          # 任务调度
-├── plugins/                   # 插件系统（兼容v1）
-├── cli.py                     # 命令行入口
-└── config.yaml               # 配置文件
+│   ├── agents/                # AI Agent 系统
+│   │   ├── base.py          # Agent 基类
+│   │   ├── scanner_agent.py  # 扫描 Agent
+│   │   ├── analyzer_agent.py # 分析 Agent
+│   │   └── tester_agent.py  # 测试 Agent
+│   ├── collectors/            # 信息采集
+│   │   ├── js_collector.py   # JS指纹缓存 + AST解析
+│   │   └── api_collector.py  # API多源采集
+│   ├── analyzers/            # 分析引擎
+│   │   ├── api_scorer.py     # 统一评分模型
+│   │   ├── response_cluster.py# 响应聚类/O(n)优化
+│   │   └── sensitive_detector.py# 两级敏感检测
+│   ├── testers/              # 测试模块
+│   │   ├── fuzz_tester.py    # 模糊测试
+│   │   └── vulnerability_tester.py# 漏洞测试 (SQLi/XSS/SSRF/JWT)
+│   ├── security/             # 安全检测
+│   │   └── security_detector.py# 未授权访问/IDOR检测
+│   ├── ai/                  # AI 引擎
+│   │   └── ai_engine.py     # LLM驱动智能分析
+│   ├── exporters/           # 导出模块
+│   │   ├── report_exporter.py# JSON/HTML/Excel
+│   │   ├── openapi_exporter.py# OpenAPI 3.0
+│   │   └── attack_chain_exporter.py# 攻击链可视化
+│   ├── plugins.py           # 插件注册表
+│   └── dashboard/           # Web 控制面板
+├── tests/                   # 测试套件 (49 tests)
+└── config.yaml             # 配置文件
+```
 ```
 
 ---
@@ -235,6 +260,17 @@ results/
 ---
 
 ## 更新日志
+
+### v3.0 - Integration (2026-03)
+
+- **ScanEngine**：统一扫描引擎，整合 Collector → Analyzer → Tester 流程
+- **Agentic AI**：LLM 驱动的智能端点预测和漏洞研判
+- **OpenAPI 导出**：自动生成 OpenAPI 3.0 规范文档
+- **增量扫描**：断点续扫，支持检查点恢复
+- **多目标并行**：支持 100+ 目标并发扫描
+- **攻击链可视化**：Mermaid 图表 + HTML 交互报告
+- **性能优化**：响应聚类 O(n) 算法，AST 解析支持
+- **测试覆盖**：49 个单元/集成测试，性能基准测试
 
 ### v2.0 - ApiRed (2026-03)
 

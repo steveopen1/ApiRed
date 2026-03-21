@@ -408,6 +408,98 @@ class HTMLReporter:
         )
 
 
+class JUnitExporter:
+    """JUnit XML 格式导出器"""
+    
+    def export(self, scan_result: Dict, output_path: str) -> bool:
+        """导出为 JUnit XML 格式"""
+        try:
+            os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+            
+            test_cases = self._build_test_cases(scan_result)
+            xml_content = self._generate_junit_xml(scan_result, test_cases)
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(xml_content)
+            
+            return True
+        except Exception as e:
+            print(f"JUnit export error: {e}")
+            return False
+    
+    def _build_test_cases(self, scan_result: Dict) -> List[Dict]:
+        """构建测试用例"""
+        test_cases = []
+        
+        vulns = scan_result.get('vulnerabilities', [])
+        for vuln in vulns:
+            test_cases.append({
+                'classname': f"security.{vuln.get('vuln_type', 'unknown')}",
+                'name': f"{vuln.get('api_id', 'unknown')}_{vuln.get('vuln_type', 'unknown')}",
+                'failure': True,
+                'message': vuln.get('title', ''),
+                'severity': vuln.get('severity', 'medium')
+            })
+        
+        sensitive = scan_result.get('sensitive_data', [])
+        for item in sensitive:
+            test_cases.append({
+                'classname': f"sensitive.{item.get('data_type', 'unknown')}",
+                'name': f"{item.get('location', 'unknown')}_{item.get('data_type', 'unknown')}",
+                'failure': True,
+                'message': item.get('context', ''),
+                'severity': item.get('severity', 'medium')
+            })
+        
+        return test_cases
+    
+    def _generate_junit_xml(self, scan_result: Dict, test_cases: List[Dict]) -> str:
+        """生成 JUnit XML 格式"""
+        total = len(test_cases) + scan_result.get('summary', {}).get('total_apis', 0)
+        failures = len(test_cases)
+        
+        xml_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<testsuites>',
+            f'  <testsuite name="ApiRed Security Scan" tests="{total}" failures="{failures}" errors="0" skipped="0">',
+            f'    <testcase classname="scan.summary" name="scan_target" time="{scan_result.get("duration", 0):.3f}"/>'
+        ]
+        
+        for tc in test_cases:
+            severity_esc = self._escape_xml(tc.get('severity', ''))
+            message_esc = self._escape_xml(tc.get('message', ''))
+            
+            xml_lines.append(
+                f'    <testcase classname="{tc["classname"]}" name="{tc["name"]}">'
+            )
+            xml_lines.append(
+                f'      <failure message="{message_esc}" type="{severity_esc}">'
+            )
+            xml_lines.append(
+                f'        <![CDATA[{tc.get("message", "")}]]>'
+            )
+            xml_lines.append('      </failure>')
+            xml_lines.append('    </testcase>')
+        
+        xml_lines.extend([
+            '  </testsuite>',
+            '</testsuites>'
+        ])
+        
+        return '\n'.join(xml_lines)
+    
+    def _escape_xml(self, text: str) -> str:
+        """转义 XML 特殊字符"""
+        if not text:
+            return ''
+        return (text
+                .replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&apos;'))
+
+
 class ReportExporter:
     """统一报告导出器"""
     
@@ -419,7 +511,8 @@ class ReportExporter:
             'openapi': OpenAPIExporter(),
             'json': JSONExporter(),
             'excel': ExcelExporter(),
-            'html': HTMLReporter()
+            'html': HTMLReporter(),
+            'junit': JUnitExporter()
         }
     
     def export(
