@@ -112,15 +112,15 @@ ApiRed v3.0
 │   │   └── vulnerability_tester.py# 漏洞测试 (SQLi/XSS/SSRF/JWT)
 │   ├── security/             # 安全检测
 │   │   └── security_detector.py# 未授权访问/IDOR检测
-│   ├── ai/                  # AI 引擎
-│   │   └── ai_engine.py     # LLM驱动智能分析
+│   ├── ai/                  # AI 引擎 (基于 llm 库)
+│   │   └── ai_engine.py     # 统一 LLM 客户端
 │   ├── exporters/           # 导出模块
 │   │   ├── report_exporter.py# JSON/HTML/Excel
 │   │   ├── openapi_exporter.py# OpenAPI 3.0
 │   │   └── attack_chain_exporter.py# 攻击链可视化
 │   ├── plugins.py           # 插件注册表
 │   └── dashboard/           # Web 控制面板
-├── tests/                   # 测试套件 (49 tests)
+├── tests/                   # 测试套件 (63 tests)
 └── config.yaml             # 配置文件
 ```
 ```
@@ -170,6 +170,65 @@ ApiRed v3.0
 
 ## 配置说明
 
+### AI 模型配置
+
+ApiRed 使用 [llm](https://github.com/simonw/llm) 库统一管理多种 LLM 提供商，支持以下模型：
+
+| 提供商 | 环境变量 | API Format | 示例模型 |
+|--------|----------|------------|----------|
+| OpenAI | `OPENAI_API_KEY` | `openai` | gpt-4o, gpt-4o-mini, gpt-4-turbo |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic` | claude-3-5-sonnet, claude-opus-4 |
+| Google Gemini | `GEMINI_API_KEY` | `gemini` | gemini-2.0-flash, gemini-1.5-pro |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek` | deepseek-chat, deepseek-coder |
+| Mistral | `MISTRAL_API_KEY` | `mistral` | mistral-large, mistral-small |
+| Ollama | 无 (本地) | `ollama` | llama3, codestral |
+| 自定义 | `CUSTOM_API_KEY` | `openai` | Qwen/Qwen2.5-72B-Instruct |
+
+#### 快速配置
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-xxxx"
+export AI_MODEL="gpt-4o-mini"
+export AI_API_FORMAT="openai"
+
+# Anthropic (Claude)
+export ANTHROPIC_API_KEY="sk-ant-xxxx"
+export AI_MODEL="claude-3-5-sonnet"
+export AI_API_FORMAT="anthropic"
+
+# Google Gemini
+export GEMINI_API_KEY="xxxx"
+export AI_MODEL="gemini-2.0-flash"
+export AI_API_FORMAT="gemini"
+
+# DeepSeek
+export DEEPSEEK_API_KEY="sk-xxxx"
+export AI_MODEL="deepseek-chat"
+export AI_API_FORMAT="deepseek"
+
+# Mistral
+export MISTRAL_API_KEY="xxxx"
+export AI_MODEL="mistral-large"
+export AI_API_FORMAT="mistral"
+
+# Ollama (本地)
+export AI_MODEL="llama3"
+export AI_API_FORMAT="ollama"
+
+# 自定义 API (硅基流动等)
+export CUSTOM_API_KEY="your-api-key"
+export AI_BASE_URL="https://api.siliconflow.cn/v1"
+export AI_MODEL="Qwen/Qwen2.5-72B-Instruct"
+export AI_API_FORMAT="openai"
+```
+
+#### 查看所有可用模型
+
+```bash
+python -c "import llm; print([m.model_id for m in llm.get_models()])"
+```
+
 ### config.yaml 关键配置
 
 ```yaml
@@ -190,6 +249,8 @@ ai:
   enabled: false
   provider: "deepseek"
   model: "deepseek-chat"
+  base_url: "https://api.deepseek.com/v1"
+  api_format: "openai"    # openai/anthropic/gemini/deepseek/mistral/ollama
   thresholds:
     high_value_api_score: 5  # 高价值 API 评分阈值
 
@@ -261,6 +322,13 @@ results/
 
 ## 更新日志
 
+### v3.1 - LLM Integration (2026-03)
+
+- **LLM 库整合**：使用 [llm](https://github.com/simonw/llm) 统一管理多种 AI 提供商
+- **多模型支持**：OpenAI, Anthropic, Google Gemini, DeepSeek, Mistral, Ollama
+- **自定义 API**：支持硅基流动等 OpenAI 兼容 API 服务
+- **简化配置**：环境变量配置，开箱即用
+
 ### v3.0 - Integration (2026-03)
 
 - **ScanEngine**：统一扫描引擎，整合 Collector → Analyzer → Tester 流程
@@ -270,7 +338,7 @@ results/
 - **多目标并行**：支持 100+ 目标并发扫描
 - **攻击链可视化**：Mermaid 图表 + HTML 交互报告
 - **性能优化**：响应聚类 O(n) 算法，AST 解析支持
-- **测试覆盖**：49 个单元/集成测试，性能基准测试
+- **测试覆盖**：63 个单元/集成测试，性能基准测试
 
 ### v2.0 - ApiRed (2026-03)
 
