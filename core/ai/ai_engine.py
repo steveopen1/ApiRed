@@ -14,6 +14,7 @@ class AIProvider(Enum):
     """AI提供商"""
     DEEPSEEK = "deepseek"
     OPENAI = "openai"
+    ANTHROPIC = "anthropic"
     CUSTOM = "custom"
 
 
@@ -24,6 +25,7 @@ class AIConfig:
     base_url: str = "https://api.deepseek.com/v1"
     api_key: str = ""
     model: str = "deepseek-chat"
+    api_format: str = "openai"
     max_tokens: int = 2000
     temperature: float = 0.7
     timeout: int = 60
@@ -69,7 +71,7 @@ class BaseAIClient:
 
 
 class DeepSeekClient(BaseAIClient):
-    """DeepSeek AI客户端"""
+    """DeepSeek AI客户端 (OpenAI 兼容格式)"""
     
     def __init__(self, config: AIConfig):
         super().__init__(config)
@@ -77,7 +79,7 @@ class DeepSeekClient(BaseAIClient):
         self.base_url = config.base_url
     
     def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
-        """发送聊天请求"""
+        """发送聊天请求 (OpenAI 格式)"""
         try:
             import requests
             
@@ -108,6 +110,65 @@ class DeepSeekClient(BaseAIClient):
             if response.status_code == 200:
                 data = response.json()
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return self._format_response(content)
+            else:
+                return AIResponse(
+                    success=False,
+                    error=f"API Error: {response.status_code} - {response.text}"
+                )
+        except ImportError:
+            return AIResponse(success=False, error="requests library not installed")
+        except Exception as e:
+            return AIResponse(success=False, error=str(e))
+
+
+class AnthropicClient(BaseAIClient):
+    """
+    Anthropic AI客户端 (Claude 格式)
+    
+    Anthropic API 格式:
+    - 端点: /v1/messages
+    - 认证: x-api-key header
+    - body 格式: messages + system + model
+    """
+    
+    def __init__(self, config: AIConfig):
+        super().__init__(config)
+        self.api_key = config.api_key
+        self.base_url = config.base_url
+    
+    def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
+        """发送聊天请求 (Anthropic 格式)"""
+        try:
+            import requests
+            
+            headers = {
+                "x-api-key": self.api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+            
+            full_messages = []
+            if system:
+                full_messages.append({"role": "user", "content": system})
+            full_messages.extend(messages)
+            
+            payload = {
+                "model": self.config.model,
+                "messages": full_messages,
+                "max_tokens": self.config.max_tokens
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/messages",
+                headers=headers,
+                json=payload,
+                timeout=self.config.timeout
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("content", [{}])[0].get("text", "")
                 return self._format_response(content)
             else:
                 return AIResponse(
@@ -469,11 +530,15 @@ class AIFactory:
     
     @classmethod
     def create_client(cls, config: AIConfig) -> BaseAIClient:
-        """创建AI客户端"""
-        if config.provider == "deepseek":
-            return DeepSeekClient(config)
-        elif config.provider == "openai":
-            return DeepSeekClient(config)
+        """创建AI客户端
+        
+        根据 api_format 决定使用 OpenAI 还是 Anthropic 格式:
+        - api_format="openai": 使用 DeepSeekClient (/chat/completions)
+        - api_format="anthropic": 使用 AnthropicClient (/messages)
+        - api_format="deepseek": 使用 DeepSeekClient (兼容 OpenAI 格式)
+        """
+        if config.api_format == "anthropic":
+            return AnthropicClient(config)
         else:
             return DeepSeekClient(config)
     
