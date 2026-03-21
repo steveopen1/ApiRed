@@ -13,7 +13,8 @@ from .ai_engine import (
     DynamicPathAnalyzer,
     ParameterInferrer,
     SensitiveInfoAnalyzer,
-    BaseAIClient
+    LLMClient,
+    LLM_MODEL_MAPPING,
 )
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     'DynamicPathAnalyzer',
     'ParameterInferrer',
     'SensitiveInfoAnalyzer',
-    'BaseAIClient'
+    'LLMClient',
+    'LLM_MODEL_MAPPING',
 ]

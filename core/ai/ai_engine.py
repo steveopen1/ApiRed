@@ -1,13 +1,17 @@
 """
 AI Engine Module
 AI分析引擎 - 整合站点定性、API分析、敏感信息识别
+使用 llm 库统一管理多种 LLM 提供商
 """
 
 import json
 import re
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+import llm
 
 
 class AIProvider(Enum):
@@ -29,6 +33,58 @@ class AIConfig:
     max_tokens: int = 2000
     temperature: float = 0.7
     timeout: int = 60
+    llm_model_id: str = ""
+
+
+LLM_MODEL_MAPPING = {
+    "deepseek-chat": "deepseek/deepseek-chat",
+    "deepseek-coder": "deepseek/deepseek-coder",
+    "deepseek-v3": "deepseek/deepseek-chat",
+    "gpt-4o": "gpt-4o",
+    "gpt-4o-mini": "gpt-4o-mini",
+    "gpt-4": "gpt-4",
+    "gpt-4-turbo": "gpt-4-turbo",
+    "gpt-3.5-turbo": "gpt-3.5-turbo",
+    "gpt-4.1": "gpt-4.1",
+    "gpt-4.1-mini": "gpt-4.1-mini",
+    "claude-3-sonnet": "anthropic/claude-3-sonnet-20240229",
+    "claude-3-opus": "anthropic/claude-3-opus-20240229",
+    "claude-3-haiku": "anthropic/claude-3-haiku-20240307",
+    "claude-3-5-sonnet": "anthropic/claude-3-5-sonnet-latest",
+    "claude-3-5-haiku": "anthropic/claude-3-5-haiku-latest",
+    "claude-sonnet-4": "anthropic/claude-sonnet-4-0",
+    "claude-opus-4": "anthropic/claude-opus-4-0",
+    "claude-sonnet-4-5": "anthropic/claude-sonnet-4-5",
+    "claude-opus-4-5": "anthropic/claude-opus-4-5",
+    "gemini-2.0-flash": "gemini/gemini-2.0-flash",
+    "gemini-2.0-pro": "gemini/gemini-2.0-pro-exp-02-05",
+    "gemini-1.5-flash": "gemini/gemini-1.5-flash-002",
+    "gemini-1.5-pro": "gemini/gemini-1.5-pro-latest",
+    "gemini-pro": "gemini/gemini-pro",
+    "mistral-large": "mistral/mistral-large-latest",
+    "mistral-small": "mistral/mistral-small-latest",
+    "mistral-medium": "mistral/mistral-medium-latest",
+    "mistral-codestral": "mistral/codestral-latest",
+}
+
+PROVIDER_MODEL_PREFIX = {
+    "anthropic": "anthropic/",
+    "deepseek": "deepseek/",
+    "gemini": "gemini/",
+    "mistral": "mistral/",
+    "ollama": "ollama/",
+    "openai": "",
+}
+
+PROVIDER_API_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "ollama": "OLLAMA_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "custom": "CUSTOM_API_KEY",
+}
 
 
 @dataclass
@@ -42,15 +98,100 @@ class AIResponse:
     result: str = ""
 
 
-class BaseAIClient:
-    """AI客户端基类"""
+class LLMClient:
+    """
+    LLM 客户端 - 使用 llm 库统一管理多种 LLM 提供商
+    
+    支持的模型格式 (llm 库标准):
+    - OpenAI: gpt-4o, gpt-4o-mini, gpt-4, gpt-3.5-turbo 等
+    - Anthropic: anthropic/claude-3-sonnet-20240229, anthropic/claude-3-5-sonnet-latest 等
+    - DeepSeek: deepseek/deepseek-chat, deepseek/deepseek-coder 等
+    - Google Gemini: gemini/gemini-2.0-flash, gemini/gemini-1.5-pro 等
+    - Mistral: mistral/mistral-large-latest, mistral/mistral-small-latest 等
+    - Ollama: ollama/llama3, ollama/codestral 等 (需本地安装 ollama)
+    """
     
     def __init__(self, config: AIConfig):
         self.config = config
+        self._model: Optional[llm.Model] = None
+        self._setup_api_keys()
+    
+    def _setup_api_keys(self):
+        """设置 API keys 到环境变量 (llm 库通过环境变量读取)"""
+        if not self.config.api_key:
+            return
+        
+        api_format = self.config.api_format.lower()
+        model_id = self._get_llm_model_id().lower()
+        
+        if 'anthropic' in model_id or api_format == 'anthropic':
+            os.environ['ANTHROPIC_API_KEY'] = self.config.api_key
+        elif 'deepseek' in model_id or api_format == 'deepseek':
+            os.environ['DEEPSEEK_API_KEY'] = self.config.api_key
+        elif 'gemini' in model_id or api_format == 'gemini':
+            os.environ['GEMINI_API_KEY'] = self.config.api_key
+        elif 'mistral' in model_id or api_format == 'mistral':
+            os.environ['MISTRAL_API_KEY'] = self.config.api_key
+        elif 'ollama' in model_id or api_format == 'ollama':
+            pass
+        else:
+            os.environ['OPENAI_API_KEY'] = self.config.api_key
+    
+    def _get_llm_model_id(self) -> str:
+        """获取 llm 库标准的模型 ID"""
+        if self.config.llm_model_id:
+            return self.config.llm_model_id
+        
+        if self.config.model in LLM_MODEL_MAPPING:
+            return LLM_MODEL_MAPPING[self.config.model]
+        
+        api_format = self.config.api_format.lower()
+        if api_format in PROVIDER_MODEL_PREFIX:
+            prefix = PROVIDER_MODEL_PREFIX[api_format]
+            if prefix and not self.config.model.startswith(prefix):
+                return f"{prefix}{self.config.model}"
+        
+        return self.config.model
+    
+    @property
+    def model(self) -> llm.Model:
+        """获取 llm 模型实例"""
+        if self._model is None:
+            model_id = self._get_llm_model_id()
+            self._model = llm.get_model(model_id)
+        return self._model
     
     def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
-        """发送聊天请求"""
-        raise NotImplementedError
+        """发送聊天请求 (通过 llm 库)"""
+        try:
+            prompt = self._format_messages_to_prompt(messages, system)
+            
+            response = self.model.prompt(
+                prompt,
+                system=system if system and not messages else None,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature
+            )
+            
+            content = response.text()
+            return self._format_response(content)
+            
+        except Exception as e:
+            return AIResponse(success=False, error=str(e))
+    
+    def _format_messages_to_prompt(self, messages: List[Dict], system: str) -> str:
+        """将消息列表格式化为单个 prompt"""
+        if len(messages) <= 1 and not system:
+            return messages[0].get("content", "") if messages else ""
+        
+        parts = []
+        if system:
+            parts.append(f"System: {system}")
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            parts.append(f"{role.capitalize()}: {content}")
+        return "\n\n".join(parts)
     
     def _format_response(self, content: str) -> AIResponse:
         """格式化响应"""
@@ -70,117 +211,6 @@ class BaseAIClient:
             return AIResponse(success=False, content=content, error=str(e))
 
 
-class DeepSeekClient(BaseAIClient):
-    """DeepSeek AI客户端 (OpenAI 兼容格式)"""
-    
-    def __init__(self, config: AIConfig):
-        super().__init__(config)
-        self.api_key = config.api_key
-        self.base_url = config.base_url
-    
-    def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
-        """发送聊天请求 (OpenAI 格式)"""
-        try:
-            import requests
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            full_messages = []
-            if system:
-                full_messages.append({"role": "system", "content": system})
-            full_messages.extend(messages)
-            
-            payload = {
-                "model": self.config.model,
-                "messages": full_messages,
-                "max_tokens": self.config.max_tokens,
-                "temperature": self.config.temperature
-            }
-            
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=self.config.timeout
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                return self._format_response(content)
-            else:
-                return AIResponse(
-                    success=False,
-                    error=f"API Error: {response.status_code} - {response.text}"
-                )
-        except ImportError:
-            return AIResponse(success=False, error="requests library not installed")
-        except Exception as e:
-            return AIResponse(success=False, error=str(e))
-
-
-class AnthropicClient(BaseAIClient):
-    """
-    Anthropic AI客户端 (Claude 格式)
-    
-    Anthropic API 格式:
-    - 端点: /v1/messages
-    - 认证: x-api-key header
-    - body 格式: messages + system + model
-    """
-    
-    def __init__(self, config: AIConfig):
-        super().__init__(config)
-        self.api_key = config.api_key
-        self.base_url = config.base_url
-    
-    def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
-        """发送聊天请求 (Anthropic 格式)"""
-        try:
-            import requests
-            
-            headers = {
-                "x-api-key": self.api_key,
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01"
-            }
-            
-            full_messages = []
-            if system:
-                full_messages.append({"role": "user", "content": system})
-            full_messages.extend(messages)
-            
-            payload = {
-                "model": self.config.model,
-                "messages": full_messages,
-                "max_tokens": self.config.max_tokens
-            }
-            
-            response = requests.post(
-                f"{self.base_url}/messages",
-                headers=headers,
-                json=payload,
-                timeout=self.config.timeout
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                content = data.get("content", [{}])[0].get("text", "")
-                return self._format_response(content)
-            else:
-                return AIResponse(
-                    success=False,
-                    error=f"API Error: {response.status_code} - {response.text}"
-                )
-        except ImportError:
-            return AIResponse(success=False, error="requests library not installed")
-        except Exception as e:
-            return AIResponse(success=False, error=str(e))
-
-
 class SiteProfiler:
     """站点定性分析器"""
     
@@ -196,7 +226,7 @@ class SiteProfiler:
 
 请用简洁专业的语言给出分析结果。"""
     
-    def __init__(self, ai_client: BaseAIClient):
+    def __init__(self, ai_client: LLMClient):
         self.ai_client = ai_client
     
     def analyze(
@@ -257,7 +287,7 @@ API信息：
 <判断>是公共接口/非公共接口/无法确定</判断>
 <结果>说明判断依据</结果>"""
     
-    def __init__(self, ai_client: BaseAIClient):
+    def __init__(self, ai_client: LLMClient):
         self.ai_client = ai_client
     
     def analyze_login_requirement(
@@ -320,7 +350,7 @@ class DynamicPathAnalyzer:
 <判断>发现/未发现</判断>
 <结果>如果发现拼接模式，列出具体的拼接方式和完整路径示例，多个用$$$$分隔</结果>"""
     
-    def __init__(self, ai_client: BaseAIClient):
+    def __init__(self, ai_client: LLMClient):
         self.ai_client = ai_client
     
     def analyze(self, js_content: str) -> AIResponse:
@@ -334,11 +364,9 @@ class DynamicPathAnalyzer:
 class ParameterInferrer:
     """API参数推断器"""
     
-    SYSTEM_PROMPT = """你是一个专业的Web安全研究员，擅长从API响应中推断参数结构。
-
-请分析以下API响应内容，推断可能的参数名称和类型。"""
+    SYSTEM_PROMPT = """你是一个专业的Web安全研究员，擅长从API响应中推断参数结构。"""
     
-    def __init__(self, ai_client: BaseAIClient):
+    def __init__(self, ai_client: LLMClient):
         self.ai_client = ai_client
     
     def infer(
@@ -385,7 +413,7 @@ class SensitiveInfoAnalyzer:
         "身份证/手机号等个人隐私"
     ]
     
-    def __init__(self, ai_client: BaseAIClient):
+    def __init__(self, ai_client: LLMClient):
         self.ai_client = ai_client
     
     def analyze(
@@ -439,11 +467,24 @@ class AIEngine:
     def _load_default_config(self) -> AIConfig:
         """从环境变量或配置加载默认配置"""
         import os
+        api_format = os.environ.get('AI_API_FORMAT', 'openai')
+        model = os.environ.get('AI_MODEL', 'deepseek-chat')
+        
+        llm_model_id = ""
+        if api_format == "anthropic":
+            llm_model_id = f"anthropic/{model}" if not model.startswith("anthropic/") else model
+        elif "deepseek" in model.lower():
+            llm_model_id = f"deepseek/{model}" if not model.startswith("deepseek/") else model
+        else:
+            llm_model_id = model
+        
         return AIConfig(
             provider=os.environ.get('AI_PROVIDER', 'deepseek'),
             api_key=os.environ.get('DEEPSEEK_API_KEY', ''),
             base_url=os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
-            model=os.environ.get('AI_MODEL', 'deepseek-chat'),
+            model=model,
+            api_format=api_format,
+            llm_model_id=llm_model_id,
             max_tokens=int(os.environ.get('AI_MAX_TOKENS', '2000')),
             temperature=float(os.environ.get('AI_TEMPERATURE', '0.7'))
         )
@@ -524,23 +565,20 @@ List only the most likely endpoints, one per line, format: /path or /v1/path"""
 
 
 class AIFactory:
-    """AI工厂类"""
+    """AI工厂类 - 使用 llm 库统一管理"""
     
-    _clients: Dict[str, BaseAIClient] = {}
+    _clients: Dict[str, LLMClient] = {}
     
     @classmethod
-    def create_client(cls, config: AIConfig) -> BaseAIClient:
+    def create_client(cls, config: AIConfig) -> LLMClient:
         """创建AI客户端
         
-        根据 api_format 决定使用 OpenAI 还是 Anthropic 格式:
-        - api_format="openai": 使用 DeepSeekClient (/chat/completions)
-        - api_format="anthropic": 使用 AnthropicClient (/messages)
-        - api_format="deepseek": 使用 DeepSeekClient (兼容 OpenAI 格式)
+        使用 llm 库统一管理，通过 llm_model_id 或 model + api_format 确定模型:
+        - OpenAI: gpt-4o, gpt-4o-mini 等
+        - Anthropic: anthropic/claude-3-sonnet-20240229 等
+        - DeepSeek: deepseek/deepseek-chat 等
         """
-        if config.api_format == "anthropic":
-            return AnthropicClient(config)
-        else:
-            return DeepSeekClient(config)
+        return LLMClient(config)
     
     @classmethod
     def create_profiler(cls, config: AIConfig) -> SiteProfiler:

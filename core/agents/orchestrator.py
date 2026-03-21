@@ -52,6 +52,16 @@ def check_ai_config() -> Dict[str, str]:
     return missing
 
 
+PROVIDER_MODEL_PREFIX = {
+    "anthropic": "anthropic/",
+    "deepseek": "deepseek/",
+    "gemini": "gemini/",
+    "mistral": "mistral/",
+    "ollama": "ollama/",
+    "openai": "",
+}
+
+
 def get_ai_config() -> Dict[str, str]:
     """
     获取 AI 配置（优先环境变量，其次配置文件）
@@ -60,21 +70,45 @@ def get_ai_config() -> Dict[str, str]:
         Dict of AI configuration
     """
     from ..utils.config import Config
+    from ..ai.ai_engine import LLM_MODEL_MAPPING
     
     yaml_config = Config()._config.get('ai', {})
     
+    api_format = os.environ.get('AI_API_FORMAT') or yaml_config.get('api_format', 'openai')
+    model = os.environ.get('AI_MODEL') or yaml_config.get('model', 'deepseek-chat')
+    provider = os.environ.get('AI_PROVIDER') or yaml_config.get('provider', 'deepseek')
+    
+    llm_model_id = ""
+    if model in LLM_MODEL_MAPPING:
+        llm_model_id = LLM_MODEL_MAPPING[model]
+    elif api_format in PROVIDER_MODEL_PREFIX:
+        prefix = PROVIDER_MODEL_PREFIX[api_format]
+        if prefix and not model.startswith(prefix.rstrip('/') + '/'):
+            llm_model_id = f"{prefix.rstrip('/')}/{model}"
+        else:
+            llm_model_id = model
+    else:
+        llm_model_id = model
+    
+    api_key_env_vars = [
+        'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY',
+        'MISTRAL_API_KEY', 'OPENAI_API_KEY', 'CUSTOM_API_KEY'
+    ]
+    api_key = ""
+    for key in api_key_env_vars:
+        api_key = os.environ.get(key, "")
+        if api_key:
+            break
+    if not api_key:
+        api_key = yaml_config.get('api_key', '')
+    
     return {
-        'provider': os.environ.get('AI_PROVIDER') or yaml_config.get('provider', 'deepseek'),
-        'api_key': (
-            os.environ.get('DEEPSEEK_API_KEY') or
-            os.environ.get('OPENAI_API_KEY') or
-            os.environ.get('ANTHROPIC_API_KEY') or
-            os.environ.get('CUSTOM_API_KEY') or
-            yaml_config.get('api_key', '')
-        ),
+        'provider': provider,
+        'api_key': api_key,
         'base_url': os.environ.get('AI_BASE_URL') or yaml_config.get('base_url', 'https://api.deepseek.com/v1'),
-        'model': os.environ.get('AI_MODEL') or yaml_config.get('model', 'deepseek-chat'),
-        'api_format': os.environ.get('AI_API_FORMAT') or yaml_config.get('api_format', 'openai'),
+        'model': model,
+        'api_format': api_format,
+        'llm_model_id': llm_model_id,
     }
 
 
@@ -84,61 +118,87 @@ def print_ai_config_guide():
     
     api_key_display = ('*' * 20) if current_config['api_key'] else 'NOT SET'
     
-    print("""
+    print(f"""
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                     AI Configuration Required                          ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
 ║  Agent 模式需要配置 AI API 密钥才能使用 LLM 功能。                     ║
+║  使用 llm 库统一管理，支持多种模型提供商。                             ║
 ║                                                                        ║
 ║  当前配置:                                                              ║
-║    Provider: {provider}                                           ║
-║    Base URL: {base_url}                                            ║
-║    Model: {model}                                                ║
-║    API Format: {api_format}                                         ║
-║    API Key: {api_key_display}                                    ║
+║    Provider: {current_config['provider']:20}                   ║
+║    Model: {current_config['model']:30}                   ║
+║    LLM Model ID: {current_config['llm_model_id']:30}         ║
+║    API Format: {current_config['api_format']:20}                    ║
+║    API Key: {api_key_display:20}                    ║
 ║                                                                        ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
-║  方式一: DeepSeek (推荐)                                            ║
-║    export DEEPSEEK_API_KEY="sk-xxxxxxx"                             ║
-║    export AI_BASE_URL="https://api.deepseek.com/v1"                 ║
-║    export AI_MODEL="deepseek-chat"                                 ║
-║    export AI_API_FORMAT="openai"                                   ║
+║  OpenAI Models:                                                        ║
+║    gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo                    ║
 ║                                                                        ║
-║  方式二: OpenAI                                                    ║
-║    export OPENAI_API_KEY="sk-xxxxxxx"                             ║
-║    export AI_BASE_URL="https://api.openai.com/v1"                   ║
-║    export AI_MODEL="gpt-4"                                        ║
-║    export AI_API_FORMAT="openai"                                     ║
+║  Anthropic Models (Claude):                                             ║
+║    claude-3-5-sonnet, claude-3-5-haiku, claude-opus-4, claude-sonnet-4 ║
 ║                                                                        ║
-║  方式三: Anthropic (Claude)                                        ║
-║    export ANTHROPIC_API_KEY="sk-ant-xxxxxxx"                        ║
-║    export AI_BASE_URL="https://api.anthropic.com"                   ║
-║    export AI_MODEL="claude-3-sonnet"                              ║
-║    export AI_API_FORMAT="anthropic"                                ║
+║  Google Gemini Models:                                                  ║
+║    gemini-2.0-flash, gemini-2.0-pro, gemini-1.5-flash, gemini-1.5-pro  ║
 ║                                                                        ║
-║  方式四: 自定义 API (硅基流动/LocalAI/Ollama 等)              ║
-║    export CUSTOM_API_KEY="your-api-key"                             ║
-║    export AI_BASE_URL="https://your-api.com/v1"                   ║
-║    export AI_MODEL="Qwen/Qwen2.5-72B-Instruct"                    ║
-║    export AI_API_FORMAT="openai"    # 或 anthropic                     ║
+║  DeepSeek Models:                                                       ║
+║    deepseek-chat, deepseek-coder                                       ║
 ║                                                                        ║
-║  提示: AI_API_FORMAT 支持: openai / anthropic                       ║
+║  Mistral Models:                                                       ║
+║    mistral-large, mistral-small, mistral-medium, codestral             ║
 ║                                                                        ║
-║  查看更多: https://github.com/chaitin/MonkeyCodeOfficialPlugins     ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  配置示例:                                                             ║
+║                                                                        ║
+║  OpenAI:                                                               ║
+║    export OPENAI_API_KEY="sk-xxxx"                                     ║
+║    export AI_MODEL="gpt-4o-mini"                                        ║
+║    export AI_API_FORMAT="openai"                                        ║
+║                                                                        ║
+║  Anthropic:                                                            ║
+║    export ANTHROPIC_API_KEY="sk-ant-xxxx"                              ║
+║    export AI_MODEL="claude-3-5-sonnet"                                  ║
+║    export AI_API_FORMAT="anthropic"                                     ║
+║                                                                        ║
+║  Google Gemini:                                                        ║
+║    export GEMINI_API_KEY="xxxx"                                        ║
+║    export AI_MODEL="gemini-2.0-flash"                                  ║
+║    export AI_API_FORMAT="gemini"                                        ║
+║                                                                        ║
+║  DeepSeek:                                                             ║
+║    export DEEPSEEK_API_KEY="sk-xxxx"                                   ║
+║    export AI_MODEL="deepseek-chat"                                      ║
+║    export AI_API_FORMAT="deepseek"                                     ║
+║                                                                        ║
+║  Mistral:                                                             ║
+║    export MISTRAL_API_KEY="xxxx"                                       ║
+║    export AI_MODEL="mistral-large"                                     ║
+║    export AI_API_FORMAT="mistral"                                       ║
+║                                                                        ║
+║  Ollama (本地):                                                        ║
+║    export AI_MODEL="llama3"                                            ║
+║    export AI_API_FORMAT="ollama"                                        ║
+║                                                                        ║
+║  自定义 API (硅基流动等):                                              ║
+║    export CUSTOM_API_KEY="your-api-key"                                 ║
+║    export AI_BASE_URL="https://api.siliconflow.cn/v1"                  ║
+║    export AI_MODEL="Qwen/Qwen2.5-72B-Instruct"                         ║
+║    export AI_API_FORMAT="openai"                                        ║
+║                                                                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                        ║
+║  查看所有可用模型:                                                     ║
+║    python -c "import llm; print([m.model_id for m in llm.get_models()])"║
 ║                                                                        ║
 ║  或者使用传统模式 (无需配置 AI):                                  ║
-║     python main.py scan -u http://example.com                         ║
+║    python main.py scan -u http://example.com                           ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-""".format(
-        provider=current_config['provider'],
-        base_url=current_config['base_url'],
-        model=current_config['model'],
-        api_format=current_config['api_format'],
-        api_key_display=api_key_display
-    ))
+    """)
 
 
 @dataclass
