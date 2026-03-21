@@ -1,0 +1,326 @@
+# Test Case Library - OWASP API Security Top 10
+# https://owasp.org/www-project-api-security/
+
+api_version: "1.0"
+category: owasp_top10
+
+test_cases:
+
+  - id: OWASP-API-1
+    name: Broken Object Level Authorization (IDOR)
+    severity: HIGH
+    description: |
+      Test for Insecure Direct Object Reference (IDOR) vulnerabilities.
+      Exploit by manipulating object identifiers in API requests.
+    vuln_type: IDOR
+    method: GET
+    path: /api/{resource}/{id}
+    parameters:
+      - name: id
+        type: integer
+        location: path
+    payloads:
+      - "999999"  # Access another user's resource
+      - "../admin"  # Path traversal
+    expected_response:
+      status_code: 200
+      check_pattern: user_data
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "not found"
+      false_positive_patterns:
+        - "public"
+        - "anonymous"
+    remediation: |
+      Implement proper authorization checks.
+      Use indirect references instead of direct object IDs.
+
+  - id: OWASP-API-2
+    name: Broken Authentication
+    severity: CRITICAL
+    description: |
+      Test for authentication vulnerabilities including:
+      - Weak passwords
+      - Credential stuffing
+      - Missing MFA
+      - Token manipulation
+    vuln_type: BROKEN_AUTH
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: admin
+        password: admin
+      - username: "' OR '1'='1"
+        password: anything
+      - username: "user@example.com"
+        password: "123456"
+    expected_response:
+      status_code: 200
+      check_pattern: token
+    validation:
+      type: error_based
+      indicators:
+        - "invalid credentials"
+        - "unauthorized"
+        - "account locked"
+      false_positive_patterns:
+        - "rate limit"
+    remediation: |
+      Implement multi-factor authentication.
+      Use secure session management.
+      Rate limit authentication endpoints.
+
+  - id: OWASP-API-3
+    name: Excessive Data Exposure
+    severity: MEDIUM
+    description: |
+      Test for excessive data exposure in API responses.
+      APIs should filter sensitive data before returning.
+    vuln_type: DATA_EXPOSURE
+    method: GET
+    path: /api/{resource}/details
+    expected_response:
+      check_pattern: sensitive_fields
+    validation:
+      type: content_analysis
+      sensitive_patterns:
+        - password
+        - ssn
+        - credit_card
+        - api_key
+        - secret
+      false_positive_patterns:
+        - "masked"
+        - "redacted"
+        - "***"
+    remediation: |
+      Use data filtering/transformation.
+      Implement field-level access control.
+
+  - id: OWASP-API-4
+    name: Lack of Resources & Rate Limiting
+    severity: MEDIUM
+    description: |
+      Test for missing or insufficient rate limiting.
+      APIs should limit request frequency and payload size.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/{endpoint}
+    bypass_techniques:
+      - header_injection: "X-Forwarded-For: 1.1.1.1"
+      - method_tampering: "POST instead of GET"
+      - path_traversal: "/api//endpoint"
+    expected_response:
+      status_code: 429
+      headers_check:
+        - X-RateLimit-Limit
+        - X-RateLimit-Remaining
+        - Retry-After
+    validation:
+      type: rate_limit_check
+      indicators:
+        - "rate limit"
+        - "too many requests"
+        - "quota exceeded"
+    remediation: |
+      Implement rate limiting middleware.
+      Limit payload size and request frequency.
+
+  - id: OWASP-API-5
+    name: Mass Assignment
+    severity: HIGH
+    description: |
+      Test for mass assignment vulnerabilities.
+      Exploit by adding unexpected parameters in requests.
+    vuln_type: MASS_ASSIGNMENT
+    method: POST
+    path: /api/users
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: role
+        type: string
+        location: body
+    attack_vectors:
+      - name: privilege_escalation
+        payload:
+          role: admin
+      - name: field_injection
+        payload:
+          is_admin: true
+          _price: 0
+    expected_response:
+      status_code: 201
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "admin"
+        - "privilege"
+        - "role"
+    remediation: |
+      Use whitelist-based parameter binding.
+      Validate all input parameters.
+
+  - id: OWASP-API-6
+    name: SQL Injection
+    severity: CRITICAL
+    description: |
+      Test for SQL injection vulnerabilities.
+      Exploit by injecting SQL meta-characters in parameters.
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "' OR '1'='1"
+      - "'; DROP TABLE users--"
+      - "' UNION SELECT NULL,NULL,NULL--"
+      - "admin'--"
+    expected_response:
+      check_pattern: sql_syntax_error
+    validation:
+      type: error_based
+      indicators:
+        - "sql"
+        - "syntax"
+        - "mysql"
+        - "oracle"
+        - "sqlite"
+        - "postgres"
+        - "syntax error"
+      false_positive_patterns:
+        - "no results"
+        - "empty"
+    remediation: |
+      Use parameterized queries.
+      Implement input validation and sanitization.
+
+  - id: OWASP-API-7
+    name: Improper Inventory Management
+    severity: MEDIUM
+    description: |
+      Test for API version and endpoint exposure.
+      Deprecated API versions should be disabled.
+    vuln_type: IMPROPER_INVENTORY
+    method: GET
+    path: /api/v1/{endpoint}
+    attack_vectors:
+      - path: /api/v0/{endpoint}
+      - path: /api/{endpoint}/debug
+      - path: /api/swagger.json
+    expected_response:
+      status_code: 200
+    validation:
+      type: version_check
+      indicators:
+        - "swagger"
+        - "openapi"
+        - "version"
+    remediation: |
+      Disable deprecated API versions.
+      Implement proper API versioning.
+
+  - id: OWASP-API-8
+    name: Security Misconfiguration
+    severity: MEDIUM
+    description: |
+      Test for security misconfigurations including:
+      - Missing security headers
+      - Debug mode enabled
+      - CORS misconfiguration
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/{endpoint}
+    checks:
+      - name: security_headers
+        required:
+          - X-Content-Type-Options
+          - X-Frame-Options
+          - Strict-Transport-Security
+      - name: cors_check
+        allowed_origins: ["https://legitimate-site.com"]
+      - name: debug_mode
+        check_patterns:
+          - "debug"
+          - "stack trace"
+          - "error details"
+    remediation: |
+      Implement security headers.
+      Disable debug mode in production.
+      Configure CORS properly.
+
+  - id: OWASP-API-9
+    name: Injection (XSS, Command Injection)
+    severity: HIGH
+    description: |
+      Test for injection vulnerabilities including:
+      - Cross-Site Scripting (XSS)
+      - Command Injection
+    vuln_type: XSS
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "<script>alert(1)</script>"
+      - "><img src=x onerror=alert(1)>"
+      - "javascript:alert(1)"
+      - "'-alert(1)-'"
+    expected_response:
+      check_pattern: "<script>|onerror=|onload="
+    validation:
+      type: reflected_input
+      indicators:
+        - "<script>"
+        - "onerror"
+        - "onload"
+        - "alert("
+      false_positive_patterns:
+        - "escaped"
+        - "encoded"
+        - "sanitized"
+    remediation: |
+      Implement output encoding.
+      Use Content Security Policy.
+      Validate and sanitize all input.
+
+  - id: OWASP-API-10
+    name: Insufficient Logging & Monitoring
+    severity: LOW
+    description: |
+      Test for insufficient logging and monitoring.
+      APIs should log security events for incident response.
+    vuln_type: INSUFFICIENT_LOGGING
+    checks:
+      - name: authentication_logging
+        events:
+          - login_success
+          - login_failure
+          - account_locked
+      - name: authorization_logging
+        events:
+          - access_denied
+          - forbidden
+      - name: error_logging
+        events:
+          - validation_error
+          - server_error
+    remediation: |
+      Implement comprehensive logging.
+      Set up security monitoring and alerting.

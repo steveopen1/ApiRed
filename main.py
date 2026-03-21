@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
 import asyncio
-from typing import Optional
+from typing import Optional, List
 
+from core.engine import ScanEngine
+from core.config import ScanConfig
 from core.scanner import ChkApiScanner, ScannerConfig, ScanResultAggregator, MultiTargetConfig
 from core.utils.config import Config
 from core.dashboard.web_dashboard import WebDashboard
@@ -67,6 +69,8 @@ Examples:
         scan_parser.add_argument('--output', '-o', help='Output directory')
         scan_parser.add_argument('--format', '-fmt', choices=['json', 'html'], default='json')
         scan_parser.add_argument('--verbose', '-v', action='store_true')
+        scan_parser.add_argument('--engine', action='store_true',
+                                  help='Use new ScanEngine (recommended)')
         
         dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')
         dash_parser.add_argument('--host', default='0.0.0.0')
@@ -110,7 +114,120 @@ Examples:
         
         return config
     
-    async def run_scan(self, config: ScannerConfig) -> int:
+    async def run_scan(self, parsed_args) -> int:
+        """执行扫描"""
+        use_engine = getattr(parsed_args, 'engine', False)
+        
+        if use_engine:
+            return await self._run_engine_scan(parsed_args)
+        else:
+            return await self._run_scanner_scan(parsed_args)
+    
+    async def _run_engine_scan(self, parsed_args) -> int:
+        """使用 ScanEngine 执行扫描"""
+        targets = []
+        target = parsed_args.url
+        
+        if parsed_args.file:
+            with open(parsed_args.file, 'r') as f:
+                targets = [line.strip() for line in f if line.strip()]
+            if targets:
+                target = targets[0]
+        
+        scan_config = ScanConfig(
+            target=target,
+            cookies=parsed_args.cookies or '',
+            collectors=['js', 'api'],
+            analyzers=['scorer', 'sensitive'],
+            testers=['fuzz', 'vuln'],
+            ai_scan=parsed_args.ai,
+            checkpoint_enabled=True,
+            concurrency=parsed_args.concurrency,
+            proxy=parsed_args.proxy,
+            js_depth=parsed_args.js_depth,
+            verify_ssl=not parsed_args.no_ssl_verify,
+            resume=parsed_args.resume,
+            output_dir=parsed_args.output or './results'
+        )
+        
+        if targets and len(targets) > 1:
+            return await self._run_multi_target_scan_engine(targets, scan_config)
+        
+        engine_config = scan_config.to_engine_config()
+        engine = ScanEngine(engine_config)
+        result = await engine.run()
+        
+        self._print_single_result(result)
+        return 0
+    
+    async def _run_multi_target_scan_engine(self, targets: List[str], base_config: ScanConfig) -> int:
+        """多目标扫描（使用 Engine）"""
+        print(f"\n{'='*60}")
+        print(f"Multi-Target Scan (Engine)")
+        print(f"{'='*60}")
+        print(f"Targets: {len(targets)}")
+        print(f"{'='*60}\n")
+        
+        results = []
+        for target in targets:
+            config = ScanConfig(
+                target=target,
+                cookies=base_config.cookies,
+                collectors=base_config.collectors,
+                analyzers=base_config.analyzers,
+                testers=base_config.testers,
+                ai_scan=base_config.ai_scan,
+                checkpoint_enabled=base_config.checkpoint_enabled,
+                concurrency=base_config.concurrency,
+                proxy=base_config.proxy,
+                js_depth=base_config.js_depth,
+                verify_ssl=base_config.verify_ssl
+            )
+            engine_config = config.to_engine_config()
+            engine = ScanEngine(engine_config)
+            result = await engine.run()
+            results.append(result)
+            print(f"Target: {target} - APIs: {result.total_apis}, Vulns: {len(result.vulnerabilities)}")
+        
+        print(f"\n{'='*60}")
+        print(f"Multi-Target Scan Complete")
+        print(f"{'='*60}")
+        print(f"Total Targets: {len(results)}")
+        print(f"Total APIs Found: {sum(r.total_apis for r in results)}")
+        print(f"Total Vulnerabilities: {sum(len(r.vulnerabilities) for r in results)}")
+        
+        return 0
+    
+    async def _run_scanner_scan(self, parsed_args) -> int:
+        """使用 ChkApiScanner 执行扫描"""
+        targets = []
+        target = parsed_args.url
+        
+        if parsed_args.file:
+            with open(parsed_args.file, 'r') as f:
+                targets = [line.strip() for line in f if line.strip()]
+            if targets:
+                target = targets[0]
+        
+        config = ScannerConfig(
+            target=target,
+            cookies=parsed_args.cookies or '',
+            chrome=(parsed_args.chrome == 'on'),
+            attack_mode='collect' if parsed_args.attack_type == '1' else 'all',
+            no_api_scan=(parsed_args.no_api == '1'),
+            proxy=parsed_args.proxy,
+            js_depth=parsed_args.js_depth,
+            ai_scan=parsed_args.ai,
+            concurrency=parsed_args.concurrency,
+            output_format=parsed_args.format,
+            resume=parsed_args.resume,
+            verify_ssl=not parsed_args.no_ssl_verify
+        )
+        
+        config.targets = targets
+        config.concurrent_targets = getattr(parsed_args, 'concurrent_targets', 5)
+        config.aggregate = getattr(parsed_args, 'aggregate', False)
+        
         if config.targets and len(config.targets) > 1:
             return await self._run_multi_target_scan(config)
         else:
