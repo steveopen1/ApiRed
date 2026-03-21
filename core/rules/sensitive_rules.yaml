@@ -679,6 +679,71 @@ rules:
         sensitive: false
         description: SQL 列名泄露
 
+      - name: SQL Error Count
+        loaded: true
+        f_regex: ((\d+.*error)|(error.*\d+)|(SQL.*\d+))
+        scope: response body
+        sensitive: false
+        description: SQL 错误计数
+
+      - name: SQL Error Message
+        loaded: true
+        f_regex: ((You have an error in your SQL)|(Warning.*mysql_)|(MySQL server version))
+        scope: response body
+        sensitive: false
+        description: SQL 错误消息
+
+      - name: SQL ODBC Error
+        loaded: true
+        f_regex: ((Microsoft OLE DB Provider for SQL Server)|(SQLServer JDBC)|(\[ODBC\]))
+        scope: response body
+        sensitive: false
+        description: ODBC SQL 错误
+
+      - name: SQL SQLMap Fingerprint
+        loaded: true
+        f_regex: ((sqlmap)|(SQLmap)|(sqlmap\/))
+        scope: response body
+        sensitive: false
+        description: SQLMap 扫描指纹
+
+  # ==================== XSS Cross-Site Scripting ====================
+
+      - name: SQL Hibernate Error
+        loaded: true
+        f_regex: ((HibernateException)|(LazyInitializationException)|(org\.hibernate))
+        scope: response body
+        sensitive: false
+        description: Hibernate SQL 错误
+
+      - name: SQL JPA Error
+        loaded: true
+        f_regex: ((javax\.persistence\.EntityNotFoundException)|(IllegalArgumentException.*entity))
+        scope: response body
+        sensitive: false
+        description: JPA SQL 错误
+
+      - name: SQL SQLAlchemy Error
+        loaded: true
+        f_regex: ((SQLAlchemy.*Error)|(IntegrityError)|(OperationalError))
+        scope: response body
+        sensitive: false
+        description: SQLAlchemy SQL 错误
+
+      - name: SQL Django Error
+        loaded: true
+        f_regex: ((django\.db\.models)|(DatabaseError)|(ProgrammingError))
+        scope: response body
+        sensitive: false
+        description: Django SQL 错误
+
+      - name: SQL Node Sequelize Error
+        loaded: true
+        f_regex: ((SequelizeDatabaseError)|(SequelizeUniqueConstraintError))
+        scope: response body
+        sensitive: false
+        description: Sequelize SQL 错误
+
   # ==================== XSS Cross-Site Scripting ====================
   - group: XSS
     rule:
@@ -808,6 +873,34 @@ rules:
         sensitive: false
         description: XSS 存储型特征
 
+      - name: XSS Video Tag
+        loaded: true
+        f_regex: (<video[^>]+(onerror|onload)\s*=|<video[^>]*src\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Video 标签
+
+      - name: XSS Audio Tag
+        loaded: true
+        f_regex: (<audio[^>]+(onerror|onload)\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Audio 标签
+
+      - name: XSS Details Tag
+        loaded: true
+        f_regex: (<details[^>]+(ontoggle|open)\s*=|<details[^>]*open>)
+        scope: response body
+        sensitive: false
+        description: XSS Details 标签
+
+      - name: XSS Embed Tag
+        loaded: true
+        f_regex: (<embed[^>]+(src|onerror)\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Embed 标签
+
   # ==================== Path Traversal 路径遍历 ====================
   - group: Path Traversal
     rule:
@@ -894,6 +987,34 @@ rules:
         scope: response body
         sensitive: false
         description: Web 根目录泄露
+
+      - name: Path Traversal Double Encoding
+        loaded: true
+        f_regex: ((%252e%252e)|(%252f)|(%25c0%25ae)|(%25c0%25af))
+        scope: any
+        sensitive: false
+        description: 路径遍历双重编码
+
+      - name: Path Traversal Unicode
+        loaded: true
+        f_regex: ((\.\.%e0%80%ae)|(\.\.%c0%ae)|(\.\.%c0%af)|(\.\.%c1%9c))
+        scope: any
+        sensitive: false
+        description: 路径遍历 Unicode 编码
+
+      - name: Path Traversal Mixed Case
+        loaded: true
+        f_regex: ((%2e%2e)|(%2e%2f)|(%2f%2e)|(%2f%2f)|(%5c%2e)|(%2e%5c))
+        scope: any
+        sensitive: false
+        description: 路径遍历混合大小写编码
+
+      - name: Sensitive File Path
+        loaded: true
+        f_regex: ((etc\/shadow)|(etc\/hosts)|(boot\.ini)|(boot\.conf)|(system\.info))
+        scope: any
+        sensitive: false
+        description: 敏感文件路径
 
   # ==================== SSRF Server-Side Request Forgery ====================
   - group: SSRF
@@ -1231,6 +1352,167 @@ rules:
         sensitive: true
         description: PGP 私钥
 
+      - name: Aliyun AccessKey ID
+        loaded: true
+        f_regex: \bLTAI[a-z0-9]{12,30}\b
+        scope: any
+        sensitive: true
+        description: 阿里云 AccessKey ID
+
+      - name: Aliyun AccessKey Secret
+        loaded: true
+        f_regex: \b[A-Za-z0-9]{30,40}\b
+        scope: any
+        sensitive: true
+        description: 阿里云 AccessKey Secret
+
+      - name: Tencent Cloud Secret ID
+        loaded: true
+        f_regex: \bAKID[a-zA-Z0-9]{13,40}\b
+        scope: any
+        sensitive: true
+        description: 腾讯云 Secret ID
+
+      - name: AWS Access Key ID
+        loaded: true
+        f_regex: \b(AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b
+        scope: any
+        sensitive: true
+        description: AWS Access Key ID
+
+      - name: AWS Secret Access Key
+        loaded: true
+        f_regex: \b[A-Za-z0-9\/+=]{40}\b
+        scope: any
+        sensitive: true
+        description: AWS Secret Access Key
+
+      - name: Azure Subscription Key
+        loaded: true
+        f_regex: \b[a-f0-9]{32}\b
+        scope: any
+        sensitive: true
+        description: Azure Subscription Key
+
+      - name: Azure Connection String
+        loaded: true
+        f_regex: (DefaultEndpointsProtocol=https;AccountName=|BlobEndpoint=|TableEndpoint=|QueueEndpoint=)
+        scope: any
+        sensitive: true
+        description: Azure Connection String
+
+      - name: Cloudflare API Key
+        loaded: true
+        f_regex: \b[a-f0-9]{37}\b
+        scope: any
+        sensitive: true
+        description: Cloudflare API Key
+
+      - name: DigitalOcean Token
+        loaded: true
+        f_regex: \b[a-zA-Z0-9]{64}\b
+        scope: any
+        sensitive: true
+        description: DigitalOcean Token
+
+      - name: Docker Hub Token
+        loaded: true
+        f_regex: \b[a-zA-Z0-9]{64}\b
+        scope: any
+        sensitive: true
+        description: Docker Hub Token
+
+      - name: Firebase API Key
+        loaded: true
+        f_regex: \bAIza[0-9A-Za-z\\-_]{35}\b
+        scope: any
+        sensitive: true
+        description: Firebase API Key
+
+      - name: Heroku API Key
+        loaded: true
+        f_regex: \b[a-f0-9]{64}\b
+        scope: any
+        sensitive: true
+        description: Heroku API Key
+
+      - name: Mapbox API Key
+        loaded: true
+        f_regex: \bpk\.[a-zA-Z0-9]{45,}\b
+        scope: any
+        sensitive: true
+        description: Mapbox API Key
+
+      - name: Nexmo API Key
+        loaded: true
+        f_regex: \b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b
+        scope: any
+        sensitive: true
+        description: Nexmo/Vonage API Key
+
+      - name: NPM Token
+        loaded: true
+        f_regex: \bnpm_[a-zA-Z0-9]{36}\b
+        scope: any
+        sensitive: true
+        description: NPM Token
+
+      - name: PyPI Token
+        loaded: true
+        f_regex: \bpypi-AgEIcHlwaS5pZXItcGluLnddLXNlY3JldDouODg5ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=\b
+        scope: any
+        sensitive: true
+        description: PyPI Token
+
+      - name: Slack Webhook URL
+        loaded: true
+        f_regex: \bhttps://hooks\.slack\.com/services/T[a-zA-Z0-9]+/B[a-zA-Z0-9]+/[a-zA-Z0-9]+\b
+        scope: any
+        sensitive: true
+        description: Slack Webhook URL
+
+      - name: Square Access Token
+        loaded: true
+        f_regex: \bsq0atp-[0-9A-Za-z\\-_]{22}\b
+        scope: any
+        sensitive: true
+        description: Square Access Token
+
+      - name: Stripe Restricted Key
+        loaded: true
+        f_regex: \brk_live_[a-zA-Z0-9]{24,}\b
+        scope: any
+        sensitive: true
+        description: Stripe Restricted Key
+
+      - name: PayPal API Key
+        loaded: true
+        f_regex: \b[A-Za-z0-9-_]{43}\b
+        scope: any
+        sensitive: true
+        description: PayPal API Key
+
+      - name: Dropbox API Token
+        loaded: true
+        f_regex: \b[A-Za-z0-9\\-_]{64}\b
+        scope: any
+        sensitive: true
+        description: Dropbox API Token
+
+      - name: Box API Token
+        loaded: true
+        f_regex: \b[a-zA-Z0-9]{43}\b
+        scope: any
+        sensitive: true
+        description: Box API Token
+
+      - name: Shopify API Key
+        loaded: true
+        f_regex: \b[a-f0-9]{32}\b
+        scope: any
+        sensitive: true
+        description: Shopify API Key
+
   # ==================== Database Connection 数据库连接 ====================
   - group: Database Connection
     rule:
@@ -1502,59 +1784,353 @@ rules:
     rule:
       - name: Eval Function
         loaded: true
-        f_regex: (\beval\s*\(|eval\s*\(\s*\$_|eval\s*\(\s*\$)
+        f_regex: (\beval\s*\(|\beval\s+\$)
         scope: any
         sensitive: false
         description: Eval 函数调用
 
       - name: Exec Function
         loaded: true
-        f_regex: (\bexec\s*\(|\bsystem\s*\(|\bpassthru\s*\(|\bshell_exec\s*\()
+        f_regex: (\bexec\s*\(|\bsystem\s*\(|\bpassthru\s*\(|\bshell_exec\s*\(|\bproc_open\s*\()
         scope: any
         sensitive: false
         description: 命令执行函数
 
       - name: SQL Execute
         loaded: true
-        f_regex: (\.execute\s*\(|\.exec\s*\(|\.query\s*\(|\.rawQuery\()
+        f_regex: (\.execute\s*\(|\.exec\s*\(|\.query\s*\(|\.rawQuery\()|\.executeQuery\()
         scope: any
         sensitive: false
         description: SQL 执行函数
 
       - name: File Operations
         loaded: true
-        f_regex: (\.readFile\(|\.readFileSync\(|\.writeFile\(|\.open\(|\.createReadStream\()
+        f_regex: (\.readFile\(|\.readFileSync\(|\.writeFile\(|\.open\(|\.createReadStream\()|\.readFileSync\(
         scope: any
         sensitive: false
         description: 文件操作函数
 
       - name: Process Operations
         loaded: true
-        f_regex: (\.exec\s*\(|\.spawn\s*\(|\.fork\s*\(|\.kill\s*\()
+        f_regex: (\.exec\s*\(|\.spawn\s*\(|\.fork\s*\(|\.kill\s*\(|\.exit\s*\(
         scope: any
         sensitive: false
         description: 进程操作函数
 
       - name: Crypto Operations
         loaded: true
-        f_regex: (\.encrypt\(|\.decrypt\(|\.sign\(|\.verify\(|createCipher|createDecipher)
+        f_regex: (\.encrypt\(|\.decrypt\(|\.sign\(|\.verify\(|createCipher|createDecipher|\.createCipher\(
         scope: any
         sensitive: false
         description: 加密操作函数
 
       - name: Dangerous HTML
         loaded: true
-        f_regex: (\.html\(|\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\()
+        f_regex: (\.html\(|\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\(|\.before\(|\.after\(
         scope: any
         sensitive: false
         description: 危险 HTML 操作
 
       - name: Dangerous JavaScript
         loaded: true
-        f_regex: (\.appendChild\(|\.removeChild\(|\.replaceChild\(|\.adoptNode\()
+        f_regex: (\.appendChild\(|\.removeChild\(|\.replaceChild\(|\.adoptNode\(|\.write\(
         scope: any
         sensitive: false
         description: 危险 DOM 操作
+
+      - name: OS Command Injection
+        loaded: true
+        f_regex: (\bexec\s*\(|\bsystem\s*\(|\bpassthru\s*\(|\bshell_exec\s*\(|\bproc_open\s*\(|\bpopen\s*\(
+        scope: any
+        sensitive: false
+        description: 操作系统命令注入
+
+      - name: Code Execution
+        loaded: true
+        f_regex: (\beval\s*\(|\bassert\s*\(|\bcreate_function\s*\(|\bmb_ereg_replace\s*\(|\bpreg_replace\s*\(
+        scope: any
+        sensitive: false
+        description: 代码执行函数
+
+      - name: PHP Code Execution
+        loaded: true
+        f_regex: (\beval\s*\(|\bassert\s*\(|\bcreate_function\s*\(|\bcall_user_func\s*\(|\bcall_user_func_array\s*\(
+        scope: any
+        sensitive: false
+        description: PHP 代码执行
+
+      - name: Python Code Execution
+        loaded: true
+        f_regex: (\bexec\s*\(|\beval\s*\(|\bcompile\s*\(|\b__import__\s*\(|\bgetattr\s*\(|\bs getattr\s*\(
+        scope: any
+        sensitive: false
+        description: Python 代码执行
+
+      - name: Java Code Execution
+        loaded: true
+        f_regex: (\bRuntime\.exec\(|\bProcessBuilder\(|\bjavax\.script\.ScriptEngineManager)
+        scope: any
+        sensitive: false
+        description: Java 代码执行
+
+      - name: NodeJS Code Execution
+        loaded: true
+        f_regex: (\beval\s*\(|\bFunction\s*\(|\brequire\s*\(\s*['\"`]vm['\"`]\)
+        scope: any
+        sensitive: false
+        description: NodeJS 代码执行
+
+      - name: Ruby Code Execution
+        loaded: true
+        f_regex: (\beval\s*\(|\bexec\s*\(|\bsystem\s*\(|\b\`[\s\S]+\`\b|\bIO\.popen\s*\(
+        scope: any
+        sensitive: false
+        description: Ruby 代码执行
+
+      - name: Perl Code Execution
+        loaded: true
+        f_regex: (\beval\s*\(|\bsystem\s*\(|\bexec\s*\(|\b\`[\s\S]+\`\b)
+        scope: any
+        sensitive: false
+        description: Perl 代码执行
+
+      - name: SSTI Template Injection
+        loaded: true
+        f_regex: (\{\{[\s\S]*\}\}|\{\%[\s\S]*\%\}|\$>\{\s*[\s\S]+\s*\}<\$)
+        scope: any
+        sensitive: false
+        description: 服务端模板注入
+
+      - name: JavaScript SSTI
+        loaded: true
+        f_regex: (<\%[\s\S]*\%>|<\%=[\s\S]*\%>|\$\{[\s\S]*\})
+        scope: any
+        sensitive: false
+        description: JavaScript 模板注入
+
+      - name: PHP SSTI Twig
+        loaded: true
+        f_regex: (\{\{\s*[\s\S]+\s*\}\}|\{\%\s*[\s\S]+\s*\%\})
+        scope: any
+        sensitive: false
+        description: Twig 模板注入
+
+      - name: Python SSTI Jinja2
+        loaded: true
+        f_regex: (\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\})
+        scope: any
+        sensitive: false
+        description: Jinja2 模板注入
+
+      - name: Deserialization
+        loaded: true
+        f_regex: (\bpickle\.loads\(|\bmarshal\.loads\(|\byaml\.load\(|\bjson\.pickle|\breadObject\(
+        scope: any
+        sensitive: false
+        description: 反序列化漏洞
+
+      - name: Java Deserialization
+        loaded: true
+        f_regex: (\bObjectInputStream\(|\breadObject\(\)|\{\[Class\.forName\(|\bXMLDecoder\()
+        scope: any
+        sensitive: false
+        description: Java 反序列化
+
+      - name: Python Deserialization
+        loaded: true
+        f_regex: (\bpickle\.loads\(|\bmarshal\.loads\(|\byaml\.load\(|\b__reduce__\(
+        scope: any
+        sensitive: false
+        description: Python 反序列化
+
+      - name: LDAP Injection
+        loaded: true
+        f_regex: (\*\(\w+=\w+\)|\(|\)|\*\?|\(user=\*)
+        scope: any
+        sensitive: false
+        description: LDAP 注入
+
+      - name: XPath Injection
+        loaded: true
+        f_regex: (\[\w+\s*=\s*[\'\"][\s\S]*?[\'\"]\]|document\[[\s\S]*?\]|user\[true\(\)\])
+        scope: any
+        sensitive: false
+        description: XPath 注入
+
+      - name: Expression Language Injection
+        loaded: true
+        f_regex: (\$\{[\s\S]*?\}|\%\{[\s\S]*?\}|\#{[\s\S]*?\})
+        scope: any
+        sensitive: false
+        description: 表达式语言注入
+
+      - name: Template Literal Injection
+        loaded: true
+        f_regex: (\$\{[\s\S]+?\}|\$\[[\s\S]+?\]|\$\(\([\s\S]+?\)\))
+        scope: any
+        sensitive: false
+        description: 模板字面量注入
+
+      - name: Server Side Request Forgery
+        loaded: true
+        f_regex: (file_get_contents\s*\(|fopen\s*\(|curl_exec\s*\(|wget\s*\(|\bexec\s*\(.*wget)
+        scope: any
+        sensitive: false
+        description: SSRF 函数调用
+
+      - name: XML External Entity
+        loaded: true
+        f_regex: (\<!ENTITY|\<!DOCTYPE.*\[|SIMPLEXML_LOAD_STRING|simplexml_load_string\()
+        scope: any
+        sensitive: false
+        description: XXE 注入
+
+      - name: SQL Injection Function
+        loaded: true
+        f_regex: (\bexecute\s*\(\s*[\'\"]\s*SELECT|\bexecute\s*\(\s*[\'\"]\s*INSERT|\bexecute\s*\(\s*[\'\"]\s*UPDATE)
+        scope: any
+        sensitive: false
+        description: SQL 注入函数
+
+      - name: JNDI Injection
+        loaded: true
+        f_regex: (\$\{jndi:|\%24\{jndi:|lookup\s*\(\s*[\'\"]\s*jndi:)
+        scope: any
+        sensitive: false
+        description: JNDI 注入
+
+      - name: Log Injection
+        loaded: true
+        f_regex: (\\n\\r|\\r\\n|%0d%0a|%0a%0d|<[\s\S]*>|[\s\S]*\\x00[\s\S]*)
+        scope: any
+        sensitive: false
+        description: 日志注入
+
+      - name: Header Injection
+        loaded: true
+        f_regex: (%0d%0a[\s\S]*:[\s\S]*|%0a[\s\S]*:[\s\S]*|\\r\\n[\s\S]*:[\s\S]*)
+        scope: any
+        sensitive: false
+        description: HTTP 头部注入
+
+      - name: Race Condition
+        loaded: true
+        f_regex: (\.then\s*\(\s*\w+\s*=>\s*.*\.then\s*\(|\basync\s+\w+\s*=\s*\(\)\s*=>\s*.*await\s+)
+        scope: any
+        sensitive: false
+        description: 竞态条件
+
+      - name: Prototype Pollution
+        loaded: true
+        f_regex: (\.__proto__|\.constructor\.prototype|\[\"__proto__\"\]|\['constructor'\]\['prototype'\])
+        scope: any
+        sensitive: false
+        description: 原型链污染
+
+      - name: Mass Assignment
+        loaded: true
+        f_regex: (\bObject\.assign\s*\([^,]+,\s*\{|\{[^{]*\w+:\s*[^,]+\})
+        scope: any
+        sensitive: false
+        description: 批量赋值
+
+      - name: Path Traversal Function
+        loaded: true
+        f_regex: (\breadFile\s*\(\s*[\'\"][\s\S]*\.\.\/|\breadFile\s*\(\s*[\'\"][\s\S]*\%2e\%2e|\binclude\s*\(\s*[\'\"]\s*\.\.\/)
+        scope: any
+        sensitive: false
+        description: 路径遍历函数
+
+      - name: Remote File Inclusion
+        loaded: true
+        f_regex: (\binclude\s*\(\s*[\'\"]\s*http|\brequire\s*\(\s*[\'\"]\s*http|\binclude\s*\(\s*[\'\"]\s*php:\/\/)
+        scope: any
+        sensitive: false
+        description: 远程文件包含
+
+      - name: Local File Inclusion
+        loaded: true
+        f_regex: (\binclude\s*\(\s*[\'\"]?\.\/|\brequire\s*\(\s*[\'\"]?\.\/|\binclude\s*\(\s*\$_(GET|POST|REQUEST)
+        scope: any
+        sensitive: false
+        description: 本地文件包含
+
+      - name: Server Side Request Forgery URL
+        loaded: true
+        f_regex: (http[s]?:\/\/localhost|http[s]?:\/\/127\.0\.0\.1|http[s]?:\/\/0\.0\.0\.0|http[s]?:\/\/\[::1\])
+        scope: any
+        sensitive: false
+        description: SSRF 本地地址
+
+      - name: Zip Slip
+        loaded: true
+        f_regex: (\.extractAll\(|\.unzip\(|\.extract\s*\(|Archive::extract)
+        scope: any
+        sensitive: false
+        description: Zip Slip 路径穿越
+
+      - name: Path Equivalence
+        loaded: true
+        f_regex: (\.\.\/|\.\.\/\\|%2e%2e%2f|%2e%2e%5c|\.\.%252f)
+        scope: any
+        sensitive: false
+        description: 路径等价绕过
+
+      - name: Null Byte Injection
+        loaded: true
+        f_regex: (%00|\x00|%2500|[\s\S]*\\x00[\s\S]*)
+        scope: any
+        sensitive: false
+        description: 空字节注入
+
+      - name: Second Order Injection
+        loaded: true
+        f_regex: (\bINSERT\s+INTO[\s\S]*VALUES[\s\S]*\$|\bUPDATE\s+[\s\S]*\s+SET\s+[\s\S]*\$)
+        scope: any
+        sensitive: false
+        description: 二次注入
+
+      - name: Cookie Injection
+        loaded: true
+        f_regex: (document\.cookie[\s]*=[\s\S]*\;|setcookie\s*\(|Set-Cookie:[\s\S]*\%0a)
+        scope: any
+        sensitive: false
+        description: Cookie 注入
+
+      - name: Email Header Injection
+        loaded: true
+        f_regex: (bcc:|cc:|to:|subject:|%0d%0a[\s\S]+:)
+        scope: any
+        sensitive: false
+        description: 邮件头部注入
+
+      - name: Command Injection Symbols
+        loaded: true
+        f_regex: (\|\s*\w+|;\s*\w+|&&\s*\w+||\s*\w+|`\w+`|\$\(\w+\))
+        scope: any
+        sensitive: false
+        description: 命令注入符号
+
+      - name: Python Code Injection
+        loaded: true
+        f_regex: (\bexec\s*\(\s*\$|\beval\s*\(\s*\$|\b__import__\s*\(\s*[\'\"]\s*os|\bopen\s*\(\s*[\'\"]\/etc)
+        scope: any
+        sensitive: false
+        description: Python 代码注入
+
+      - name: Ruby Code Injection
+        loaded: true
+        f_regex: (\beval\s*\(\s*\$|\bsystem\s*\(\s*\$|\b\`[\s\S]*?\$\w+|\bspawn\s*\()
+        scope: any
+        sensitive: false
+        description: Ruby 代码注入
+
+      - name: Perl Code Injection
+        loaded: true
+        f_regex: (\beval\s*\(\s*\$|\bsystem\s*\(\s*\$|\bexec\s*\(\s*\$)
+        scope: any
+        sensitive: false
+        description: Perl 代码注入
 
   # ==================== API Specific API 特定 ====================
   - group: API Specific
