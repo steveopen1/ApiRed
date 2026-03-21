@@ -66,6 +66,28 @@ class ContentTypeDetector:
         return 'unknown'
 
 
+COMMON_API_PATHS = [
+    'add', 'ls', 'focus', 'calc', 'download', 'bind', 'execute',
+    'logininfo', 'create', 'decrypt', 'new', 'update', 'click',
+    'shell', 'export', 'menu', 'retrieve', 'on', 'message', 'admin',
+    'calculate', 'append', 'check', 'crypt', 'rename', 'exec', 'detail',
+    'clone', 'query', 'verify', 'is', 'authenticate', 'move', 'toggle',
+    'make', 'modify', 'upload', 'help', 'demo', 'with', 'alert', 'mode',
+    'gen', 'msg', 'edit', 'vrfy', 'enable', 'run', 'open', 'post',
+    'proxy', 'subtract', 'initiate', 'read', 'encrypt', 'auth', 'snd',
+    'view', 'save', 'config', 'get', 'alter', 'forceLogout', 'build',
+    'list', 'show', 'online', 'test', 'pull', 'notice', 'change',
+    'put', 'to', 'status', 'search', 'mod', '0', 'send', 'load',
+    'login', 'logout', 'register', 'info', 'detail', 'delete', 'remove',
+    'insert', 'select', 'update', 'user', 'users', 'order', 'orders',
+    'product', 'products', 'goods', 'item', 'items', 'category', 'cart',
+    'shop', 'payment', 'account', 'profile', 'setting', 'settings',
+    'dashboard', 'home', 'index', 'about', 'contact', 'service',
+    'news', 'article', 'blog', 'comment', 'file', 'files', 'upload',
+    'download', 'image', 'images', 'video', 'videos', 'audio',
+]
+
+
 class URLBlacklist:
     """
     URL 黑名单过滤器
@@ -321,6 +343,39 @@ class APIRouter:
                 filtered.append(cleaned)
         
         return filtered
+    
+    @classmethod
+    def build_api_urls(cls, base_urls: List[str], path_with_api_paths: List[str],
+                       path_with_no_api_paths: List[str]) -> List[str]:
+        """
+        构建完整的 API URL 列表
+        参考 0x727/ChkApi 的 filter_data 函数逻辑
+        
+        组合方式：
+        1. base_urls + path_with_api_paths + path_with_no_api_paths
+        2. base_urls + path_with_api_paths + COMMON_API_PATHS
+        3. tree_urls + path_with_api_paths + path_with_no_api_paths
+        4. tree_urls + path_with_api_paths + COMMON_API_PATHS
+        """
+        api_urls = set()
+        
+        if not path_with_api_paths:
+            path_with_api_paths = ['/api']
+        
+        for base in base_urls:
+            base_clean = base.rstrip('/')
+            for api_path in path_with_api_paths:
+                api_path_clean = api_path.lstrip('/')
+                for no_api_path in path_with_no_api_paths:
+                    no_api_clean = no_api_path.lstrip('/') if no_api_path.startswith('/') else no_api_path
+                    url = f"{base_clean}/{api_path_clean}/{no_api_clean}"
+                    api_urls.add(url)
+                
+                for common_path in COMMON_API_PATHS:
+                    url = f"{base_clean}/{api_path_clean}/{common_path}"
+                    api_urls.add(url)
+        
+        return list(api_urls)
     
     @classmethod
     def extract_from_swagger(cls, swagger_content: str) -> List[APIFindResult]:
