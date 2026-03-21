@@ -213,6 +213,86 @@ class FrameworkRuleEngine:
     def list_rules(self) -> List[str]:
         """列出所有已加载的规则"""
         return list(self.rules.keys())
+    
+    async def llm_assisted_detect(self, target_info: Dict, llm_client=None) -> Optional[FrameworkMatch]:
+        """
+        LLM 辅助框架识别
+        
+        当规则匹配不确定时，使用 LLM 进行辅助判断
+        
+        Args:
+            target_info: 目标信息
+            llm_client: LLM 客户端（需要有 chat 方法）
+        
+        Returns:
+            可能的框架匹配
+        """
+        if not llm_client:
+            return self.detect_best(target_info)
+        
+        js_files = target_info.get('js_files', '')
+        api_paths = target_info.get('api_paths', '')
+        response_content = target_info.get('response_content', '')[:500]
+        headers = target_info.get('headers', '')
+        
+        prompt = f"""Analyze this target to identify its framework or custom system.
+
+JS Files found: {js_files[:200]}
+API Paths found: {api_paths[:200]}
+Response content: {response_content[:300]}
+Headers: {headers}
+
+What framework or custom system does this appear to use?
+Consider these patterns:
+1. VC Framework: /callComponent/{{component}}/{{action}}, 智慧小区
+2. Spring Boot: /api/v1/, org.springframework
+3. Express.js: /api/, X-Powered-By: Express
+4. Django: /admin/, csrftoken
+5. Laravel: /api/, XSRF-TOKEN
+6. Custom enterprise frameworks
+
+Respond with JSON format:
+{{"framework": "framework name or 'custom/unknown'", "confidence": "high/medium/low", "api_pattern": "RESTful/Component/RPC/etc", "key_indicators": ["list of indicators found"]}}
+
+Only output JSON."""
+        
+        try:
+            response = await llm_client.chat([{"role": "user", "content": prompt}])
+            
+            if not response:
+                return self.detect_best(target_info)
+            
+            import json
+            import re
+            json_match = re.search(r'\{[^{}]*"framework"[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                
+                framework_name = result.get('framework', 'unknown')
+                confidence = result.get('confidence', 'low')
+                
+                confidence_map = {'high': 0.9, 'medium': 0.7, 'low': 0.5}
+                conf_value = confidence_map.get(confidence.lower(), 0.5)
+                
+                api_pattern = result.get('api_pattern', '')
+                
+                if api_pattern.lower() == 'component' or '/callcomponent' in api_paths.lower():
+                    pattern_str = '/callComponent/{component}/{action}'
+                elif api_pattern.lower() == 'rpc':
+                    pattern_str = '/rpc/{service}/{method}'
+                else:
+                    pattern_str = '/api/v1/{resource}'
+                
+                return FrameworkMatch(
+                    name=framework_name,
+                    confidence=conf_value,
+                    api_pattern={'structure': pattern_str},
+                    matched_indicators=result.get('key_indicators', [])
+                )
+        except Exception as e:
+            print(f"LLM assisted detection failed: {e}")
+        
+        return self.detect_best(target_info)
 
 
 def load_default_fingerprints() -> FrameworkRuleEngine:

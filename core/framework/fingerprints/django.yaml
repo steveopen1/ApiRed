@@ -1,0 +1,33 @@
+# Django Framework Fingerprint
+
+framework:
+  name: "Django"
+  version_pattern: "django.*?v?([\\d.]+)"
+  confidence_threshold: 45
+
+detection:
+  indicators:
+    - type: "file"
+      pattern: "django.*\\.py|csrftoken"
+      weight: 25
+      description: "Django Python 文件或 CSRF token"
+    
+    - type: "header"
+      pattern: "csrftoken|XSRF-TOKEN"
+      weight: 20
+      description: "Django CSRF token"
+    
+    - type: "content"
+      pattern: "@csrf_exempt|@login_required|Django"
+      weight: 20
+      description: "Django 特征"
+
+api_pattern:
+  base_path: "/api/"
+  structure: "v{version}/{resource}"
+  common_versions: ["v1", "v2"]
+  common_resources:
+    - users
+    - accounts
+    - auth
+    - admin

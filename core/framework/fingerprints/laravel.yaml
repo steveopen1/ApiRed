@@ -1,0 +1,33 @@
+# Laravel Framework Fingerprint
+
+framework:
+  name: "Laravel"
+  version_pattern: "laravel.*?v?([\\d.]+)"
+  confidence_threshold: 45
+
+detection:
+  indicators:
+    - type: "header"
+      pattern: "XSRF-TOKEN|X-CSRF-TOKEN"
+      weight: 30
+      description: "Laravel CSRF token"
+    
+    - type: "cookie"
+      pattern: "laravel_session|XSRF-TOKEN"
+      weight: 25
+      description: "Laravel session cookie"
+    
+    - type: "content"
+      pattern: "Laravel|@extends|@section|blade"
+      weight: 20
+      description: "Laravel Blade 模板"
+
+api_pattern:
+  base_path: "/api/"
+  structure: "v{version}/{resource}"
+  common_versions: ["v1", "v2"]
+  common_resources:
+    - users
+    - auth
+    - login
+    - register

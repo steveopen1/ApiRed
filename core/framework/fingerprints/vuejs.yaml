@@ -1,0 +1,24 @@
+# Vue.js Framework Fingerprint
+
+framework:
+  name: "Vue.js"
+  version_pattern: "vue.*?@([\\d.]+)"
+  confidence_threshold: 35
+
+detection:
+  indicators:
+    - type: "file"
+      pattern: "vue.*\\.js|vue-router|vuex"
+      weight: 30
+      description: "Vue.js 文件"
+    
+    - type: "content"
+      pattern: "Vue\\.js|VueRouter|createApp"
+      weight: 20
+      description: "Vue.js 代码"
+
+api_pattern:
+  base_path: "/api/"
+  structure: "v{version}/{resource}"
+
+# Vue.js 通常配合后端框架使用，API pattern 由后端决定

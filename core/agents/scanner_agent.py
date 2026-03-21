@@ -228,23 +228,32 @@ Please list all discovered API endpoints, one per line. Format: METHOD /path"""
             logging.getLogger(__name__).error(f"analyze_js error: {e}")
             return []
 
-    async def predict_endpoints(self, js_content: str, known_endpoints: List[str]) -> List[str]:
+    async def predict_endpoints(self, js_content: str, known_endpoints: List[str], 
+                            framework_pattern: str = None) -> List[str]:
         """
         基于 JS 代码和已知端点预测新的 API 路径
+        
+        支持的 API 模式：
+        - RESTful: /api/v1/users, /api/v1/users/:id
+        - 组件调用: /callComponent/{component}/{action}
+        - RPC: /rpc/{service}/{method}
+        - 命令式: /cmd?command={cmd}
         
         Args:
             js_content: JS 文件内容
             known_endpoints: 已知的 API 端点列表
+            framework_pattern: 框架特定模式（如 "{component}/{action}"）
         
         Returns:
             预测的新端点列表
         """
-        if not self.llm_client:
-            return []
-        
-        cache_key = hash((js_content[:1000], tuple(sorted(known_endpoints[:10]))))
+        cache_key = hash((js_content[:1000], tuple(sorted(known_endpoints[:10])), framework_pattern or ''))
         if cache_key in self.prediction_cache:
             return self.prediction_cache[cache_key]
+        
+        pattern_hint = ""
+        if framework_pattern:
+            pattern_hint = f"\nFramework API pattern: {framework_pattern}"
         
         prompt = f"""Analyze this JavaScript code and API patterns to predict additional API endpoints that might exist but weren't explicitly found.
 
@@ -253,20 +262,25 @@ Known endpoints:
 
 JavaScript code (first 3000 chars):
 {js_content[:3000]}
+{pattern_hint}
 
-Based on the patterns found, predict what other API endpoints might exist on this server. Consider:
-1. RESTful naming conventions (e.g., /users, /users/:id, /orders/:id)
-2. Common CRUD patterns (/create, /update, /delete, /list)
-3. Authentication endpoints (/login, /logout, /auth, /token)
-4. Admin/management endpoints (/admin, /manage, /dashboard)
-5. File/resource endpoints (/upload, /download, /export)
+IMPORTANT: This target may use NON-RESTful API patterns. Consider these patterns:
+1. Component-based: /callComponent/{'{component}'}/{'{action}'}  (e.g., /callComponent/login/getSysInfo)
+2. RPC-style: /rpc/{'{service}'}/{'{method}'}  (e.g., /rpc/user/getInfo)
+3. Command-style: /cmd?command={'{cmd}'}  (e.g., /cmd?command=getUserInfo)
+4. RESTful: /api/v1/{'resource'}/{'{id}'}
+5. Custom: /{'{module}'}/{'{controller}'}/{'{action}'}
 
-List only the most likely endpoints, one per line, without explanation."""
+Based on the patterns found in the JavaScript, predict what other API endpoints might exist.
+List only the most likely endpoints, one per line, without explanation.
+For component-based APIs, use format: /callComponent/component/action
+For RPC APIs, use format: /rpc/service/method
+For RESTful APIs, use format: /api/v1/resource or /api/v1/resource/id"""
         
         try:
             response = await self.chat([{"role": "user", "content": prompt}])
             if not response:
-                return []
+                return self._rule_based_prediction(known_endpoints, framework_pattern)
             
             predicted = self._parse_endpoints(response)
             predicted = [ep for ep in predicted if ep not in known_endpoints]
@@ -275,7 +289,35 @@ List only the most likely endpoints, one per line, without explanation."""
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"predict_endpoints error: {e}")
-            return []
+            return self._rule_based_prediction(known_endpoints, framework_pattern)
+    
+    def _rule_based_prediction(self, known_endpoints: List[str], framework_pattern: str = None) -> List[str]:
+        """无 LLM 时的规则预测"""
+        predicted = []
+        
+        components = ['login', 'admin', 'system', 'user', 'role', 'config', 'dict', 'log']
+        actions = ['getSysInfo', 'getConfig', 'getUserInfo', 'list', 'get', 'add', 'edit', 'delete', 'query', 'export', 'import']
+        
+        if framework_pattern and '{component}' in framework_pattern and '{action}' in framework_pattern:
+            base_path = framework_pattern.split('{component}')[0]
+            for comp in components:
+                for action in actions:
+                    endpoint = f"{base_path}{comp}/{action}"
+                    if endpoint not in known_endpoints:
+                        predicted.append(endpoint)
+        
+        for comp in components:
+            for action in actions:
+                endpoint = f"/callComponent/{comp}/{action}"
+                if endpoint not in known_endpoints:
+                    predicted.append(endpoint)
+        
+        common_resources = ['users', 'orders', 'products', 'auth', 'admin']
+        for resource in common_resources:
+            if f"/api/v1/{resource}" not in known_endpoints:
+                predicted.append(f"/api/v1/{resource}")
+        
+        return predicted[:50]
     
     async def analyze_api_context(self, endpoint: str, response_content: str) -> Dict:
         """
