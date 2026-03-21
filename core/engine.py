@@ -11,7 +11,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from urllib.parse import urlparse
 
-from .config import Config
+from .utils.config import Config
 from .storage import DBStorage, FileStorage
 from .collectors import JSFingerprintCache, JSParser, APIAggregator
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
