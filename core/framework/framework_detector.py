@@ -95,9 +95,9 @@ class FrameworkRule:
         return self.data.get('response_behavior')
 
 
-class FrameworkRuleEngine:
+class FrameworkDetector:
     """
-    框架规则引擎
+    框架检测器
     支持 YAML 规则文件的可扩展框架识别
     """
     
@@ -295,6 +295,6 @@ Only output JSON."""
         return self.detect_best(target_info)
 
 
-def load_default_fingerprints() -> FrameworkRuleEngine:
+def load_default_fingerprints() -> FrameworkDetector:
     """加载默认指纹库"""
-    return FrameworkRuleEngine()
+    return FrameworkDetector()

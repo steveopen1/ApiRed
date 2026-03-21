@@ -20,7 +20,7 @@ from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .models import ScanResult, APIEndpoint
-from .framework import FrameworkRuleEngine
+from .framework import FrameworkDetector
 
 
 @dataclass

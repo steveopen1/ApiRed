@@ -1,10 +1,10 @@
 import pytest
-from core.framework import FrameworkRuleEngine, load_default_fingerprints
+from core.framework import FrameworkDetector, load_default_fingerprints
 
 
-class TestFrameworkRuleEngine:
+class TestFrameworkDetector:
     def test_engine_creation(self):
-        engine = FrameworkRuleEngine()
+        engine = FrameworkDetector()
         assert engine is not None
     
     def test_load_vc_framework_fingerprint(self):
@@ -69,7 +69,7 @@ class TestFrameworkRuleEngine:
 
 class TestFrameworkMatch:
     def test_framework_match_creation(self):
-        from core.framework.rule_engine import FrameworkMatch
+        from core.framework.framework_detector import FrameworkMatch
         
         match = FrameworkMatch(
             name='Test Framework',

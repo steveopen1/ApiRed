@@ -14,7 +14,7 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
 from ..testers.api_tester import APIRequestTester
 from ..testers.parameter_extractor import DangerousAPIFilter
 from ..testers.bypass_techniques import BypassTechniques
-from ..rules.rule_engine import SensitiveRuleEngine
+from ..rules.sensitive_detector import SensitiveRuleEngine
 from ..analyzers.response_baseline import ResponseDifferentiator
 
 logger = logging.getLogger(__name__)
