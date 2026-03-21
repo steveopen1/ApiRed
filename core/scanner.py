@@ -65,6 +65,7 @@ class ScannerConfig:
     output_format: str = "json"
     resume: bool = False
     checkpoint_file: Optional[str] = None
+    verify_ssl: bool = True
     targets: List[str] = field(default_factory=list)
     concurrent_targets: int = 5
     aggregate: bool = False
@@ -141,7 +142,8 @@ class ChkApiScanner:
             max_concurrent=self.config.concurrency,
             max_retries=3,
             timeout=30,
-            proxy=self.config.proxy
+            proxy=self.config.proxy,
+            verify_ssl=self.config.verify_ssl
         )
         
         self.js_cache = JSFingerprintCache(self.db_storage)

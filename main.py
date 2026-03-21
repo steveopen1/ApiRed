@@ -56,6 +56,10 @@ Examples:
         scan_parser.add_argument('--na', '--no-api', dest='no_api', choices=['0', '1'], default='0')
         scan_parser.add_argument('--ai', action='store_true')
         scan_parser.add_argument('--proxy', help='Proxy server')
+        scan_parser.add_argument('--no-ssl-verify', action='store_true',
+                                  help='Disable SSL verification (not recommended)')
+        scan_parser.add_argument('--resume', action='store_true',
+                                  help='Resume from previous scan checkpoint')
         scan_parser.add_argument('--concurrent-targets', '-ct', type=int, default=5,
                                   help='Maximum concurrent targets for multi-target scan')
         scan_parser.add_argument('--aggregate', action='store_true',
@@ -95,7 +99,9 @@ Examples:
             js_depth=parsed.js_depth,
             ai_scan=parsed.ai,
             concurrency=parsed.concurrency,
-            output_format=parsed.format
+            output_format=parsed.format,
+            resume=parsed.resume,
+            verify_ssl=not parsed.no_ssl_verify
         )
         
         config.targets = targets
