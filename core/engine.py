@@ -19,6 +19,9 @@ from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTie
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
+from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
+from .agents.orchestrator import ScanContext
+from .knowledge_base import KnowledgeBase
 from .models import ScanResult, APIEndpoint
 from .framework import FrameworkDetector
 
@@ -45,6 +48,7 @@ class EngineConfig:
     targets: List[str] = field(default_factory=list)
     concurrent_targets: int = 5
     aggregate: bool = False
+    agent_mode: bool = False
 
 
 @dataclass
@@ -84,6 +88,9 @@ class ScanEngine:
         self.scanner_agent: Optional[ScannerAgent] = None
         self.analyzer_agent: Optional[AnalyzerAgent] = None
         self.tester_agent: Optional[TesterAgent] = None
+        
+        self._orchestrator: Optional[Orchestrator] = None
+        self._knowledge_base: Optional[KnowledgeBase] = None
         
         self.result: Optional[ScanResult] = None
         self._current_stage = 0
@@ -154,7 +161,7 @@ class ScanEngine:
         self._evidence_aggregator = APIEvidenceAggregator(self._api_scorer)
         self._response_cluster = ResponseCluster()
         self._response_baseline = ResponseBaselineLearner()
-        self._framework_detector = FrameworkRuleEngine()
+        self._framework_detector = FrameworkDetector()
         self._detected_framework = None
         self._sensitive_detector = TwoTierSensitiveDetector(
             config={'ai_enabled': self.config.ai_enabled}
@@ -194,6 +201,11 @@ class ScanEngine:
     
     async def run(self) -> ScanResult:
         """运行扫描流程"""
+        agent_mode = getattr(self.config, 'agent_mode', False)
+        
+        if agent_mode:
+            return await self._run_agent_mode()
+        
         await self.initialize()
         
         attack_mode = getattr(self.config, 'attack_mode', 'all')
@@ -233,6 +245,57 @@ class ScanEngine:
         
         finally:
             await self.cleanup()
+        
+        return self.result
+    
+    async def _run_agent_mode(self) -> ScanResult:
+        """使用 Agent 系统运行扫描"""
+        self._knowledge_base = KnowledgeBase()
+        
+        context = ScanContext(
+            target=self.config.target,
+            cookies=self.config.cookies or "",
+            concurrency=self.config.concurrency,
+            ai_enabled=self.config.ai_enabled,
+            knowledge_base=self._knowledge_base
+        )
+        
+        self._orchestrator = Orchestrator(context)
+        self._orchestrator.register_agent(DiscoverAgent())
+        self._orchestrator.register_agent(TestAgent())
+        self._orchestrator.register_agent(ReflectAgent())
+        
+        self.result = ScanResult(
+            target_url=self.config.target,
+            start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
+        
+        self._emit('stage_start', {'stage': 'agent_mode', 'status': 'running'})
+        
+        try:
+            task_definitions = [
+                {'agent': 'discover', 'task_type': 'js_collect', 'params': {'depth': self.config.js_depth}},
+                {'agent': 'test', 'task_type': 'vuln_test', 'params': {}},
+                {'agent': 'reflect', 'task_type': 'analysis', 'params': {}},
+            ]
+            
+            result = await self._orchestrator.run(task_definitions)
+            
+            kb_data = self._knowledge_base.export()
+            
+            self.result.api_endpoints = kb_data.get('endpoints', [])
+            self.result.total_apis = kb_data.get('summary', {}).get('total_endpoints', 0)
+            self.result.vulnerabilities = kb_data.get('vulnerabilities', [])
+            self.result.sensitive_data = kb_data.get('sensitive_data', [])
+            self.result.status = "completed"
+            
+            self._emit('stage_complete', {'stage': 'agent_mode', 'status': 'completed'})
+            
+        except Exception as e:
+            if self.result:
+                self.result.errors.append(str(e))
+                self.result.status = "failed"
+            self._emit('error', {'error': str(e)})
         
         return self.result
     

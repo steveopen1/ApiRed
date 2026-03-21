@@ -62,6 +62,8 @@ Examples:
                                   help='Skip API testing')
         scan_parser.add_argument('--ai', action='store_true',
                                   help='Enable AI-powered analysis')
+        scan_parser.add_argument('--agent-mode', action='store_true',
+                                  help='Enable new Agent system (DiscoverAgent/TestAgent/ReflectAgent)')
         scan_parser.add_argument('--proxy', help='Proxy server')
         scan_parser.add_argument('--no-ssl-verify', action='store_true',
                                   help='Disable SSL verification (not recommended)')
@@ -102,7 +104,8 @@ Examples:
             resume=parsed_args.resume,
             targets=targets,
             concurrent_targets=getattr(parsed_args, 'concurrent_targets', 5),
-            aggregate=getattr(parsed_args, 'aggregate', False)
+            aggregate=getattr(parsed_args, 'aggregate', False),
+            agent_mode=getattr(parsed_args, 'agent_mode', False)
         )
 
     async def run_scan(self, parsed_args) -> int:
