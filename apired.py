@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-ChkApi CLI Entry Point
+ApiRed CLI Entry Point
+Red Team API Security Scanner
 """
 
 from cli import main

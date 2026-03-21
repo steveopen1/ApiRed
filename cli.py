@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ChkApi CLI
-重构后的命令行界面
+ApiRed CLI
+Red Team API Security Scanner - Command Line Interface
 """
 
 import sys
@@ -26,14 +26,14 @@ class CLI:
     def _build_parser(self) -> argparse.ArgumentParser:
         """构建命令行解析器"""
         parser = argparse.ArgumentParser(
-            prog='ChkApi',
-            description='API Security Scanner - Automated API security detection tool',
+            prog='ApiRed',
+            description='Red Team API Security Scanner - Attack-oriented API vulnerability detection',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog='''
 Examples:
   %(prog)s -u http://www.example.com
   %(prog)s -u http://www.example.com -c "session=xxx"
-  %(prog)s -f urls.txt --chrome off
+  %(prog)s -f targets.txt --at 1
   %(prog)s -u http://www.example.com --ai --concurrency 100
             '''
         )
@@ -41,7 +41,7 @@ Examples:
         parser.add_argument(
             '--version',
             action='version',
-            version='ChkApi v2.0.0'
+            version='ApiRed v2.0'
         )
         
         target_group = parser.add_mutually_exclusive_group(required=True)
