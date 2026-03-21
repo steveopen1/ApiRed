@@ -16,9 +16,11 @@ from .storage import DBStorage, FileStorage
 from .collectors import JSFingerprintCache, JSParser, APIAggregator
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
+from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .models import ScanResult, APIEndpoint
+from .framework import FrameworkRuleEngine
 
 
 @dataclass
@@ -122,6 +124,9 @@ class ScanEngine:
         )
         self._evidence_aggregator = APIEvidenceAggregator(self._api_scorer)
         self._response_cluster = ResponseCluster()
+        self._response_baseline = ResponseBaselineLearner()
+        self._framework_detector = FrameworkRuleEngine()
+        self._detected_framework = None
         self._sensitive_detector = TwoTierSensitiveDetector(
             config={'ai_enabled': self.config.ai_enabled}
         )
@@ -193,7 +198,7 @@ class ScanEngine:
         self._collector_results = collector_results
     
     async def _collect_js(self) -> Dict[str, Any]:
-        """采集JS资源"""
+        """采集JS资源 + 框架检测"""
         from .utils.http_client import AsyncHttpClient
         
         response = await self._http_client.request(
@@ -204,12 +209,14 @@ class ScanEngine:
         js_urls = self._extract_js_urls(response.content)
         alive_js = []
         js_parser = JSParser(self._js_cache)
+        js_content_all = ""
         
         for js_url in js_urls:
             try:
                 js_response = await self._http_client.request(js_url)
                 if js_response.status_code == 200:
                     js_content = js_response.content
+                    js_content_all += js_content + "\n"
                     alive_js.append({'url': js_url, 'content': js_content})
                     try:
                         js_parser.parse(js_content, js_url)
@@ -218,19 +225,33 @@ class ScanEngine:
             except Exception:
                 pass
         
+        target_info = {
+            'js_files': ','.join(js_urls),
+            'api_paths': js_content_all[:1000],
+            'response_content': response.content[:500] if response.content else '',
+            'headers': str(response.headers) if hasattr(response, 'headers') else ''
+        }
+        
+        framework_match = self._framework_detector.detect_best(target_info)
+        if framework_match:
+            self._detected_framework = framework_match.name
+        
         return {
             'total_js': len(js_urls),
             'alive_js': len(alive_js),
-            'js_urls': alive_js
+            'js_urls': alive_js,
+            'detected_framework': self._detected_framework
         }
     
     async def _extract_apis(self) -> Dict[str, Any]:
-        """提取API端点"""
+        """提取API端点 + 基于框架生成更多端点"""
         js_results = self._js_cache.get_all()
+        existing_paths = set()
         
         for js_result in js_results:
             try:
                 for api_path in js_result.apis:
+                    existing_paths.add(api_path)
                     from .collectors.api_collector import APIFindResult
                     api_find_result = APIFindResult(
                         path=api_path,
@@ -245,6 +266,24 @@ class ScanEngine:
                     )
             except Exception:
                 pass
+        
+        if self._detected_framework and self._framework_detector:
+            framework_endpoints = self._framework_detector.generate_endpoints(self._detected_framework)
+            for endpoint in framework_endpoints:
+                if endpoint not in existing_paths:
+                    existing_paths.add(endpoint)
+                    from .collectors.api_collector import APIFindResult
+                    api_find_result = APIFindResult(
+                        path=endpoint,
+                        method="GET",
+                        source_type="framework_pattern",
+                        base_url="",
+                        url_type="generated"
+                    )
+                    self._api_aggregator.add_api(
+                        api_find_result,
+                        source_info={'source': f'framework_{self._detected_framework}'}
+                    )
         
         raw_endpoints = self._api_aggregator.get_all()
         final_endpoints = []
