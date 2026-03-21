@@ -1,6 +1,7 @@
 # ApiRed Sensitive Information Detection Rules
 # 基于 0x727/ChkApi 规则库
 # 用于检测响应中的敏感信息
+# 当前规则数: 230+
 
 rules:
   # ==================== Fingerprint 指纹 ====================
@@ -22,7 +23,7 @@ rules:
 
       - name: Swagger UI
         loaded: true
-        f_regex: ((swagger-ui\.html)|(\"swagger\":)|(Swagger UI)|(swaggerUi)|(swaggerVersion))
+        f_regex: ((swagger-ui\.html)|("swagger":)|(Swagger UI)|(swaggerUi)|(swaggerVersion))
         scope: response body
         sensitive: false
         description: Swagger API 文档
@@ -40,6 +41,272 @@ rules:
         scope: response body
         sensitive: false
         description: Druid 监控
+
+      - name: Spring Boot
+        loaded: true
+        f_regex: ((spring-boot-starter)|(spring-boot-actuator)|(Whitelabel Error Page))
+        scope: response body
+        sensitive: false
+        description: Spring Boot 指纹
+
+      - name: Apache Shiro
+        loaded: true
+        f_regex: ((shiro)|(Session Timeout)|(Unauthorized)|(Forced Login))
+        scope: response body
+        sensitive: false
+        description: Apache Shiro 认证
+
+      - name: Django
+        loaded: true
+        f_regex: ((CSRF verification failed)|(CSRF token missing)|(Django Administration))
+        scope: response body
+        sensitive: false
+        description: Django 指纹
+
+      - name: Laravel
+        loaded: true
+        f_regex: ((laravel_session)|(XSRF-TOKEN)|(Whoops\Exception))
+        scope: response body
+        sensitive: false
+        description: Laravel 指纹
+
+      - name: ThinkPHP
+        loaded: true
+        f_regex: ((ThinkPHP)|(app\\\\think\\\\)|(Runtime\\\\ logs))
+        scope: response body
+        sensitive: false
+        description: ThinkPHP 指纹
+
+      - name: Struts2
+        loaded: true
+        f_regex: ((Struts Problem Report)|(struts2)|(No result defined))
+        scope: response body
+        sensitive: false
+        description: Struts2 指纹
+
+      - name: Fastjson
+        loaded: true
+        f_regex: ((fastjson)|(com.alibaba.fastjson)|(autotype))
+        scope: response body
+        sensitive: false
+        description: Fastjson 指纹
+
+      - name: Jackson
+        loaded: true
+        f_regex: ((com.fasterxml.jackson)|(jackson-databind)|(JSON parse error))
+        scope: response body
+        sensitive: false
+        description: Jackson 指纹
+
+      - name: Nexus Repository
+        loaded: true
+        f_regex: ((nexus-webapp)|(Sonatype Nexus)|(repository\.sonatype\.org))
+        scope: response body
+        sensitive: false
+        description: Nexus 仓库指纹
+
+      - name: Jenkins
+        loaded: true
+        f_regex: ((Jenkins)|(jenkins\.ci)|(Dashboard[^/]*$))
+        scope: response body
+        sensitive: false
+        description: Jenkins 指纹
+
+      - name: Grafana
+        loaded: true
+        f_regex: ((Grafana)|(grafana\.com)|(public dashboard))
+        scope: response body
+        sensitive: false
+        description: Grafana 指纹
+
+      - name: Kibana
+        loaded: true
+        f_regex: ((Kibana)|(kibana\.com)|(Elasticsearch))
+        scope: response body
+        sensitive: false
+        description: Kibana 指纹
+
+      - name: Apollo
+        loaded: true
+        f_regex: ((Apollo)|(apollo-portal)|(Config Portal))
+        scope: response body
+        sensitive: false
+        description: Apollo 配置中心指纹
+
+      - name: Nacos
+        loaded: true
+        f_regex: ((Nacos)|(nacos\.io)|(NamingService))
+        scope: response body
+        sensitive: false
+        description: Nacos 指纹
+
+      - name: Seata
+        loaded: true
+        f_regex: ((Seata)|(tc/session_sync)|(GlobalTransaction))
+        scope: response body
+        sensitive: false
+        description: Seata 分布式事务指纹
+
+      - name: Sentinel
+        loaded: true
+        f_regex: ((Sentinel)|(sentinel\.dashboard)|(Degraded))
+        scope: response body
+        sensitive: false
+        description: Sentinel 指纹
+
+      - name: Dubbo
+        loaded: true
+        f_regex: ((dubbo)|(DubboBox)|(provider\.|consumer\.))
+        scope: response body
+        sensitive: false
+        description: Dubbo 指纹
+
+      - name: ZooKeeper
+        loaded: true
+        f_regex: ((ZooKeeper)|(zookeeper)|(ensemble\.service\.dns))
+        scope: response body
+        sensitive: false
+        description: ZooKeeper 指纹
+
+      - name: Redis
+        loaded: true
+        f_regex: ((Redis)|(redis)|(DENIED Redis))
+        scope: response body
+        sensitive: false
+        description: Redis 指纹
+
+      - name: MongoDB
+        loaded: true
+        f_regex: ((MongoDB)|(mongodb)|(It seems like you are trying))
+        scope: response body
+        sensitive: false
+        description: MongoDB 指纹
+
+      - name: MySQL
+        loaded: true
+        f_regex: ((MySQL)|(mysql)|(Server version))
+        scope: response body
+        sensitive: false
+        description: MySQL 指纹
+
+      - name: PostgreSQL
+        loaded: true
+        f_regex: ((PostgreSQL)|(postgres)|(psql))
+        scope: response body
+        sensitive: false
+        description: PostgreSQL 指纹
+
+      - name: Oracle
+        loaded: true
+        f_regex: ((Oracle)|(oracle)|(ORA-\d{5}))
+        scope: response body
+        sensitive: false
+        description: Oracle 指纹
+
+      - name: MSSQL
+        loaded: true
+        f_regex: ((Microsoft SQL Server)|(mssql)|(SqlServer))
+        scope: response body
+        sensitive: false
+        description: MSSQL 指纹
+
+      - name: Elasticsearch
+        loaded: true
+        f_regex: ((elasticsearch)|(ES_\d+)|(cluster_name))
+        scope: response body
+        sensitive: false
+        description: Elasticsearch 指纹
+
+      - name: RabbitMQ
+        loaded: true
+        f_regex: ((RabbitMQ)|(rabbitmq)|(Mnesia))
+        scope: response body
+        sensitive: false
+        description: RabbitMQ 指纹
+
+      - name: ActiveMQ
+        loaded: true
+        f_regex: ((ActiveMQ)|(activemq)|(broker\.xml))
+        scope: response body
+        sensitive: false
+        description: ActiveMQ 指纹
+
+      - name: Kafka
+        loaded: true
+        f_regex: ((Kafka)|(kafka)|(zookeeper\.connect))
+        scope: response body
+        sensitive: false
+        description: Kafka 指纹
+
+      - name: etcd
+        loaded: true
+        f_regex: ((etcd)|(Etcd)|(etcd-server))
+        scope: response body
+        sensitive: false
+        description: etcd 指纹
+
+      - name: Consul
+        loaded: true
+        f_regex: ((Consul)|(consul)|(catalog\.consul))
+        scope: response body
+        sensitive: false
+        description: Consul 指纹
+
+      - name: Prometheus
+        loaded: true
+        f_regex: ((Prometheus)|(prometheus)|(Prometheus is))
+        scope: response body
+        sensitive: false
+        description: Prometheus 指纹
+
+      - name: Docker API
+        loaded: true
+        f_regex: ((Docker)|(docker)|(Containersocker))
+        scope: response body
+        sensitive: false
+        description: Docker API 指纹
+
+      - name: Kubernetes API
+        loaded: true
+        f_regex: ((kubernetes)|(kube)|(KUBERNETES))
+        scope: response body
+        sensitive: false
+        description: Kubernetes API 指纹
+
+      - name: Vault
+        loaded: true
+        f_regex: ((Vault)|(vault)|(HashiCorp Vault))
+        scope: response body
+        sensitive: false
+        description: Vault 指纹
+
+      - name: minIO
+        loaded: true
+        f_regex: ((minio)|(MinIO)|(play\.minio))
+        scope: response body
+        sensitive: false
+        description: MinIO 指纹
+
+      - name: WordPress
+        loaded: true
+        f_regex: ((wp-content)|(wp-includes)|(wordpress))
+        scope: response body
+        sensitive: false
+        description: WordPress 指纹
+
+      - name: phpMyAdmin
+        loaded: true
+        f_regex: ((phpMyAdmin)|(pma_)|(phpmyadmin))
+        scope: response body
+        sensitive: false
+        description: phpMyAdmin 指纹
+
+      - name: Adminer
+        loaded: true
+        f_regex: ((Adminer)|(adminer)|(select database))
+        scope: response body
+        sensitive: false
+        description: Adminer 指纹
 
   # ==================== Maybe Vulnerability 潜在漏洞 ====================
   - group: Maybe Vulnerability
@@ -261,3 +528,1186 @@ rules:
         scope: response body
         sensitive: false
         description: Python 错误
+
+  # ==================== SQL Injection SQL 注入 ====================
+  - group: SQL Injection
+    rule:
+      - name: MySQL Error
+        loaded: true
+        f_regex: ((MySQLSyntaxErrorException)|(Dynamic SQL Error)|(com\.mysql\.jdbc)|(mysql_fetch))
+        scope: response body
+        sensitive: false
+        description: MySQL SQL 注入错误
+
+      - name: PostgreSQL Error
+        loaded: true
+        f_regex: ((PG::SyntaxError)|(org\.postgresql\.util\.PSQLException)|(ERROR:\s+syntax error))
+        scope: response body
+        sensitive: false
+        description: PostgreSQL SQL 注入错误
+
+      - name: Oracle Error
+        loaded: true
+        f_regex: ((ORA-\d{5})|(oracle\.jdbc)|(SQLException))
+        scope: response body
+        sensitive: false
+        description: Oracle SQL 注入错误
+
+      - name: MSSQL Error
+        loaded: true
+        f_regex: ((Microsoft SQL Native Client)|(Unclosed quotation mark)|(SQLServer JDBC)|(mssql_))
+        scope: response body
+        sensitive: false
+        description: MSSQL SQL 注入错误
+
+      - name: SQLite Error
+        loaded: true
+        f_regex: ((SQLite\.SQLiteException)|(sqlite3\.OperationalError)|(LIMIT clause))
+        scope: response body
+        sensitive: false
+        description: SQLite SQL 注入错误
+
+      - name: SQL Generic Error
+        loaded: true
+        f_regex: ((sql (syntax|error|exception))|(SQL error)|(SQL syntax)|(SQLITE_)|(SQL_ERROR))
+        scope: response body
+        sensitive: false
+        description: 通用 SQL 错误
+
+      - name: SQL Injection Payloads
+        loaded: true
+        f_regex: ((' or ''=')|(-- )|(; drop )|(union select)|(union all select))
+        scope: request
+        sensitive: false
+        description: SQL 注入 Payload 特征
+
+      - name: SQL Time-based Blind
+        loaded: true
+        f_regex: ((sleep\(\d+\))|(waitfor delay)|(benchmark\())
+        scope: request
+        sensitive: false
+        description: SQL 时间盲注特征
+
+      - name: SQL Error Based
+        loaded: true
+        f_regex: ((extractvalue)|(updatexml)|(exp\(~\))
+        scope: request
+        sensitive: false
+        description: SQL 报错注入特征
+
+      - name: SQL Union Select
+        loaded: true
+        f_regex: ((union\s+(all\s+)?select)|(order\s+by\s+\d+))
+        scope: request
+        sensitive: false
+        description: SQL Union 注入特征
+
+      - name: SQL Boolean Blind
+        loaded: true
+        f_regex: (((true|false)\( )|(IF\( ))
+        scope: request
+        sensitive: false
+        description: SQL 布尔盲注特征
+
+      - name: SQL Comment Injection
+        loaded: true
+        f_regex: ((\/\*.*\*\/)|(--\s*$)|(#\s*\w+))
+        scope: request
+        sensitive: false
+        description: SQL 注释注入特征
+
+      - name: SQL Stacked Queries
+        loaded: true
+        f_regex: ((;\s*(select|insert|update|delete|drop|create|alter)))
+        scope: request
+        sensitive: false
+        description: SQL 堆叠查询特征
+
+      - name: SQL OR Injection
+        loaded: true
+        f_regex: (('\s+or\s+')|("\s+or\s+")|('\s+or\s+\d+=\d+))
+        scope: request
+        sensitive: false
+        description: SQL OR 注入特征
+
+      - name: SQL AND Injection
+        loaded: true
+        f_regex: (('\s+and\s+')|("\s+and\s+")|('\s+and\s+\d+=\d+))
+        scope: request
+        sensitive: false
+        description: SQL AND 注入特征
+
+      - name: SQL Hex Evasion
+        loaded: true
+        f_regex: ((0x[0-9a-fA-F]+)|(char\(\d+\)))
+        scope: request
+        sensitive: false
+        description: SQL 十六进制编码特征
+
+      - name: SQL Double Quote
+        loaded: true
+        f_regex: (""\s*(or|and)\s+"")
+        scope: request
+        sensitive: false
+        description: SQL 双引号注入
+
+      - name: SQL String Escape
+        loaded: true
+        f_regex: ((\\' )|(;.*--)|(\|\|.*--))
+        scope: request
+        sensitive: false
+        description: SQL 字符串转义注入
+
+      - name: SQL Information Schema
+        loaded: true
+        f_regex: ((information_schema)|(sys\.databases)|(mysql\.user))
+        scope: response body
+        sensitive: false
+        description: SQL 信息泄露
+
+      - name: SQL Table Name Leak
+        loaded: true
+        f_regex: ((Table\s*'\w+\.\w+' doesn't exist)|(Unknown table)|(Table.*doesn't exist))
+        scope: response body
+        sensitive: false
+        description: SQL 表名泄露
+
+      - name: SQL Column Name Leak
+        loaded: true
+        f_regex: ((Unknown column)|(Column.*not found)|(unknown attribute))
+        scope: response body
+        sensitive: false
+        description: SQL 列名泄露
+
+  # ==================== XSS Cross-Site Scripting ====================
+  - group: XSS
+    rule:
+      - name: XSS Script Tag
+        loaded: true
+        f_regex: ((<script[^>]*>)|(<\/script>)|(<script))
+        scope: response body
+        sensitive: false
+        description: XSS Script 标签
+
+      - name: XSS Event Handler
+        loaded: true
+        f_regex: ((onerror\s*=)|(onclick\s*=)|(onload\s*=)|(onmouseover\s*=)|(onfocus\s*=))
+        scope: response body
+        sensitive: false
+        description: XSS 事件处理器
+
+      - name: XSS JavaScript URI
+        loaded: true
+        f_regex: ((javascript:)|(vbscript:)|(data:text/html))
+        scope: response body
+        sensitive: false
+        description: XSS JavaScript URI
+
+      - name: XSS IMG Tag
+        loaded: true
+        f_regex: (<img[^>]+(onerror|onclick|onload)\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS IMG 标签
+
+      - name: XSS IFRAME Tag
+        loaded: true
+        f_regex: (<iframe[^>]*>)|(<\/iframe>)
+        scope: response body
+        sensitive: false
+        description: XSS IFRAME 标签
+
+      - name: XSS SVG Tag
+        loaded: true
+        f_regex: (<svg[^>]*>)|(<svg.*onerror))
+        scope: response body
+        sensitive: false
+        description: XSS SVG 标签
+
+      - name: XSS Body Tag
+        loaded: true
+        f_regex: (<body[^>]*onload\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Body 标签
+
+      - name: XSS Input Tag
+        loaded: true
+        f_regex: (<input[^>]+(onfocus|onerror|autofocus)\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Input 标签
+
+      - name: XSS Link Tag
+        loaded: true
+        f_regex: (<link[^>]+(href|onload)\s*=)
+        scope: response body
+        sensitive: false
+        description: XSS Link 标签
+
+      - name: XSS Object Tag
+        loaded: true
+        f_regex: (<object[^>]*>)|(<embed[^>]*>)
+        scope: response body
+        sensitive: false
+        description: XSS Object/Embed 标签
+
+      - name: XSS Expression
+        loaded: true
+        f_regex: ((style\s*=\s*["']?.*expression\s*\()|(url\(['"]?javascript:))
+        scope: response body
+        sensitive: false
+        description: XSS Expression 注入
+
+      - name: XSS Base64 Decode
+        loaded: true
+        f_regex: ((atob\s*\()|(btoa\s*\()|(fromCharCode\s*\())
+        scope: response body
+        sensitive: false
+        description: XSS Base64 解码
+
+      - name: XSS DOM Access
+        loaded: true
+        f_regex: ((document\.cookie)|(document\.write)|(innerHTML)|(outerHTML))
+        scope: response body
+        sensitive: false
+        description: XSS DOM 操作
+
+      - name: XSS Payload in Response
+        loaded: true
+        f_regex: ((<script[^>]*>.*?alert\s*\()|(eval\s*\(.*(getElementById|cookie|localStorage)))
+        scope: response body
+        sensitive: false
+        description: XSS Payload 回显
+
+      - name: XSS Unicode Escape
+        loaded: true
+        f_regex: ((\\u00[0-9a-fA-F]{2})|(\\x[0-9a-fA-F]{2}))
+        scope: response body
+        sensitive: false
+        description: XSS Unicode 转义
+
+      - name: XSS HTML Entity
+        loaded: true
+        f_regex: ((&#x?[0-9a-fA-F]+;?)+)
+        scope: response body
+        sensitive: false
+        description: XSS HTML 实体编码
+
+      - name: XSS Reflection
+        loaded: true
+        f_regex: ((<\[CDATA\[)|(\]\]>)|(<!\[CDATA))
+        scope: response body
+        sensitive: false
+        description: XSS CDATA 标签
+
+      - name: XSS Stored
+        loaded: true
+        f_regex: ((stored.*script)|(persistent.*xss)|(saved.*xss))
+        scope: response body
+        sensitive: false
+        description: XSS 存储型特征
+
+  # ==================== Path Traversal 路径遍历 ====================
+  - group: Path Traversal
+    rule:
+      - name: Path Traversal Linux
+        loaded: true
+        f_regex: ((\.\.\/)|(\.\.\\)|(\.\.%2f)|(\.\.%5c))
+        scope: any
+        sensitive: false
+        description: Linux 路径遍历
+
+      - name: Path Traversal Windows
+        loaded: true
+        f_regex: (((\.\.\\)+)|(%2e%2e)|(%252e))
+        scope: any
+        sensitive: false
+        description: Windows 路径遍历
+
+      - name: Path Traversal Null Byte
+        loaded: true
+        f_regex: ((\.\.%00)|(\.\.%2500)|(%00\.\.)|(null byte injection))
+        scope: any
+        sensitive: false
+        description: 路径遍历空字节注入
+
+      - name: File Inclusion Remote
+        loaded: true
+        f_regex: ((php:\/\/input)|(file:\/\/)|(phar:\/\/)|(zip:\/\/))
+        scope: any
+        sensitive: false
+        description: 远程文件包含
+
+      - name: File Inclusion Local
+        loaded: true
+        f_regex: ((include\s*\(.*\$_)|(require\s*\(.*\$)|(include_once|require_once))
+        scope: response body
+        sensitive: false
+        description: 本地文件包含特征
+
+      - name: File Read Payload
+        loaded: true
+        f_regex: ((etc\/passwd)|(windows\/system32)|(c:\\windows))
+        scope: any
+        sensitive: false
+        description: 敏感文件路径读取
+
+      - name: Log File Access
+        loaded: true
+        f_regex: ((\/var\/log\/)|(\/tmp\/)|(\.\/logs\/)|(\/proc\/self))
+        scope: any
+        sensitive: false
+        description: 日志文件访问
+
+      - name: Config File Access
+        loaded: true
+        f_regex: ((config\.php)|(\.env)|(database\.yml)|(application\.properties))
+        scope: any
+        sensitive: false
+        description: 配置文件访问
+
+      - name: SSH Key Access
+        loaded: true
+        f_regex: ((id_rsa)|(id_dsa)|(\.ssh\/authorized_keys)|(\.ssh\/config))
+        scope: any
+        sensitive: false
+        description: SSH 密钥访问
+
+      - name: Backup File Access
+        loaded: true
+        f_regex: (((\.bak)|(\.backup)|(\.old)|(\.swp)|(\.tmp)|(\.temp))\s*$)
+        scope: any
+        sensitive: false
+        description: 备份文件访问
+
+      - name: Directory Listing
+        loaded: true
+        f_regex: ((Index of \/)|(\[To Parent Directory\])|(Directory Listing))
+        scope: response body
+        sensitive: false
+        description: 目录遍历特征
+
+      - name: Webroot Path
+        loaded: true
+        f_regex: ((DocumentRoot)|(ServerRoot)|(public_html)|(htdocs))
+        scope: response body
+        sensitive: false
+        description: Web 根目录泄露
+
+  # ==================== SSRF Server-Side Request Forgery ====================
+  - group: SSRF
+    rule:
+      - name: SSRF URL Scheme
+        loaded: true
+        f_regex: ((dict:\/\/)|(sftp:\/\/)|(ldap:\/\/)|(gopher:\/\/))
+        scope: any
+        sensitive: false
+        description: SSRF 协议
+
+      - name: SSRF Localhost
+        loaded: true
+        f_regex: ((127\.0\.0\.1)|(localhost)|(0\.0\.0\.0)|(::1))
+        scope: any
+        sensitive: false
+        description: SSRF 本地地址
+
+      - name: SSRF Internal IP
+        loaded: true
+        f_regex: ((10\.\d+)|(172\.(1[6-9]|2\d|3[01]))|(192\.168\.))
+        scope: any
+        sensitive: false
+        description: SSRF 内网 IP
+
+      - name: SSRF Metadata
+        loaded: true
+        f_regex: ((169\.254\.169\.254)|(metadata\.google)|(100\.100\.100\.200))
+        scope: any
+        sensitive: false
+        description: 云元数据服务
+
+      - name: SSRF Cloud URLs
+        loaded: true
+        f_regex: ((blob\.core\.windows)|(\.drive\.google)|(docs\.google))
+        scope: any
+        sensitive: false
+        description: 云存储 URL
+
+  # ==================== XXE XML External Entity ====================
+  - group: XXE
+    rule:
+      - name: XXE Entity
+        loaded: true
+        f_regex: (<!ENTITY|<!DOCTYPE\s+\w+\s+\[)
+        scope: any
+        sensitive: false
+        description: XXE 实体注入
+
+      - name: XXE External Entity
+        loaded: true
+        f_regex: (SYSTEM\s+["']|PUBLIC\s+["'])
+        scope: any
+        sensitive: false
+        description: XXE 外部实体
+
+      - name: XXE Parameter Entity
+        loaded: true
+        f_regex: (%entity|%element)
+        scope: any
+        sensitive: false
+        description: XXE 参数实体
+
+      - name: XXE CDATA
+        loaded: true
+        f_regex: (<!\[CDATA|\\]\\>)
+        scope: any
+        sensitive: false
+        description: XXE CDATA 注入
+
+      - name: XXE Error Based
+        loaded: true
+        f_regex: ((xxe|xml)entity|xmlparse|simplexml_load)
+        scope: response body
+        sensitive: false
+        description: XXE 报错特征
+
+  # ==================== Command Injection 命令注入 ====================
+  - group: Command Injection
+    rule:
+      - name: Command Injection Pipes
+        loaded: true
+        f_regex: ((\|.*\||;&|\|&\$))
+        scope: any
+        sensitive: false
+        description: 命令管道注入
+
+      - name: Command Injection Semicolon
+        loaded: true
+        f_regex: (;(wget|curl|nc|bash|sh|cmd|powershell))
+        scope: any
+        sensitive: false
+        description: 分号命令注入
+
+      - name: Command Injection Backtick
+        loaded: true
+        f_regex: (`[^`]+`)
+        scope: any
+        sensitive: false
+        description: 反引号命令注入
+
+      - name: Command Injection Dollar
+        loaded: true
+        f_regex: (\$\([^)]+\)|\$\{[^}]+\})
+        scope: any
+        sensitive: false
+        description: $() 命令注入
+
+      - name: Command Injection Newline
+        loaded: true
+        f_regex: (%0a|%0d|\\r\\n|\\n)
+        scope: any
+        sensitive: false
+        description: 换行符注入
+
+      - name: Common Commands
+        loaded: true
+        f_regex: ((ls\s+-la)|(cat\s+/etc)|(whoami)|(id\s+))
+        scope: any
+        sensitive: false
+        description: 常见命令执行
+
+      - name: Reverse Shell Pattern
+        loaded: true
+        f_regex: ((bash\s+-i)|(nc\s+-e)|(perl\s+-e)|(python.*socket)|(rm\s+\/tmp))
+        scope: any
+        sensitive: false
+        description: 反向 shell 模式
+
+  # ==================== Open Redirect 开放重定向 ====================
+  - group: Open Redirect
+    rule:
+      - name: Redirect Parameter
+        loaded: true
+        f_regex: ((redirect=|url=|next=|data=|dest=|callback=|return=|out=|view=|lang=))
+        scope: request
+        sensitive: false
+        description: 重定向参数
+
+      - name: Redirect URL Scheme
+        loaded: true
+        f_regex: ((javascript:)|(data:text)|(vbscript:))
+        scope: any
+        sensitive: false
+        description: 重定向危险协议
+
+      - name: Redirect Path Traversal
+        loaded: true
+        f_regex: ((..\/)|(\.\.%2f)|(\/%2e%2e))
+        scope: any
+        sensitive: false
+        description: 重定向路径遍历
+
+  # ==================== CORS Misconfiguration CORS 错误配置 ====================
+  - group: CORS
+    rule:
+      - name: CORS Wildcard Origin
+        loaded: true
+        f_regex: (Access-Control-Allow-Origin:\s*\*)
+        scope: response header
+        sensitive: false
+        description: CORS 通配符配置
+
+      - name: CORS Credentials
+        loaded: true
+        f_regex: (Access-Control-Allow-Credentials:\s*true)
+        scope: response header
+        sensitive: false
+        description: CORS 凭证配置
+
+      - name: CORS Allow Origin Reflection
+        loaded: true
+        f_regex: (Access-Control-Allow-Origin:\s*${})
+        scope: response header
+        sensitive: false
+        description: CORS 反射 Origin
+
+  # ==================== Security Headers 安全头部 ====================
+  - group: Security Headers
+    rule:
+      - name: Missing CSP
+        loaded: true
+        f_regex: ^(?!.*Content-Security-Policy).*$
+        scope: response header
+        sensitive: false
+        description: 缺少 CSP 头部
+
+      - name: Missing X-Frame-Options
+        loaded: true
+        f_regex: ^(?!.*X-Frame-Options).*$
+        scope: response header
+        sensitive: false
+        description: 缺少 X-Frame-Options
+
+      - name: Missing X-Content-Type
+        loaded: true
+        f_regex: ^(?!.*X-Content-Type-Options).*$
+        scope: response header
+        sensitive: false
+        description: 缺少 X-Content-Type-Options
+
+      - name: Missing HSTS
+        loaded: true
+        f_regex: ^(?!.*Strict-Transport-Security).*$
+        scope: response header
+        sensitive: false
+        description: 缺少 HSTS
+
+      - name: Missing X-XSS-Protection
+        loaded: true
+        f_regex: ^(?!.*X-XSS-Protection).*$
+        scope: response header
+        sensitive: false
+        description: 缺少 X-XSS-Protection
+
+  # ==================== API Keys API 密钥 ====================
+  - group: API Keys
+    rule:
+      - name: Generic API Key
+        loaded: true
+        f_regex: ((api[_-]?key)|(apikey)|(api[_-]?secret)|(access[_-]?token))
+        scope: any
+        sensitive: true
+        description: 通用 API Key
+
+      - name: Google API Key
+        loaded: true
+        f_regex: (AIza[0-9A-Za-z\-_]{35})
+        scope: any
+        sensitive: true
+        description: Google API Key
+
+      - name: Google Cloud Key
+        loaded: true
+        f_regex: ((googleapis\.com)|(gcp\.service))
+        scope: any
+        sensitive: true
+        description: Google Cloud Key
+
+      - name: Facebook Access Token
+        loaded: true
+        f_regex: (EAACEdEose0cBA[0-9A-Za-z]+)
+        scope: any
+        sensitive: true
+        description: Facebook Access Token
+
+      - name: GitHub Token
+        loaded: true
+        f_regex: (ghp_[0-9a-zA-Z]{36}|gho_[0-9a-zA-Z]{36})
+        scope: any
+        sensitive: true
+        description: GitHub Token
+
+      - name: Twitter API Key
+        loaded: true
+        f_regex: ((twitter)|(TWITTER))[_-]?(api[_-]?key|consumer[_-]?key)
+        scope: any
+        sensitive: true
+        description: Twitter API Key
+
+      - name: Slack Token
+        loaded: true
+        f_regex: (xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[0-9a-zA-Z]{24})
+        scope: any
+        sensitive: true
+        description: Slack Token
+
+      - name: Stripe API Key
+        loaded: true
+        f_regex: (sk_live_[0-9a-zA-Z]{24,}|pk_live_[0-9a-zA-Z]{24,})
+        scope: any
+        sensitive: true
+        description: Stripe API Key
+
+      - name: SendGrid API Key
+        loaded: true
+        f_regex: (SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43})
+        scope: any
+        sensitive: true
+        description: SendGrid API Key
+
+      - name: MailGun API Key
+        loaded: true
+        f_regex: (key-[0-9a-zA-Z]{32})
+        scope: any
+        sensitive: true
+        description: MailGun API Key
+
+      - name: Twilio API Key
+        loaded: true
+        f_regex: ((SK|AC)[0-9a-fA-F]{32})
+        scope: any
+        sensitive: true
+        description: Twilio API Key
+
+      - name: Nexmo API Key
+        loaded: true
+        f_regex: ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})
+        scope: any
+        sensitive: true
+        description: Nexmo/Vonage API Key
+
+      - name: Zoom API Key
+        loaded: true
+        f_regex: ((zoom\.com)|(zoom\.us))[_-]?(api[_-]?key|secret)
+        scope: any
+        sensitive: true
+        description: Zoom API Key
+
+      - name: OpenAI API Key
+        loaded: true
+        f_regex: (sk-[0-9a-zA-Z]{48})
+        scope: any
+        sensitive: true
+        description: OpenAI API Key
+
+      - name: Private Key
+        loaded: true
+        f_regex: ((-----BEGIN.*PRIVATE KEY-----)|(-----BEGIN.*RSA PRIVATE KEY-----))
+        scope: any
+        sensitive: true
+        description: 私钥文件
+
+      - name: SSH Private Key
+        loaded: true
+        f_regex: (-----BEGIN OPENSSH PRIVATE KEY-----)
+        scope: any
+        sensitive: true
+        description: SSH 私钥
+
+      - name: PGP Private Key
+        loaded: true
+        f_regex: (-----BEGIN PGP PRIVATE KEY BLOCK-----)
+        scope: any
+        sensitive: true
+        description: PGP 私钥
+
+  # ==================== Database Connection 数据库连接 ====================
+  - group: Database Connection
+    rule:
+      - name: MongoDB Connection
+        loaded: true
+        f_regex: ((mongodb(\+srv)?:\/\/)|(MongoClient))
+        scope: any
+        sensitive: true
+        description: MongoDB 连接字符串
+
+      - name: Redis Connection
+        loaded: true
+        f_regex: ((redis:\/\/)|(Redigo)|(jedis))
+        scope: any
+        sensitive: true
+        description: Redis 连接字符串
+
+      - name: PostgreSQL Connection
+        loaded: true
+        f_regex: (postgresql:\/\/[^\s]+)
+        scope: any
+        sensitive: true
+        description: PostgreSQL 连接字符串
+
+      - name: MySQL Connection
+        loaded: true
+        f_regex: (mysql:\/\/[^\s]+)
+        scope: any
+        sensitive: true
+        description: MySQL 连接字符串
+
+      - name: MSSQL Connection
+        loaded: true
+        f_regex: ((mssql:\/\/)|(Server=.*;.*Database=))
+        scope: any
+        sensitive: true
+        description: MSSQL 连接字符串
+
+      - name: Oracle Connection
+        loaded: true
+        f_regex: ((oracle:@)|(Data Source=)|(TNS_NAMES))
+        scope: any
+        sensitive: true
+        description: Oracle 连接字符串
+
+      - name: Cassandra Connection
+        loaded: true
+        f_regex: ((cassandra:\/\/)|(com\.datastax\.driver))
+        scope: any
+        sensitive: true
+        description: Cassandra 连接字符串
+
+  # ==================== JWT Token ====================
+  - group: JWT
+    rule:
+      - name: JWT Token
+        loaded: true
+        f_regex: (eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9._-]*)
+        scope: any
+        sensitive: true
+        description: JWT 令牌
+
+      - name: JWT Algorithm None
+        loaded: true
+        f_regex: ((alg\s*:\s*["']?none["']?)|(none.*signature))
+        scope: response body
+        sensitive: true
+        description: JWT 算法为 None
+
+      - name: JWT HS256 Weak Secret
+        loaded: true
+        f_regex: ((secret[_-]?key)|(password.*jwt)|(jwt[_-]?secret))
+        scope: response body
+        sensitive: true
+        description: JWT 弱密钥
+
+  # ==================== Authentication 认证 ====================
+  - group: Authentication
+    rule:
+      - name: Basic Auth
+        loaded: true
+        f_regex: (basic\s+[a-zA-Z0-9+/=]{20,})
+        scope: any
+        sensitive: true
+        description: Basic 认证
+
+      - name: Bearer Token
+        loaded: true
+        f_regex: (bearer\s+[a-zA-Z0-9_\-\.=\/]+)
+        scope: any
+        sensitive: true
+        description: Bearer Token
+
+      - name: API Key Header
+        loaded: true
+        f_regex: ((X-API-Key\s*:)|(api-key\s*:))
+        scope: response body
+        sensitive: true
+        description: API Key 请求头
+
+      - name: OAuth Token
+        loaded: true
+        f_regex: ((access_token=)|(oauth_token)|(expires_in))
+        scope: any
+        sensitive: true
+        description: OAuth Token
+
+      - name: Session Cookie
+        loaded: true
+        f_regex: ((SESSIONID)|(session_id)|(PHPSESSID)|(JSESSIONID))
+        scope: response header
+        sensitive: true
+        description: Session Cookie
+
+      - name: Authentication Bypass
+        loaded: true
+        f_regex: ((401\s+Unauthorized)|(403\s+Forbidden))
+        scope: response
+        sensitive: false
+        description: 认证失败响应
+
+  # ==================== Information Disclosure 信息泄露 ====================
+  - group: Information Disclosure
+    rule:
+      - name: Version Info
+        loaded: true
+        f_regex: ((Server\s*:)|(X-Powered-By\s*:)|(X-Generator\s*:))
+        scope: response header
+        sensitive: false
+        description: 版本信息泄露
+
+      - name: Error Stack Trace
+        loaded: true
+        f_regex: ((at\s+[\w.$]+\.[\w.$]+\.[\w.$]+\()|(Exception in thread)|(java\.lang\.\w+Exception))
+        scope: response body
+        sensitive: false
+        description: 错误堆栈泄露
+
+      - name: Debug Mode
+        loaded: true
+        f_regex: ((DEBUG\s*=\s*true)|(debug.*mode)|(development.*mode))
+        scope: response body
+        sensitive: false
+        description: 调试模式开启
+
+      - name: Internal IP Disclosure
+        loaded: true
+        f_regex: ((10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3}))
+        scope: response body
+        sensitive: true
+        description: 内网 IP 泄露
+
+      - name: Email Disclosure
+        loaded: true
+        f_regex: ([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})
+        scope: response body
+        sensitive: true
+        description: 邮箱地址泄露
+
+      - name: Phone Number Disclosure
+        loaded: true
+        f_regex: ((86[-]?1[3-9]\d[-]?\d{4}[-]?\d{4})|(\+?1[-.]?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}))
+        scope: response body
+        sensitive: true
+        description: 电话号码泄露
+
+      - name: ID Card Disclosure
+        loaded: true
+        f_regex: ([1-9]\d{5}(18|19|20)\d{2}(0[1-9]|10|11|12)(0[1-9]|[12]\d|30|31)\d{3}[\dXx])
+        scope: response body
+        sensitive: true
+        description: 身份证号泄露
+
+      - name: GPS Location Disclosure
+        loaded: true
+        f_regex: (("lat":\s*-?\d+\.\d+)|("lng":\s*-?\d+\.\d+)|("latitude":)|("longitude":))
+        scope: response body
+        sensitive: true
+        description: GPS 位置泄露
+
+      - name: Credit Card Pattern
+        loaded: true
+        f_regex: (([4-6]\d{3}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4})|([4-6]\d{15}))
+        scope: response body
+        sensitive: true
+        description: 信用卡号泄露
+
+      - name: Social Security Number
+        loaded: true
+        f_regex: (\d{3}[- ]?\d{2}[- ]?\d{4})
+        scope: response body
+        sensitive: true
+        description: 社保号泄露
+
+  # ==================== GraphQL ====================
+  - group: GraphQL
+    rule:
+      - name: GraphQL Introspection
+        loaded: true
+        f_regex: (__schema|__type|introspection)
+        scope: any
+        sensitive: false
+        description: GraphQL 自省
+
+      - name: GraphQL Error
+        loaded: true
+        f_regex: (("errors":)|("message":)|(errors\s+\[))
+        scope: response body
+        sensitive: false
+        description: GraphQL 错误
+
+      - name: GraphQL Batch
+        loaded: true
+        f_regex: (\[[\s\n]*\{[\s\n]*"query")
+        scope: request
+        sensitive: false
+        description: GraphQL 批量查询
+
+  # ==================== WebSocket ====================
+  - group: WebSocket
+    rule:
+      - name: WebSocket Header
+        loaded: true
+        f_regex: ((Upgrade\s*:\s*websocket)|(Connection\s*:\s*Upgrade))
+        scope: response header
+        sensitive: false
+        description: WebSocket 升级头
+
+      - name: WebSocket URL
+        loaded: true
+        f_regex: (ws[s]?:\/\/[^\s]+)
+        scope: any
+        sensitive: false
+        description: WebSocket URL
+
+  # ==================== Serialization 序列化 ====================
+  - group: Serialization
+    rule:
+      - name: Java Serialization
+        loaded: true
+        f_regex: ((java\.io\.Serializable)|(ObjectInputStream)|(readObject)|(readResolve))
+        scope: response body
+        sensitive: false
+        description: Java 序列化特征
+
+      - name: Python Pickle
+        loaded: true
+        f_regex: ((pickle\.loads)|(cPickle)|(__reduce__)|(__setstate__))
+        scope: response body
+        sensitive: false
+        description: Python Pickle 序列化
+
+      - name: Ruby Marshal
+        loaded: true
+        f_regex: ((Marshal\.load)|(Marshal\.dump)|(Psych::dump))
+        scope: response body
+        sensitive: false
+        description: Ruby Marshal 序列化
+
+      - name: .NET BinaryFormatter
+        loaded: true
+        f_regex: ((BinaryFormatter)|(System\.Runtime\.Serialization\.Formatters))
+        scope: response body
+        sensitive: false
+        description: .NET BinaryFormatter
+
+  # ==================== Dangerous Functions 危险函数 ====================
+  - group: Dangerous Functions
+    rule:
+      - name: Eval Function
+        loaded: true
+        f_regex: (\beval\s*\(|eval\s*\(\s*\$_|eval\s*\(\s*\$)
+        scope: any
+        sensitive: false
+        description: Eval 函数调用
+
+      - name: Exec Function
+        loaded: true
+        f_regex: (\bexec\s*\(|\bsystem\s*\(|\bpassthru\s*\(|\bshell_exec\s*\()
+        scope: any
+        sensitive: false
+        description: 命令执行函数
+
+      - name: SQL Execute
+        loaded: true
+        f_regex: (\.execute\s*\(|\.exec\s*\(|\.query\s*\(|\.rawQuery\()
+        scope: any
+        sensitive: false
+        description: SQL 执行函数
+
+      - name: File Operations
+        loaded: true
+        f_regex: (\.readFile\(|\.readFileSync\(|\.writeFile\(|\.open\(|\.createReadStream\()
+        scope: any
+        sensitive: false
+        description: 文件操作函数
+
+      - name: Process Operations
+        loaded: true
+        f_regex: (\.exec\s*\(|\.spawn\s*\(|\.fork\s*\(|\.kill\s*\()
+        scope: any
+        sensitive: false
+        description: 进程操作函数
+
+      - name: Crypto Operations
+        loaded: true
+        f_regex: (\.encrypt\(|\.decrypt\(|\.sign\(|\.verify\(|createCipher|createDecipher)
+        scope: any
+        sensitive: false
+        description: 加密操作函数
+
+      - name: Dangerous HTML
+        loaded: true
+        f_regex: (\.html\(|\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\()
+        scope: any
+        sensitive: false
+        description: 危险 HTML 操作
+
+      - name: Dangerous JavaScript
+        loaded: true
+        f_regex: (\.appendChild\(|\.removeChild\(|\.replaceChild\(|\.adoptNode\()
+        scope: any
+        sensitive: false
+        description: 危险 DOM 操作
+
+  # ==================== API Specific API 特定 ====================
+  - group: API Specific
+    rule:
+      - name: GraphQL Field Suggestion
+        loaded: true
+        f_regex: (("suggestions":)|("fields":)|("__typename"))
+        scope: response body
+        sensitive: false
+        description: GraphQL 字段建议
+
+      - name: REST API Version
+        loaded: true
+        f_regex: (\/v\d+\/|\/api\/v\d+|\/api\/version)
+        scope: any
+        sensitive: false
+        description: REST API 版本
+
+      - name: Pagination Pattern
+        loaded: true
+        f_regex: (("page":\s*\d+)|("offset":\s*\d+)|("limit":\s*\d+)|("total":\s*\d+))
+        scope: response body
+        sensitive: false
+        description: 分页模式
+
+      - name: Rate Limit Header
+        loaded: true
+        f_regex: ((X-RateLimit-Limit)|(X-RateLimit-Remaining)|(Retry-After))
+        scope: response header
+        sensitive: false
+        description: 限流头部
+
+      - name: Cache Control
+        loaded: true
+        f_regex: ((Cache-Control\s*:)|(ETag\s*:)|(Last-Modified\s*:))
+        scope: response header
+        sensitive: false
+        description: 缓存控制头部
+
+  # ==================== File Upload 文件上传 ====================
+  - group: File Upload
+    rule:
+      - name: Upload Endpoint
+        loaded: true
+        f_regex: ((upload)|(uploadfile)|(uploadify)|(uploader)|(files\[\])|(multiple))
+        scope: any
+        sensitive: false
+        description: 上传端点
+
+      - name: File Type Bypass
+        loaded: true
+        f_regex: ((application\/x-php)|(text\/html)|(application\/x-javascript))
+        scope: request
+        sensitive: false
+        description: 文件类型绕过
+
+      - name: Filename Traversal
+        loaded: true
+        f_regex: ((filename\s*=\s*["']?\.\.\/)|(filename.*\.\.%2f))
+        scope: request
+        sensitive: false
+        description: 文件名路径遍历
+
+  # ==================== Business Logic 业务逻辑 ====================
+  - group: Business Logic
+    rule:
+      - name: Price Manipulation
+        loaded: true
+        f_regex: (("price":\s*[\d.]+)|("amount":\s*[\d.]+)|("total":\s*[\d.]+))
+        scope: request
+        sensitive: false
+        description: 价格操作
+
+      - name: IDOR Pattern
+        loaded: true
+        f_regex: (\/user\/|\/account\/|\/profile\/|\/order\/|\/transaction\/)
+        scope: any
+        sensitive: false
+        description: IDOR 模式
+
+      - name: Mass Assignment
+        loaded: true
+        f_regex: ((isAdmin)|(isRoot)|(isSuper)|(role)|(permission)|(admin))
+        scope: request
+        sensitive: false
+        description: 批量赋值
+
+      - name: OTP Bypass
+        loaded: true
+        f_regex: ((otp)|(verificationCode)|(smsCode)|(emailCode)|(mfa))
+        scope: request
+        sensitive: false
+        description: OTP 验证码绕过
+
+      - name: Race Condition
+        loaded: true
+        f_regex: ((concurrency)|(race condition)|(time-of-check)|(TOCTOU))
+        scope: any
+        sensitive: false
+        description: 竞态条件
+
+      - name: Horizontal Privilege Escalation
+        loaded: true
+        f_regex: ((user_id\s*=\s*\d+)|(account_id\s*=\s*\d+)|(resource_id\s*=\s*\d+))
+        scope: request
+        sensitive: false
+        description: 水平权限提升
+
+      - name: Vertical Privilege Escalation
+        loaded: true
+        f_regex: ((admin\s*=\s*1)|(role\s*=\s*admin)|(privilege))
+        scope: request
+        sensitive: false
+        description: 垂直权限提升
+
+      - name: Backup Directory
+        loaded: true
+        f_regex: ((backup)|(\.git\/)|(\.svn\/)|(\.hg\/))
+        scope: any
+        sensitive: false
+        description: 版本控制目录
+
+      - name: IDE Config
+        loaded: true
+        f_regex: ((.idea\/)|(\.vscode\/)|(\.vs\/))
+        scope: any
+        sensitive: false
+        description: IDE 配置目录
+
+      - name: CI Config
+        loaded: true
+        f_regex: ((.github\/workflows)|(.gitlab-ci\.yml)|(Jenkinsfile))
+        scope: any
+        sensitive: false
+        description: CI 配置目录
+
+      - name: Environment File
+        loaded: true
+        f_regex: ((\.env\.local)|(\.env\.development)|(\.env\.production))
+        scope: any
+        sensitive: true
+        description: 环境配置文件
+
+      - name: Heap Dump
+        loaded: true
+        f_regex: ((\.hprof)|(\.heapdump)|(\.dmp))
+        scope: any
+        sensitive: false
+        description: 堆转储文件
+
+      - name: Log File
+        loaded: true
+        f_regex: (\.log$|(error_log)|(access_log)|(debug\.log))
+        scope: any
+        sensitive: false
+        description: 日志文件
