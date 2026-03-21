@@ -4,11 +4,13 @@ Scanner Module
 """
 
 import asyncio
+import json
 import time
 from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from urllib.parse import urlparse
+import os
 
 from .utils.config import Config
 from .utils.http_client import AsyncHttpClient, AsyncTask
@@ -22,6 +24,19 @@ from .analyzers.sensitive_detector import TwoTierSensitiveDetector
 from .testers.fuzz_tester import FuzzTester
 from .testers.vulnerability_tester import VulnerabilityTester
 from .models import ScanResult, APIEndpoint, Vulnerability, SensitiveData
+
+
+@dataclass
+class ScanCheckpoint:
+    """扫描检查点"""
+    target: str
+    current_stage: str
+    stage_results: Dict[str, Any]
+    js_cache_state: List[Dict]
+    discovered_apis: List[Dict]
+    tested_apis: List[Dict]
+    vulnerabilities: List[Dict]
+    timestamp: float
 
 
 @dataclass
@@ -39,6 +54,8 @@ class ScannerConfig:
     ai_scan: bool = False
     concurrency: int = 50
     output_format: str = "json"
+    resume: bool = False
+    checkpoint_file: Optional[str] = None
 
 
 class ChkApiScanner:
@@ -58,9 +75,13 @@ class ChkApiScanner:
         self.evidence_aggregator: Optional[APIEvidenceAggregator] = None
         self.response_cluster: Optional[ResponseCluster] = None
         self.sensitive_detector: Optional[TwoTierSensitiveDetector] = None
+        self.fuzz_tester: Optional[FuzzTester] = None
+        self.vulnerability_tester: Optional[VulnerabilityTester] = None
         
         self.result: Optional[ScanResult] = None
         self._running = False
+        self._current_stage: str = "initialization"
+        self._checkpoint: Optional[ScanCheckpoint] = None
         self._callbacks: Dict[str, List[Callable]] = {
             'stage_start': [],
             'stage_progress': [],
@@ -87,14 +108,21 @@ class ChkApiScanner:
         
         target_parsed = urlparse(self.config.target)
         folder_name = self.config.target.replace('://', '_').replace('/', '_').replace('.', '_')
+        results_dir = f"./results/{folder_name}"
+        
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir, exist_ok=True)
+        
+        if self.config.checkpoint_file is None:
+            self.config.checkpoint_file = os.path.join(results_dir, "scan_state.json")
         
         self.db_storage = DBStorage(
-            db_path=f"./results/{folder_name}/results.db",
+            db_path=f"{results_dir}/results.db",
             wal_mode=True
         )
         
         self.file_storage = FileStorage(
-            base_dir=f"./results/{folder_name}"
+            base_dir=results_dir
         )
         
         self.http_client = AsyncHttpClient(
@@ -115,6 +143,9 @@ class ChkApiScanner:
             config={'ai_enabled': self.config.ai_scan}
         )
         
+        self.fuzz_tester = FuzzTester(self.http_client)
+        self.vulnerability_tester = VulnerabilityTester(self.http_client)
+        
         self.result = ScanResult(
             target_url=self.config.target,
             start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -124,29 +155,51 @@ class ChkApiScanner:
         """执行扫描"""
         await self.initialize()
         
+        if self.config.resume and self.config.checkpoint_file:
+            checkpoint = self._load_checkpoint()
+            if checkpoint:
+                self._restore_from_checkpoint(checkpoint)
+        
         try:
             self._emit('stage_start', {'stage': 'initialization', 'status': 'complete'})
             
+            stages_to_run = []
+            
             if self.config.attack_mode in ['collect', 'all']:
-                await self._stage1_js_collection()
-                await self._stage2_api_extraction()
+                if self._current_stage in ['initialization', 'js_collection']:
+                    stages_to_run.append(self._stage1_js_collection)
+                if self._current_stage in ['initialization', 'js_collection', 'api_extraction']:
+                    stages_to_run.append(self._stage2_api_extraction)
             
             if self.config.attack_mode in ['scan', 'all'] and not self.config.no_api_scan:
-                await self._stage3_api_testing()
-                await self._stage4_vulnerability_testing()
+                if self._current_stage in ['initialization', 'js_collection', 'api_extraction', 'api_testing']:
+                    stages_to_run.append(self._stage3_api_testing)
+                if self._current_stage in ['initialization', 'js_collection', 'api_extraction', 'api_testing', 'vulnerability_testing']:
+                    stages_to_run.append(self._stage4_vulnerability_testing)
             
-            await self._stage5_reporting()
+            if self._current_stage in ['initialization', 'js_collection', 'api_extraction', 'api_testing', 'vulnerability_testing', 'reporting']:
+                stages_to_run.append(self._stage5_reporting)
             
+            for stage_method in stages_to_run:
+                await stage_method()
+                await self._save_checkpoint()
+            
+            if not stages_to_run:
+                await self._stage5_reporting()
+                await self._save_checkpoint()
+
         except Exception as e:
             self.result.errors.append(str(e))
         
         finally:
+            await self._save_checkpoint()
             await self.cleanup()
         
         return self.result
     
     async def _stage1_js_collection(self):
         """阶段1：JS采集"""
+        self._current_stage = 'js_collection'
         self._emit('stage_start', {'stage': 'js_collection', 'status': 'running'})
         
         start_time = time.time()
@@ -159,13 +212,19 @@ class ChkApiScanner:
         js_urls = self._extract_js_urls(response.content)
         
         alive_js = []
+        js_parser = JSParser(self.js_cache)
         for js_url in js_urls:
             js_response = await self.http_client.request(js_url)
             if js_response.status_code == 200:
+                js_content = js_response.content
                 alive_js.append({
                     'url': js_url,
-                    'content': js_response.content
+                    'content': js_content
                 })
+                try:
+                    js_parser.parse(js_content, js_url)
+                except Exception:
+                    pass
         
         duration = time.time() - start_time
         
@@ -186,51 +245,288 @@ class ChkApiScanner:
     
     async def _stage2_api_extraction(self):
         """阶段2：API提取"""
+        self._current_stage = 'api_extraction'
         self._emit('stage_start', {'stage': 'api_extraction', 'status': 'running'})
         
         start_time = time.time()
         
-        pass
+        js_results = self.js_cache.get_all()
+        input_count = len(js_results)
+        error_count = 0
+        
+        for js_result in js_results:
+            try:
+                for api_path in js_result.apis:
+                    from .collectors.api_collector import APIFindResult
+                    api_find_result = APIFindResult(
+                        path=api_path,
+                        method="GET",
+                        source_type="js_parser",
+                        base_url="",
+                        url_type="api_path"
+                    )
+                    self.api_aggregator.add_api(
+                        api_find_result,
+                        source_info={'source': 'js_fingerprint_cache'}
+                    )
+            except Exception:
+                error_count += 1
+        
+        raw_endpoints = self.api_aggregator.get_all()
+        
+        from .collectors.api_collector import APIPathCombiner, BaseURLAnalyzer, ServiceAnalyzer
+        final_endpoints = []
+        for endpoint in raw_endpoints:
+            full_url = APIPathCombiner.combine_base_and_path(
+                endpoint.base_url or "",
+                endpoint.path
+            )
+            
+            from .models import APIEndpoint as APIEndpointModel
+            api_endpoint = APIEndpointModel(
+                path=endpoint.path,
+                method=endpoint.method,
+                base_url=endpoint.base_url,
+                full_url=full_url,
+                sources=[],
+                service_key=ServiceAnalyzer.extract_service_key(full_url, endpoint.path)
+            )
+            final_endpoints.append(api_endpoint)
+        
+        if self.result:
+            self.result.api_endpoints = final_endpoints
         
         duration = time.time() - start_time
         
+        self._record_stage_stats(
+            'stage2_api_extraction',
+            start_time,
+            time.time(),
+            input_count,
+            len(final_endpoints),
+            error_count
+        )
+        
         self._emit('stage_complete', {
             'stage': 'api_extraction',
-            'duration': duration
+            'duration': duration,
+            'extracted': len(final_endpoints)
         })
     
     async def _stage3_api_testing(self):
         """阶段3：API测试"""
+        self._current_stage = 'api_testing'
         self._emit('stage_start', {'stage': 'api_testing', 'status': 'running'})
         
         start_time = time.time()
         
-        pass
+        endpoints = self.result.api_endpoints if self.result else []
+        input_count = len(endpoints)
+        tested_endpoints = []
+        error_count = 0
         
-        duration = time.time() - start_time
+        for endpoint in endpoints:
+            for method in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+                try:
+                    response = await self.http_client.request(
+                        endpoint.full_url,
+                        method=method
+                    )
+                    
+                    self.response_cluster.add_response(endpoint.api_id, response)
+                    
+                    if not self.response_cluster.is_baseline_404(endpoint.api_id, response):
+                        endpoint.method = method
+                        endpoint.status = APIStatus.ALIVE.value
+                        tested_endpoints.append(endpoint)
+                        
+                        self.api_scorer.add_evidence(endpoint, 'http_test', response)
+                        break
+                except Exception:
+                    error_count += 1
+        
+        high_value_apis = self.api_scorer.get_high_value_apis() if self.api_scorer else []
+        
+        end_time = time.time()
+        self._record_stage_stats(
+            'stage3_api_testing',
+            start_time,
+            end_time,
+            input_count,
+            len(tested_endpoints),
+            error_count
+        )
         
         self._emit('stage_complete', {
             'stage': 'api_testing',
-            'duration': duration
+            'duration': end_time - start_time,
+            'tested': len(tested_endpoints),
+            'high_value': len(high_value_apis)
         })
     
     async def _stage4_vulnerability_testing(self):
         """阶段4：漏洞测试"""
+        self._current_stage = 'vulnerability_testing'
         self._emit('stage_start', {'stage': 'vulnerability_testing', 'status': 'running'})
         
         start_time = time.time()
         
-        pass
+        high_value_apis = [e for e in self.result.api_endpoints if e.is_high_value]
+        high_value_api_ids = {e.api_id for e in high_value_apis}
         
-        duration = time.time() - start_time
+        input_count = len(high_value_apis)
+        vulnerability_count = 0
+        sensitive_count = 0
+        error_count = 0
+        responses_collected = []
+        
+        for endpoint in high_value_apis:
+            try:
+                response = await self.http_client.request(
+                    endpoint.full_url,
+                    method=endpoint.method
+                )
+                
+                responses_collected.append({
+                    'content': response.content,
+                    'url': endpoint.full_url,
+                    'api_id': endpoint.api_id
+                })
+                
+                fuzz_params = endpoint.parameters if endpoint.parameters else ['id', 'page']
+                fuzz_results = await self.fuzz_tester.fuzz_parameters(
+                    endpoint.full_url,
+                    endpoint.method,
+                    fuzz_params
+                )
+                
+                for fuzz_result in fuzz_results:
+                    if fuzz_result.is_different:
+                        vuln_result = await self.vulnerability_tester.test_unauthorized_access(
+                            fuzz_result.url,
+                            fuzz_result.method
+                        )
+                        
+                        if vuln_result.is_vulnerable:
+                            from .models import Vulnerability, Severity
+                            
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=vuln_result.vuln_type.value,
+                                severity=Severity[vuln_result.severity.upper()] if isinstance(vuln_result.severity, str) else vuln_result.severity,
+                                evidence=vuln_result.evidence,
+                                payload=vuln_result.payload,
+                                remediation=vuln_result.remediation,
+                                cwe_id=vuln_result.cwe_id
+                            )
+                            self.result.vulnerabilities.append(vuln)
+                            vulnerability_count += 1
+                            
+                            self._emit('finding', {
+                                'type': 'vulnerability',
+                                'vuln_type': vuln.vuln_type,
+                                'api_id': vuln.api_id,
+                                'severity': vuln.severity.value
+                            })
+                
+                ssrf_result = await self.vulnerability_tester.test_ssrf(endpoint.full_url)
+                if ssrf_result.is_vulnerable:
+                    from .models import Vulnerability, Severity
+                    
+                    vuln = Vulnerability(
+                        api_id=endpoint.api_id,
+                        vuln_type=ssrf_result.vuln_type.value,
+                        severity=Severity[ssrf_result.severity.upper()] if isinstance(ssrf_result.severity, str) else ssrf_result.severity,
+                        evidence=ssrf_result.evidence,
+                        payload=ssrf_result.payload,
+                        remediation=ssrf_result.remediation,
+                        cwe_id=ssrf_result.cwe_id
+                    )
+                    self.result.vulnerabilities.append(vuln)
+                    vulnerability_count += 1
+                    
+                    self._emit('finding', {
+                        'type': 'vulnerability',
+                        'vuln_type': vuln.vuln_type,
+                        'api_id': vuln.api_id,
+                        'severity': vuln.severity.value
+                    })
+                
+                info_disclosure = await self.vulnerability_tester.test_information_disclosure(
+                    endpoint.full_url
+                )
+                if info_disclosure.is_vulnerable:
+                    from .models import Vulnerability, Severity
+                    
+                    vuln = Vulnerability(
+                        api_id=endpoint.api_id,
+                        vuln_type=info_disclosure.vuln_type.value,
+                        severity=Severity[info_disclosure.severity.upper()] if isinstance(info_disclosure.severity, str) else info_disclosure.severity,
+                        evidence=info_disclosure.evidence,
+                        payload=info_disclosure.payload,
+                        remediation=info_disclosure.remediation,
+                        cwe_id=info_disclosure.cwe_id
+                    )
+                    self.result.vulnerabilities.append(vuln)
+                    vulnerability_count += 1
+                    
+                    self._emit('finding', {
+                        'type': 'vulnerability',
+                        'vuln_type': vuln.vuln_type,
+                        'api_id': vuln.api_id,
+                        'severity': vuln.severity.value
+                    })
+            
+            except Exception:
+                error_count += 1
+        
+        sensitive_findings = await self.sensitive_detector.detect(
+            responses_collected,
+            high_value_api_ids
+        )
+        sensitive_count = len(sensitive_findings)
+        
+        for finding in sensitive_findings:
+            from .models import SensitiveData
+            
+            sensitive_data = SensitiveData(
+                api_id=finding.location,
+                data_type=finding.data_type,
+                matches=finding.matches,
+                severity=finding.severity,
+                evidence=finding.evidence,
+                context=finding.context,
+                location=finding.location
+            )
+            self.result.sensitive_data.append(sensitive_data)
+            
+            self._emit('finding', {
+                'type': 'sensitive_data',
+                'data_type': finding.data_type,
+                'location': finding.location,
+                'severity': finding.severity.value
+            })
+        
+        end_time = time.time()
+        self._record_stage_stats(
+            'stage4_vulnerability_testing',
+            start_time,
+            end_time,
+            input_count,
+            vulnerability_count + sensitive_count,
+            error_count
+        )
         
         self._emit('stage_complete', {
             'stage': 'vulnerability_testing',
-            'duration': duration
+            'duration': end_time - start_time,
+            'vulnerabilities': vulnerability_count,
+            'sensitive_data': sensitive_count
         })
     
     async def _stage5_reporting(self):
         """阶段5：报告生成"""
+        self._current_stage = 'reporting'
         self._emit('stage_start', {'stage': 'reporting', 'status': 'running'})
         
         if self.file_storage:
@@ -274,6 +570,114 @@ class ChkApiScanner:
             if 'stage_stats' not in self.result.statistics:
                 self.result.statistics['stage_stats'] = []
             self.result.statistics['stage_stats'].append(stats)
+    
+    async def _save_checkpoint(self):
+        """保存扫描检查点"""
+        if not self.config.checkpoint_file:
+            return
+        
+        js_cache_state = []
+        if self.js_cache:
+            js_results = self.js_cache.get_all() if hasattr(self.js_cache, 'get_all') else []
+            for js_result in js_results:
+                js_cache_state.append({
+                    'url': getattr(js_result, 'url', ''),
+                    'apis': getattr(js_result, 'apis', []),
+                    'endpoints': getattr(js_result, 'endpoints', [])
+                })
+        
+        discovered_apis = []
+        if self.result and self.result.api_endpoints:
+            for api in self.result.api_endpoints:
+                discovered_apis.append({
+                    'path': api.path,
+                    'method': api.method,
+                    'base_url': api.base_url,
+                    'full_url': api.full_url,
+                    'api_id': api.api_id,
+                    'is_high_value': api.is_high_value
+                })
+        
+        tested_apis = []
+        if self.api_scorer and hasattr(self.api_scorer, 'get_high_value_apis'):
+            for api in self.api_scorer.get_high_value_apis():
+                tested_apis.append({
+                    'path': api.path,
+                    'method': api.method,
+                    'full_url': api.full_url,
+                    'api_id': api.api_id
+                })
+        
+        vulnerabilities = []
+        if self.result:
+            for vuln in self.result.vulnerabilities:
+                vulnerabilities.append({
+                    'api_id': vuln.api_id,
+                    'vuln_type': vuln.vuln_type,
+                    'severity': vuln.severity.value if hasattr(vuln.severity, 'value') else str(vuln.severity),
+                    'evidence': vuln.evidence,
+                    'payload': vuln.payload
+                })
+        
+        self._checkpoint = ScanCheckpoint(
+            target=self.config.target,
+            current_stage=self._current_stage,
+            stage_results=dict(self.result.statistics) if self.result else {},
+            js_cache_state=js_cache_state,
+            discovered_apis=discovered_apis,
+            tested_apis=tested_apis,
+            vulnerabilities=vulnerabilities,
+            timestamp=time.time()
+        )
+        
+        checkpoint_path = self.config.checkpoint_file
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+        with open(checkpoint_path, 'w', encoding='utf-8') as f:
+            json.dump(asdict(self._checkpoint), f, indent=2, ensure_ascii=False)
+    
+    def _load_checkpoint(self) -> Optional[ScanCheckpoint]:
+        """从文件加载检查点"""
+        if not self.config.checkpoint_file or not os.path.exists(self.config.checkpoint_file):
+            return None
+        
+        try:
+            with open(self.config.checkpoint_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            checkpoint = ScanCheckpoint(
+                target=data.get('target', ''),
+                current_stage=data.get('current_stage', 'initialization'),
+                stage_results=data.get('stage_results', {}),
+                js_cache_state=data.get('js_cache_state', []),
+                discovered_apis=data.get('discovered_apis', []),
+                tested_apis=data.get('tested_apis', []),
+                vulnerabilities=data.get('vulnerabilities', []),
+                timestamp=data.get('timestamp', 0.0)
+            )
+            return checkpoint
+        except Exception:
+            return None
+    
+    def _restore_from_checkpoint(self, checkpoint: ScanCheckpoint):
+        """从检查点恢复状态"""
+        self._current_stage = checkpoint.current_stage
+        
+        if self.result:
+            self.result.statistics = checkpoint.stage_results
+            
+            self.result.vulnerabilities = []
+            for vuln_data in checkpoint.vulnerabilities:
+                from .models import Vulnerability, Severity
+                vuln = Vulnerability(
+                    api_id=vuln_data.get('api_id', ''),
+                    vuln_type=vuln_data.get('vuln_type', ''),
+                    severity=Severity[vuln_data.get('severity', 'MEDIUM').upper()] if isinstance(vuln_data.get('severity'), str) else vuln_data.get('severity', Severity.MEDIUM),
+                    evidence=vuln_data.get('evidence', ''),
+                    payload=vuln_data.get('payload'),
+                    remediation=vuln_data.get('remediation', ''),
+                    cwe_id=vuln_data.get('cwe_id')
+                )
+                self.result.vulnerabilities.append(vuln)
     
     async def cleanup(self):
         """清理资源"""

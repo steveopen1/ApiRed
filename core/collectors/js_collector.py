@@ -88,6 +88,18 @@ class JSFingerprintCache:
     def clear_memory(self):
         """清空内存缓存"""
         self._memory_cache.clear()
+    
+    def get_all(self) -> List[ParsedJSResult]:
+        """获取所有缓存的解析结果"""
+        results = []
+        seen_hashes = set()
+        
+        for cache_key, result in self._memory_cache.items():
+            if cache_key not in seen_hashes:
+                seen_hashes.add(cache_key)
+                results.append(result)
+        
+        return results
 
 
 class APIRouter:
