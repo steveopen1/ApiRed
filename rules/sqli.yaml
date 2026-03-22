@@ -1,0 +1,97 @@
+# SQL Injection Patterns Library
+# 参考 OWASP, SQLMap, 众测实战技巧
+
+version: "1.0"
+description: "SQL 注入检测模式库"
+
+patterns:
+  - name: "sqli_union_select"
+    pattern: "UNION\\s+(ALL\\s+)?SELECT"
+    severity: "critical"
+    description: "SQL UNION 注入"
+    tags: ["sql", "injection", "union"]
+    
+  - name: "sqli_union_null"
+    pattern: "UNION\\s+(ALL\\s+)?SELECT\\s+NULL"
+    severity: "critical"
+    description: "SQL UNION NULL 注入"
+    tags: ["sql", "injection"]
+    
+  - name: "sqli_error_based"
+    pattern: "(mysql|postgresql|oracle|sqlite|mssql).*?(error|exception)"
+    severity: "high"
+    description: "数据库错误信息泄露"
+    tags: ["sql", "error", "disclosure"]
+    false_positive: "error handling|exception handling"
+    
+  - name: "sqli_boolean_blind"
+    pattern: "('|\")?\\s*(OR|AND)\\s+('|\")?\\d+('|\")?\\s*(=|>|<|<>|LIKE)"
+    severity: "high"
+    description: "布尔盲注特征"
+    tags: ["sql", "blind", "injection"]
+    
+  - name: "sqli_time_based"
+    pattern: "(SLEEP\\s*\\(|BENCHMARK\\s*\\(|WAITFOR\\s+DELAY|pg_sleep\\s*\\()"
+    severity: "high"
+    description: "时间盲注特征"
+    tags: ["sql", "time-based", "injection"]
+    
+  - name: "sqli_classic_or"
+    pattern: "('|\\\")?\\s*(OR|AND)\\s+('|\\\")?\\s*1\\s*(=|IS)"
+    severity: "critical"
+    description: "经典 OR 注入"
+    tags: ["sql", "classic", "injection"]
+    
+  - name: "sqli_comment"
+    pattern: "(--|#|\\/\\*|\\*\\/)"
+    severity: "medium"
+    description: "SQL 注释符号"
+    tags: ["sql"]
+    
+  - name: "sqli_stacked"
+    pattern: "';\\s*(SELECT|INSERT|UPDATE|DELETE|DROP)"
+    severity: "critical"
+    description: "堆叠查询注入"
+    tags: ["sql", "stacked", "injection"]
+    
+  - name: "sqli_hex编码"
+    pattern: "0x[0-9a-fA-F]+"
+    severity: "medium"
+    description: "十六进制编码数据"
+    tags: ["sql", "encoding"]
+    
+  - name: "sqli_outfile"
+    pattern: "(INTO\\s+(OUT|DUMP)FILE|LOAD_FILE\\s*\\()"
+    severity: "critical"
+    description: "文件操作注入"
+    tags: ["sql", "file操作"]
+    
+  - name: "sqli_information_schema"
+    pattern: "information_schema\\.(tables|columns)"
+    severity: "high"
+    description: "MySQL 信息_schema 查询"
+    tags: ["sql", "mysql", "recon"]
+    
+  - name: "sqli_xpath"
+    pattern: "(EXTRACTVALUE|UPDATEXML|XPATH)"
+    severity: "high"
+    description: "XPath 注入"
+    tags: ["sql", "xpath"]
+    
+  - name: "sqli_orderby"
+    pattern: "ORDER\\s+BY\\s+\\d+"
+    severity: "medium"
+    description: "ORDER BY 注入"
+    tags: ["sql", "orderby"]
+    
+  - name: "sqli_groupby"
+    pattern: "GROUP\\s+BY\\s+"
+    severity: "low"
+    description: "GROUP BY 子句"
+    tags: ["sql"]
+    
+  - name: "sqli_having"
+    pattern: "HAVING\\s+"
+    severity: "medium"
+    description: "HAVING 子句注入"
+    tags: ["sql", "having"]

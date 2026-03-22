@@ -1,0 +1,132 @@
+# XSS Patterns Library
+# 参考 OWASP, XSStrike, 众测实战技巧
+
+version: "1.0"
+description: "跨站脚本 (XSS) 检测模式库"
+
+patterns:
+  - name: "xss_script_tag"
+    pattern: "<script[^>]*>.*?<\\/script>"
+    severity: "critical"
+    description: "Script 标签 XSS"
+    tags: ["xss", "stored", "reflected"]
+    
+  - name: "xss_script_src"
+    pattern: "<script[^>]+src\\s*=\\s*[\"']?"
+    severity: "critical"
+    description: "外部脚本引入"
+    tags: ["xss", "external"]
+    
+  - name: "xss_img_onerror"
+    pattern: "<img[^>]+onerror\\s*="
+    severity: "critical"
+    description: "Img onerror XSS"
+    tags: ["xss", "reflected"]
+    
+  - name: "xss_svg_onload"
+    pattern: "<svg[^>]+onload\\s*="
+    severity: "critical"
+    description: "SVG onload XSS"
+    tags: ["xss"]
+    
+  - name: "xss_svg_data"
+    pattern: "<svg[^>]*>.*?<script"
+    severity: "critical"
+    description: "SVG 内嵌脚本"
+    tags: ["xss", "stored"]
+    
+  - name: "xss_body_onload"
+    pattern: "<body[^>]+onload\\s*="
+    severity: "critical"
+    description: "Body onload XSS"
+    tags: ["xss"]
+    
+  - name: "xss_input_focus"
+    pattern: "<input[^>]+onfocus\\s*="
+    severity: "high"
+    description: "Input onfocus XSS"
+    tags: ["xss", "autofocus"]
+    
+  - name: "xss_iframe_src"
+    pattern: "<iframe[^>]+src\\s*=\\s*[\"']?javascript:"
+    severity: "high"
+    description: "Iframe JavaScript 协议"
+    tags: ["xss"]
+    
+  - name: "xss_a_href"
+    pattern: "<a[^>]+href\\s*=\\s*[\"']?javascript:"
+    severity: "high"
+    description: "A 标签 JavaScript 协议"
+    tags: ["xss"]
+    
+  - name: "xss_link_href"
+    pattern: "<link[^>]+href\\s*=\\s*[\"']?javascript:"
+    severity: "medium"
+    description: "Link 标签 JavaScript"
+    tags: ["xss"]
+    
+  - name: "xss_embed_src"
+    pattern: "<embed[^>]+src\\s*=\\s*[\"']?javascript:"
+    severity: "high"
+    description: "Embed 标签 JavaScript"
+    tags: ["xss"]
+    
+  - name: "xss_object_data"
+    pattern: "<object[^>]+data\\s*=\\s*[\"']?javascript:"
+    severity: "high"
+    description: "Object 标签 JavaScript"
+    tags: ["xss"]
+    
+  - name: "xss_form_action"
+    pattern: "<form[^>]+action\\s*=\\s*[\"']?javascript:"
+    severity: "high"
+    description: "Form 标签 JavaScript"
+    tags: ["xss"]
+    
+  - name: "xss_event_handler"
+    pattern: "\\s+on\\w+\\s*=\\s*[\"']"
+    severity: "high"
+    description: "通用事件处理器"
+    tags: ["xss"]
+    
+  - name: "xss_data_url"
+    pattern: "data\\s*:\\s*text/html"
+    severity: "medium"
+    description: "Data URL XSS"
+    tags: ["xss"]
+    
+  - name: "xss_dom_ready"
+    pattern: "domReady|document\\.ready|\\$\\s*\\(\\s*function"
+    severity: "low"
+    description: "DOM Ready 事件"
+    tags: ["xss"]
+    
+  - name: "xss_innerHTML"
+    pattern: "innerHTML\\s*="
+    severity: "medium"
+    description: "innerHTML 赋值"
+    tags: ["xss", "dom"]
+    
+  - name: "xss_outerHTML"
+    pattern: "outerHTML\\s*="
+    severity: "medium"
+    description: "outerHTML 赋值"
+    tags: ["xss", "dom"]
+    
+  - name: "xss_jQuery_html"
+    pattern: "\\.html\\s*\\("
+    severity: "medium"
+    description: "jQuery html() 方法"
+    tags: ["xss", "dom", "jquery"]
+    
+  - name: "xss_eval"
+    pattern: "eval\\s*\\("
+    severity: "high"
+    description: "eval 函数使用"
+    tags: ["xss", "code执行"]
+    
+  - name: "xss_document_write"
+    pattern: "document\\.write\\s*\\("
+    severity: "high"
+    description: "document.write 使用"
+    tags: ["xss", "dom"]

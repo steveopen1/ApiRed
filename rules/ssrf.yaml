@@ -1,0 +1,114 @@
+# SSRF Patterns Library
+# 参考 C段的, Burp Collaborator, 众测实战技巧
+
+version: "1.0"
+description: "服务器端请求伪造 (SSRF) 检测模式库"
+
+patterns:
+  - name: "ssrf_localhost"
+    pattern: "localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0"
+    severity: "high"
+    description: "本地主机访问"
+    tags: ["ssrf"]
+    
+  - name: "ssrf_localhost_variants"
+    pattern: "(127\\.1|127\\.0\\.1|127\\.0\\.0\\.1|0x7f000001)"
+    severity: "high"
+    description: "本地主机变体"
+    tags: ["ssrf"]
+    
+  - name: "ssrf_aws_metadata"
+    pattern: "169\\.254\\.169\\.254"
+    severity: "critical"
+    description: "AWS 元数据服务"
+    tags: ["ssrf", "aws", "cloud"]
+    
+  - name: "ssrf_gcp_metadata"
+    pattern: "metadata\\.google\\.internal|metadata\\.googleapis"
+    severity: "critical"
+    description: "GCP 元数据服务"
+    tags: ["ssrf", "gcp", "cloud"]
+    
+  - name: "ssrf_azure_metadata"
+    pattern: "169\\.254\\.169\\.254.*?api-version|metadata\\.azure\\.com"
+    severity: "critical"
+    description: "Azure 元数据服务"
+    tags: ["ssrf", "azure", "cloud"]
+    
+  - name: "ssrf_alibaba_metadata"
+    pattern: "100\\.100\\.100\\.200|100\\.100\\.101\\.200"
+    severity: "critical"
+    description: "阿里云元数据服务"
+    tags: ["ssrf", "alibaba", "cloud"]
+    
+  - name: "ssrf_internal_ip_classa"
+    pattern: "10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+    severity: "high"
+    description: "A 类内网 IP"
+    tags: ["ssrf", "internal"]
+    
+  - name: "ssrf_internal_ip_classb"
+    pattern: "172\\.(1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3}"
+    severity: "high"
+    description: "B 类内网 IP"
+    tags: ["ssrf", "internal"]
+    
+  - name: "ssrf_internal_ip_classc"
+    pattern: "192\\.168\\.\\d{1,3}\\.\\d{1,3}"
+    severity: "high"
+    description: "C 类内网 IP"
+    tags: ["ssrf", "internal"]
+    
+  - name: "ssrf_url_param"
+    pattern: "(url|link|src|dest|redirect|uri|path|continue)\\s*=\\s*[\"']?http"
+    severity: "high"
+    description: "URL 相关参数"
+    tags: ["ssrf", "param"]
+    
+  - name: "ssrf_fetch_param"
+    pattern: "(fetch|request|remote|open|read)\\s*=\\s*[\"']?http"
+    severity: "high"
+    description: "Fetch 相关参数"
+    tags: ["ssrf", "param"]
+    
+  - name: "ssrf_gateway"
+    pattern: "(gateway|proxy|pipe)\\s*=\\s*[\"']?http"
+    severity: "high"
+    description: "网关/代理参数"
+    tags: ["ssrf", "param"]
+    
+  - name: "ssrf_file_protocol"
+    pattern: "file:///|file://localhost/"
+    severity: "critical"
+    description: "File 协议访问"
+    tags: ["ssrf", "lfi"]
+    
+  - name: "ssrf_dict_protocol"
+    pattern: "dict://|gopher://|ftp://"
+    severity: "high"
+    description: "其他协议利用"
+    tags: ["ssrf"]
+    
+  - name: "ssrf_ip_encoded"
+    pattern: "(%7C|%26|%3B|%0A|0x)[a-f0-9]{7,}"
+    severity: "medium"
+    description: "IP 地址编码混淆"
+    tags: ["ssrf", "encoding"]
+    
+  - name: "ssrf_ip_decimal"
+    pattern: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?!\\.\\d)"
+    severity: "low"
+    description: "点分十进制 IP"
+    tags: ["ssrf"]
+    
+  - name: "ssrf_ip_dword"
+    pattern: "\\d{10}"
+    severity: "medium"
+    description: "DWORD 格式 IP"
+    tags: ["ssrf", "obfuscation"]
+    
+  - name: "ssrf_domain_fronting"
+    pattern: "@.*@.*\\.cloudfront\\.net|@.*\\.herokuapp\\.com"
+    severity: "high"
+    description: "域名前端技术"
+    tags: ["ssrf", "cdn"]
