@@ -150,6 +150,7 @@ def rewrite_internal_host(url, base):
 
 
 
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Empty
 
