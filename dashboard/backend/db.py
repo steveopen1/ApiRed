@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS scan_results (
     status TEXT DEFAULT 'pending',
     total_apis INTEGER DEFAULT 0,
     alive_apis INTEGER DEFAULT 0,
+    critical_vulns INTEGER DEFAULT 0,
     high_vulns INTEGER DEFAULT 0,
     medium_vulns INTEGER DEFAULT 0,
     low_vulns INTEGER DEFAULT 0,
@@ -197,13 +198,14 @@ class Database:
     
     def create_scan_result(self, target_id: int, status: str = 'pending',
                           total_apis: int = 0, alive_apis: int = 0,
-                          high_vulns: int = 0, medium_vulns: int = 0,
-                          low_vulns: int = 0, result_json: str = None) -> int:
+                          critical_vulns: int = 0, high_vulns: int = 0,
+                          medium_vulns: int = 0, low_vulns: int = 0,
+                          result_json: str = None) -> int:
         """创建扫描结果"""
         with self.get_conn() as conn:
             cursor = conn.execute(
-                """INSERT INTO scan_results (target_id, status, total_apis, alive_apis, high_vulns, medium_vulns, low_vulns, result_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (target_id, status, total_apis, alive_apis, high_vulns, medium_vulns, low_vulns, result_json))
+                """INSERT INTO scan_results (target_id, status, total_apis, alive_apis, critical_vulns, high_vulns, medium_vulns, low_vulns, result_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (target_id, status, total_apis, alive_apis, critical_vulns, high_vulns, medium_vulns, low_vulns, result_json))
             conn.commit()
             return cursor.lastrowid
     
@@ -230,10 +232,12 @@ class Database:
             total_apis = conn.execute(
                 """SELECT SUM(api_count) FROM targets""").fetchone()[0] or 0
             critical = conn.execute(
+                """SELECT SUM(critical_vulns) FROM scan_results""").fetchone()[0] or 0
+            high = conn.execute(
                 """SELECT SUM(high_vulns) FROM scan_results""").fetchone()[0] or 0
-            high_vulns = conn.execute(
+            medium = conn.execute(
                 """SELECT SUM(medium_vulns) FROM scan_results""").fetchone()[0] or 0
-            medium_vulns = conn.execute(
+            low = conn.execute(
                 """SELECT SUM(low_vulns) FROM scan_results""").fetchone()[0] or 0
             
             return {
@@ -241,9 +245,9 @@ class Database:
                 "active_targets": active_targets,
                 "total_apis": total_apis,
                 "critical_vulns": critical,
-                "high_vulns": high_vulns,
-                "medium_vulns": medium_vulns,
-                "low_vulns": 0
+                "high_vulns": high,
+                "medium_vulns": medium,
+                "low_vulns": low
             }
 
 

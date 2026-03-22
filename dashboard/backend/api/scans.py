@@ -49,6 +49,7 @@ async def run_scan(scan_id: int, target_id: int, target_url: str):
             'status': 'completed',
             'total_apis': 42,
             'alive_apis': 38,
+            'critical_vulns': 1,
             'high_vulns': 2,
             'medium_vulns': 5,
             'low_vulns': 10
@@ -57,7 +58,7 @@ async def run_scan(scan_id: int, target_id: int, target_url: str):
         db.update_target(target_id, 
                         status='completed',
                         api_count=result['alive_apis'],
-                        vuln_count=result['high_vulns'] + result['medium_vulns'],
+                        vuln_count=result['critical_vulns'] + result['high_vulns'] + result['medium_vulns'],
                         last_scan_at=datetime.now().isoformat())
         
         db.create_scan_result(
@@ -65,6 +66,7 @@ async def run_scan(scan_id: int, target_id: int, target_url: str):
             status='completed',
             total_apis=result['total_apis'],
             alive_apis=result['alive_apis'],
+            critical_vulns=result['critical_vulns'],
             high_vulns=result['high_vulns'],
             medium_vulns=result['medium_vulns'],
             low_vulns=result['low_vulns'],
