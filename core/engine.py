@@ -50,6 +50,7 @@ class EngineConfig:
     concurrent_targets: int = 5
     aggregate: bool = False
     agent_mode: bool = False
+    incremental: bool = False
     # 漏洞测试开关
     enable_sql_test: bool = True
     enable_xss_test: bool = True
@@ -206,19 +207,21 @@ class ScanEngine:
             self.analyzer_agent = AnalyzerAgent(analyzer_config, llm_client)
             self.tester_agent = TesterAgent(tester_config, llm_client)
         
-        self._incremental_scanner: Optional[IncrementalScanner] = None
+        self._incremental_scanner = None
+        self._url_deduplicator = None
         if getattr(self.config, 'resume', False) or getattr(self.config, 'incremental', False):
             storage_path = os.path.join(results_dir, "incremental.db")
             try:
+                from .incremental_scanner import IncrementalScanner, URLDeduplicator
                 self._incremental_scanner = IncrementalScanner(storage_path)
+                self._url_deduplicator = URLDeduplicator()
                 latest = self._incremental_scanner.get_latest_snapshot(self.config.target)
                 if latest:
                     print(f"Found previous scan snapshot: {latest.api_count} APIs, {latest.js_count} JS files")
             except Exception as e:
                 print(f"Incremental scanner init error: {e}")
                 self._incremental_scanner = None
-        
-        self._url_deduplicator = URLDeduplicator()
+                self._url_deduplicator = None
         
         self.result = ScanResult(
             target_url=self.config.target,
@@ -608,7 +611,7 @@ class ScanEngine:
             except Exception:
                 pass
         
-        sensitive_findings = await self._sensitive_detector.detect(
+        sensitive_findings = self._sensitive_detector.detect(
             responses_collected,
             high_value_api_ids
         )
