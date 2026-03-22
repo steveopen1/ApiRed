@@ -233,13 +233,17 @@ class Database:
                 """SELECT SUM(high_vulns) FROM scan_results""").fetchone()[0] or 0
             high_vulns = conn.execute(
                 """SELECT SUM(medium_vulns) FROM scan_results""").fetchone()[0] or 0
+            medium_vulns = conn.execute(
+                """SELECT SUM(low_vulns) FROM scan_results""").fetchone()[0] or 0
             
             return {
                 "total_projects": projects,
                 "active_targets": active_targets,
                 "total_apis": total_apis,
                 "critical_vulns": critical,
-                "high_vulns": high_vulns
+                "high_vulns": high_vulns,
+                "medium_vulns": medium_vulns,
+                "low_vulns": 0
             }
 
 

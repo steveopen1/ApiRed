@@ -22,6 +22,13 @@ class ReportSummary(BaseModel):
     low_vulns: int
     scan_date: str
 
+@router.get("/vulnerabilities")
+async def get_vulnerabilities(project_id: Optional[int] = None):
+    """获取漏洞列表"""
+    return {
+        "vulnerabilities": []
+    }
+
 @router.get("/{project_id}/summary", response_model=ReportSummary)
 async def get_report_summary(project_id: int):
     """获取报告摘要"""
@@ -119,10 +126,3 @@ async def export_report(project_id: int, format: str = Query(default="json")):
     
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
-
-@router.get("/vulnerabilities")
-async def get_vulnerabilities(project_id: Optional[int] = None):
-    """获取漏洞列表"""
-    return {
-        "vulnerabilities": []
-    }
