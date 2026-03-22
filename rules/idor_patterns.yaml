@@ -1,0 +1,237 @@
+# IDOR Patterns Library
+# 参考 tomnomnom/gf 和 Bugcrowd/HackerOne 众测技巧
+# 用于从海量 URL 中快速筛选可能存在 IDOR 漏洞的端点
+
+version: "1.0"
+description: "IDOR 参数模式库 - 用于识别可能存在越权访问的 API 端点"
+
+# ID 参数名称模式 (按优先级排序)
+id_patterns:
+  # 基础用户/账户 ID
+  - name: "user_id"
+    pattern: "(user[_-]?id|userid|uid)"
+    severity: "high"
+    description: "用户 ID 参数"
+    
+  - name: "account_id"
+    pattern: "(account[_-]?id|accountid)"
+    severity: "high"
+    description: "账户 ID 参数"
+    
+  - name: "profile_id"
+    pattern: "(profile[_-]?id|profileid|profile[_-]?no)"
+    severity: "medium"
+    description: "用户资料 ID"
+    
+  - name: "member_id"
+    pattern: "(member[_-]?id|memberid|member[_-]?no)"
+    severity: "medium"
+    description: "会员 ID"
+    
+  - name: "customer_id"
+    pattern: "(customer[_-]?id|customerid|cust[_-]?id)"
+    severity: "high"
+    description: "客户 ID"
+    
+  - name: "client_id"
+    pattern: "(client[_-]?id|clientid|cl[_-]?id)"
+    severity: "medium"
+    description: "客户端 ID"
+    
+  - name: "session_id"
+    pattern: "(session[_-]?id|sessionid|sid)"
+    severity: "high"
+    description: "会话 ID (可能包含敏感信息)"
+    
+  - name: "token_id"
+    pattern: "(token[_-]?id|tokenid)"
+    severity: "high"
+    description: "Token ID"
+
+  # 业务资源 ID
+  - name: "order_id"
+    pattern: "(order[_-]?id|orderid|order[_-]?no|order[_-]?num)"
+    severity: "high"
+    description: "订单 ID"
+    
+  - name: "transaction_id"
+    pattern: "(transaction[_-]?id|transactionid|txn[_-]?id|ref[_-]?id)"
+    severity: "critical"
+    description: "交易 ID (涉及资金)"
+    
+  - name: "payment_id"
+    pattern: "(payment[_-]?id|paymentid|pay[_-]?id|invoice[_-]?id)"
+    severity: "critical"
+    description: "支付 ID (涉及资金)"
+    
+  - name: "invoice_id"
+    pattern: "(invoice[_-]?id|invoiceid|bill[_-]?id)"
+    severity: "high"
+    description: "发票 ID"
+    
+  - name: "product_id"
+    pattern: "(product[_-]?id|productid|item[_-]?id|sku|article[_-]?id)"
+    severity: "low"
+    description: "商品/产品 ID"
+    
+  - name: "document_id"
+    pattern: "(document[_-]?id|doc[_-]?id|file[_-]?id|attachment[_-]?id)"
+    severity: "high"
+    description: "文档/文件 ID"
+    
+  - name: "post_id"
+    pattern: "(post[_-]?id|article[_-]?id|blog[_-]?id|news[_-]?id)"
+    severity: "low"
+    description: "文章/帖子 ID"
+    
+  - name: "comment_id"
+    pattern: "(comment[_-]?id|reply[_-]?id|message[_-]?id)"
+    severity: "low"
+    description: "评论/消息 ID"
+    
+  - name: "id"
+    pattern: "(?<!&)\\bid(?!\\w)(?!=)"  # 独立的 id 参数
+    severity: "medium"
+    description: "通用 ID 参数"
+
+# 路径模式 (URL 路径中包含敏感资源)
+path_patterns:
+  # 用户相关路径
+  - name: "user_detail"
+    pattern: "/users?/\\d+"
+    severity: "high"
+    description: "用户详情页"
+    
+  - name: "user_profile"
+    pattern: "/(profile|account|dashboard|settings)/"
+    severity: "medium"
+    description: "用户个人中心"
+    
+  - name: "user_orders"
+    pattern: "/(orders?|transactions?|payments?|invoices?)/"
+    severity: "high"
+    description: "用户订单/交易"
+    
+  - name: "user_files"
+    pattern: "/(documents?|files?|attachments?|uploads?)/"
+    severity: "medium"
+    description: "用户文档/文件"
+    
+  - name: "admin_panel"
+    pattern: "/(admin|administrator|manage|cms|backend|panel|console)/"
+    severity: "critical"
+    description: "管理后台"
+    
+  - name: "api_endpoint"
+    pattern: "/api/(v\\d+/)?(users?|accounts?|profiles?|orders?|payments?|invoices?|products?|documents?|files?)/"
+    severity: "high"
+    description: "API 端点"
+    
+  - name: "export_data"
+    pattern: "/(export|download|dump|csv|json|xml)/"
+    severity: "medium"
+    description: "数据导出端点"
+    
+  - name: "internal_api"
+    pattern: "/(internal|private|secret|hidden)/"
+    severity: "high"
+    description: "内部 API"
+    
+  - name: "old_version"
+    pattern: "/(v0|v1|old|legacy|deprecated)/"
+    severity: "medium"
+    description: "老旧版本 API"
+
+# 敏感操作模式
+action_patterns:
+  - name: "view_other"
+    pattern: "(view|show|get|fetch|read|detail|info)"
+    severity: "medium"
+    description: "查看操作"
+    
+  - name: "edit_resource"
+    pattern: "(edit|update|modify|change|put|patch)"
+    severity: "high"
+    description: "编辑操作"
+    
+  - name: "delete_resource"
+    pattern: "(delete|remove|destroy|drop)"
+    severity: "critical"
+    description: "删除操作"
+    
+  - name: "export_data"
+    pattern: "(export|download|dump|extract)"
+    severity: "high"
+    description: "导出操作"
+    
+  - name: "change_password"
+    pattern: "(password|passwd|pwd|reset|change)"
+    severity: "critical"
+    description: "密码操作"
+    
+  - name: "payment_operation"
+    pattern: "(payment|pay|refund|transfer|withdraw|deposit)"
+    severity: "critical"
+    description: "支付操作"
+
+# 优先级计算规则
+priority_rules:
+  # 资源类型权重
+  resource_weights:
+    transaction: 10
+    payment: 10
+    invoice: 8
+    order: 7
+    user: 6
+    account: 6
+    session: 6
+    token: 6
+    document: 5
+    file: 5
+    profile: 4
+    member: 4
+    customer: 4
+    client: 3
+    product: 2
+    post: 2
+    comment: 2
+    other: 1
+    
+  # 操作类型权重
+  action_weights:
+    delete: 10
+    payment: 10
+    change_password: 9
+    export_data: 8
+    edit_resource: 6
+    view_other: 4
+    
+  # 路径权重
+  path_weights:
+    admin: 10
+    api: 5
+    internal: 5
+    old_version: 3
+
+# 排除规则 (这些模式通常不是 IDOR)
+exclude_patterns:
+  - name: "captcha"
+    pattern: "(captcha|verify|recaptcha|hcaptcha)"
+    
+  - name: "csrf"
+    pattern: "(csrf|xsrf|_token|nonce)"
+    
+  - name: "pagination"
+    pattern: "(page|limit|offset|per[_-]?page|per[_-]?page)"
+    
+  - name: "search"
+    pattern: "(search|query|q=|keyword|filter)"
+    
+  - name: "sort"
+    pattern: "(sort|order|by|dir|direction)"
+    
+  - name: "timestamp"
+    pattern: "(timestamp|ts|created[_-]?at|updated[_-]?at)"
+    
+  - name: "session_csrf"
+    pattern: "(session|affiliate|referral)"

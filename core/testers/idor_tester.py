@@ -2,10 +2,12 @@
 IDOR Tester Module
 IDOR 专项测试器 - 实现参数替换/值替换测试
 参考 Bugcrowd/HackerOne 众测实战技巧
+参考 tomnomnom/gf 模式匹配
 """
 
 import json
 import hashlib
+import re
 from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -35,6 +37,7 @@ class IDORTester:
     4. 数组包装 - user_id[]=123
     5. 参数污染 - 同一参数多个值
     6. 响应差异分析 - 判断真假绕过
+    7. GF 模式库支持 - 自定义 IDOR 参数规则
     """
     
     SENSITIVE_PARAM_NAMES = {
@@ -58,9 +61,32 @@ class IDORTester:
         'address': r'\d{1,5}\s+[\w\s]+(?:street|st|avenue|ave|road|rd|blvd)',
     }
     
-    def __init__(self, http_client):
+    def __init__(self, http_client, custom_patterns: Optional[List[str]] = None):
         self.http_client = http_client
         self._test_results: List[IDORTestResult] = []
+        self._url_greper = None
+        self._custom_patterns = custom_patterns or []
+        self._init_gf_patterns()
+    
+    def _init_gf_patterns(self):
+        """初始化 GF 模式支持"""
+        try:
+            from ..utils.url_greper import URLGreper
+            self._url_greper = URLGreper()
+        except ImportError:
+            self._url_greper = None
+    
+    def set_custom_patterns(self, patterns: List[str]):
+        """
+        设置自定义 IDOR 参数模式
+        
+        Args:
+            patterns: 正则表达式模式列表，例如:
+                - r"user_\d+_id"
+                - r"record_\d+"
+                - r"item_\d+"
+        """
+        self._custom_patterns = patterns
     
     async def test_idor(
         self,

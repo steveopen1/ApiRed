@@ -19,6 +19,7 @@ from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTie
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
 from .testers.idor_tester import IDORTester
+from .utils.url_greper import URLGreper
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
 from .agents.orchestrator import ScanContext
@@ -184,6 +185,7 @@ class ScanEngine:
         self._fuzz_tester = FuzzTester(self._http_client)
         self._vulnerability_tester = VulnerabilityTester(self._http_client)
         self._idor_tester = IDORTester(self._http_client)
+        self._url_greper = URLGreper()
         
         self._browser_collector: Optional[HeadlessBrowserCollector] = None
         self._browser_enabled = getattr(self.config, 'chrome', False)
@@ -681,6 +683,23 @@ class ScanEngine:
     async def _run_vuln_test(self) -> Dict[str, Any]:
         """漏洞测试"""
         high_value_apis = [e for e in self.result.api_endpoints if e.is_high_value] if self.result else []
+        
+        if self._url_greper and high_value_apis:
+            try:
+                urls_to_scan = [api.full_url for api in high_value_apis]
+                url_matches = self._url_greper.scan_urls(urls_to_scan)
+                
+                if url_matches:
+                    matched_urls = {m.url for m in url_matches}
+                    high_value_apis = [
+                        api for api in high_value_apis 
+                        if api.full_url in matched_urls
+                    ]
+                    
+                    stats = self._url_greper.get_statistics(url_matches)
+                    print(f"[IDOR Scan] Filtered {stats['total']} high-risk URLs for IDOR testing")
+            except Exception as e:
+                print(f"URL greper error: {e}")
         
         vuln_count = 0
         from .models import Severity
