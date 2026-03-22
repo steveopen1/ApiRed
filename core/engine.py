@@ -18,6 +18,7 @@ from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
+from .testers.idor_tester import IDORTester
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
 from .agents.orchestrator import ScanContext
@@ -182,6 +183,7 @@ class ScanEngine:
         
         self._fuzz_tester = FuzzTester(self._http_client)
         self._vulnerability_tester = VulnerabilityTester(self._http_client)
+        self._idor_tester = IDORTester(self._http_client)
         
         self._browser_collector: Optional[HeadlessBrowserCollector] = None
         self._browser_enabled = getattr(self.config, 'chrome', False)
@@ -812,6 +814,40 @@ class ScanEngine:
                         if self.result:
                             self.result.vulnerabilities.append(vuln)
                         vuln_count += 1
+                
+                # IDOR 专项测试
+                if getattr(cfg, 'enable_idor_test', True):
+                    try:
+                        idor_params = {}
+                        if endpoint.parameters:
+                            for param in endpoint.parameters:
+                                if param.get('name'):
+                                    idor_params[param['name']] = param.get('default', param.get('example', 'test'))
+                        
+                        idor_results = await self._idor_tester.test_idor(
+                            url=endpoint.full_url,
+                            method=endpoint.method,
+                            params=idor_params if idor_params else None,
+                            headers={'Cookie': self.config.cookies} if self.config.cookies else None
+                        )
+                        
+                        for idor_result in idor_results:
+                            if idor_result.is_vulnerable:
+                                from .models import Vulnerability
+                                vuln = Vulnerability(
+                                    api_id=endpoint.api_id,
+                                    vuln_type='IDOR',
+                                    severity=Severity.HIGH if idor_result.severity == 'high' else Severity.MEDIUM,
+                                    evidence=idor_result.evidence,
+                                    payload=f"technique={idor_result.bypass_technique}",
+                                    remediation="实施对象级访问控制，验证用户是否有权访问请求的资源",
+                                    cwe_id="CWE-639"
+                                )
+                                if self.result:
+                                    self.result.vulnerabilities.append(vuln)
+                                vuln_count += 1
+                    except Exception:
+                        pass
                         
             except Exception:
                 pass

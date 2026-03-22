@@ -2,10 +2,13 @@
 Bypass Techniques Library
 Bypass 技术库 - 绕过 API 安全限制
 参考 0x727/ChkApi bypass 技术
+以及 Bugcrowd/HackerOne 众测技巧
 """
 
 import random
 import string
+import re
+import json
 from typing import Dict, List, Any, Callable, Optional
 from dataclasses import dataclass
 
@@ -15,9 +18,10 @@ class BypassTechnique:
     """Bypass 技术"""
     name: str
     description: str
-    bypass_type: str  # status, header, path, parameter
+    bypass_type: str  # status, header, path, parameter, idor, method, body
     apply_func: Callable
     expected_status: int = 200
+    category: str = "general"  # general, idor, 403, 401
 
 
 class BypassTechniques:
@@ -51,141 +55,417 @@ class BypassTechniques:
     def get_all_techniques() -> List[BypassTechnique]:
         """获取所有 Bypass 技术"""
         return [
-            # ========== Header Bypass ==========
+            # ========== IDOR Parameter Manipulation ==========
             BypassTechnique(
-                name="X-Forwarded-For IP",
-                description="使用 X-Forwarded-For 头绕过 IP 限制",
-                bypass_type="header",
+                name="IDOR - Array Wrap",
+                description="参数数组包装绕过 IDOR",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'X-Forwarded-For': BypassTechniques.get_random_ip()}
-                }
+                    'params': {k: [v] for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="X-Real-IP",
-                description="使用 X-Real-IP 头绕过",
-                bypass_type="header",
+                name="IDOR - PHP Array Syntax",
+                description="PHP 数组语法绕过",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'X-Real-IP': BypassTechniques.get_random_ip()}
-                }
+                    'params': {k: f"{v}[]" for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="X-Originating-IP",
-                description="使用 X-Originating-IP 头",
-                bypass_type="header",
+                name="IDOR - JSON Nesting",
+                description="JSON 嵌套混淆绕过",
+                bypass_type="body",
                 apply_func=lambda original: {
-                    'headers': {'X-Originating-IP': BypassTechniques.get_random_ip()}
-                }
+                    'data': json.dumps({k: {"value": v} for k, v in original.get('params', {}).items()}) if original.get('params') else '{"value":1}'
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="CF-Connecting-IP",
-                description="Cloudflare Connecting-IP 头",
-                bypass_type="header",
+                name="IDOR - JSON Wrapper",
+                description="JSON 包装绕过",
+                bypass_type="body",
                 apply_func=lambda original: {
-                    'headers': {'CF-Connecting-IP': BypassTechniques.get_random_ip()}
-                }
+                    'data': json.dumps({"data": original.get('params', {})}) if original.get('params') else '{"data":{}}'
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="User-Agent Spoofing",
-                description="伪装成 Googlebot",
-                bypass_type="header",
+                name="IDOR - Type Confusion",
+                description="参数类型混淆 (id=1 → id=abc)",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'User-Agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)'}
-                }
+                    'params': {k: 'abc' if k.lower() in ['id', 'user_id', 'uid'] else v for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="Referer Spoofing",
-                description="伪造 Referer 头",
-                bypass_type="header",
+                name="IDOR - Null Value",
+                description="参数设为空值绕过",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'Referer': original.get('url', 'https://google.com')}
-                }
+                    'params': {k: '' for k in original.get('params', {}).keys()}
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="Requested-With XMLHttpRequest",
-                description="添加 XMLHttpRequest 头绕过 CORS",
-                bypass_type="header",
+                name="IDOR - Double Value",
+                description="参数值双重传递",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'X-Requested-With': 'XMLHttpRequest'}
-                }
+                    'params': {k: [v, v] for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="Authorization Bearer",
-                description="添加空的 Authorization 头",
-                bypass_type="header",
+                name="IDOR - Param Pollution",
+                description="参数污染 (同一参数多个值)",
+                bypass_type="parameter",
                 apply_func=lambda original: {
-                    'headers': {'Authorization': 'Bearer '}
-                }
+                    'params': {k: f"{v}&{k}={v}" for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
             ),
+
+            # ========== 403/401 Path Bypass ==========
             BypassTechnique(
-                name="Content-Type JSON",
-                description="强制 JSON Content-Type",
-                bypass_type="header",
-                apply_func=lambda original: {
-                    'headers': {'Content-Type': 'application/json'}
-                }
-            ),
-            
-            # ========== Path Bypass ==========
-            BypassTechnique(
-                name="Add ..;/ to path",
-                description="路径遍历绕过",
+                name="403 - Add /..;/ to path",
+                description="路径遍历绕过 403",
                 bypass_type="path",
                 apply_func=lambda original: {
                     'path': original.get('path', '') + '/..;/'
-                }
+                },
+                category="403"
             ),
             BypassTechnique(
-                name="Double encode path",
+                name="403 - Double URL Encode",
                 description="双 URL 编码绕过",
                 bypass_type="path",
                 apply_func=lambda original: {
                     'path': original.get('path', '').replace('/', '%2F')
-                }
+                },
+                category="403"
             ),
             BypassTechnique(
-                name="Add /./ to path",
+                name="403 - Add /./ to path",
                 description="添加 /./ 绕过",
                 bypass_type="path",
                 apply_func=lambda original: {
                     'path': original.get('path', '').replace('/api/', '/api/./')
-                }
+                },
+                category="403"
             ),
             BypassTechnique(
-                name="Remove /v1/ prefix",
+                name="403 - Remove /v1/ prefix",
                 description="移除版本前缀",
                 bypass_type="path",
                 apply_func=lambda original: {
                     'path': original.get('path', '').replace('/v1/', '/')
-                }
+                },
+                category="403"
             ),
             BypassTechnique(
-                name="Add /v2/ prefix",
+                name="403 - Add /v2/ prefix",
                 description="尝试 v2 版本",
                 bypass_type="path",
                 apply_func=lambda original: {
                     'path': original.get('path', '').replace('/api/', '/api/v2/')
-                }
+                },
+                category="403"
             ),
-            
-            # ========== Parameter Bypass ==========
             BypassTechnique(
-                name="Add null byte to parameter",
+                name="403 - Add .json to path",
+                description="添加文件后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '.json'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add .xml to path",
+                description="添加 .xml 后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '.xml'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add ; to path",
+                description="分号绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + ';'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add %20 to path",
+                description="空格 URL 编码绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('/', '/%20/')
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Path case manipulation",
+                description="路径大小写变换 (admin → ADMIN)",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('admin', 'ADMIN')
+                },
+                category="403"
+            ),
+
+            # ========== Header Bypass ==========
+            BypassTechnique(
+                name="Header - X-Forwarded-For IP",
+                description="使用 X-Forwarded-For 头绕过 IP 限制",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Forwarded-For': BypassTechniques.get_random_ip()}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Real-IP",
+                description="使用 X-Real-IP 头绕过",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Real-IP': BypassTechniques.get_random_ip()}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Originating-IP",
+                description="使用 X-Originating-IP 头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Originating-IP': BypassTechniques.get_random_ip()}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - CF-Connecting-IP",
+                description="Cloudflare Connecting-IP 头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'CF-Connecting-IP': BypassTechniques.get_random_ip()}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Forwarded-Host",
+                description="X-Forwarded-Host 头绕过",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Forwarded-Host': original.get('url', 'localhost')}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Host",
+                description="X-Host 头绕过",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Host': 'localhost'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Original-URL",
+                description="X-Original-URL 覆盖路径 (Apache)",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Original-URL': original.get('path', '/admin')}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Rewrite-URL",
+                description="X-Rewrite-URL 重写路径 (ISAPI)",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Rewrite-URL': original.get('path', '/admin')}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - User-Agent Googlebot",
+                description="伪装成 Googlebot",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'User-Agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - Referer Spoofing",
+                description="伪造 Referer 头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'Referer': original.get('url', 'https://google.com')}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - Requested-With XMLHttpRequest",
+                description="添加 XMLHttpRequest 头绕过 CORS",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Requested-With': 'XMLHttpRequest'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - Authorization Bearer",
+                description="添加空的 Authorization 头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'Authorization': 'Bearer '}
+                },
+                category="401"
+            ),
+            BypassTechnique(
+                name="Header - Content-Type JSON",
+                description="强制 JSON Content-Type",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'Content-Type': 'application/json'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - Front-End-Https",
+                description="Front-End-Https 头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'Front-End-Https': 'on'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-HTTP-Method-Override",
+                description="方法覆盖头",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-HTTP-Method-Override': 'GET'}
+                },
+                category="403"
+            ),
+
+            # ========== HTTP Method Bypass ==========
+            BypassTechnique(
+                name="Method - POST to GET",
+                description="POST 改为 GET",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'GET'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - GET to POST",
+                description="GET 改为 POST",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'POST'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - CHANGE to PUT",
+                description="使用 PUT 方法",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'PUT'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - CHANGE to PATCH",
+                description="使用 PATCH 方法",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'PATCH'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - CHANGE to DELETE",
+                description="使用 DELETE 方法",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'DELETE'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - HEAD",
+                description="使用 HEAD 方法",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'HEAD'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Method - OPTIONS",
+                description="使用 OPTIONS 方法探测",
+                bypass_type="method",
+                apply_func=lambda original: {
+                    'method': 'OPTIONS'
+                },
+                category="403"
+            ),
+
+            # ========== Body/Parameter Bypass ==========
+            BypassTechnique(
+                name="Body - Add null byte",
                 description="参数添加空字节",
                 bypass_type="parameter",
                 apply_func=lambda original: {
                     'params': {k: v + '\x00' for k, v in original.get('params', {}).items()}
-                }
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="Convert to array",
-                description="参数转换为数组",
+                name="Body - JSON to Form",
+                description="JSON 转为表单格式",
+                bypass_type="body",
+                apply_func=lambda original: {
+                    'headers': {'Content-Type': 'application/x-www-form-urlencoded'},
+                    'data': original.get('data', '')
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Body - Send empty body",
+                description="发送空请求体",
+                bypass_type="body",
+                apply_func=lambda original: {
+                    'data': ''
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Body - _method parameter",
+                description="添加 _method 参数（Ruby on Rails）",
                 bypass_type="parameter",
                 apply_func=lambda original: {
-                    'params': {k: [v] for k, v in original.get('params', {}).items()}
-                }
+                    'params': {
+                        **original.get('params', {}),
+                        '_method': 'POST'
+                    }
+                },
+                category="403"
             ),
             BypassTechnique(
-                name="Add common admin parameters",
+                name="Parameter - Add admin parameters",
                 description="添加管理员参数",
                 bypass_type="parameter",
                 apply_func=lambda original: {
@@ -195,79 +475,92 @@ class BypassTechniques:
                         'role': 'admin',
                         'user_type': 'administrator'
                     }
-                }
-            ),
-            
-            # ========== HTTP Method Bypass ==========
-            BypassTechnique(
-                name="Change POST to GET",
-                description="POST 改为 GET",
-                bypass_type="method",
-                apply_func=lambda original: {
-                    'method': 'GET'
-                }
+                },
+                category="idor"
             ),
             BypassTechnique(
-                name="Change GET to POST",
-                description="GET 改为 POST",
-                bypass_type="method",
-                apply_func=lambda original: {
-                    'method': 'POST'
-                }
-            ),
-            BypassTechnique(
-                name="Change to PUT",
-                description="使用 PUT 方法",
-                bypass_type="method",
-                apply_func=lambda original: {
-                    'method': 'PUT'
-                }
-            ),
-            BypassTechnique(
-                name="Change to PATCH",
-                description="使用 PATCH 方法",
-                bypass_type="method",
-                apply_func=lambda original: {
-                    'method': 'PATCH'
-                }
-            ),
-            BypassTechnique(
-                name="Change to DELETE",
-                description="使用 DELETE 方法",
-                bypass_type="method",
-                apply_func=lambda original: {
-                    'method': 'DELETE'
-                }
-            ),
-            
-            # ========== Body Bypass ==========
-            BypassTechnique(
-                name="Send empty body",
-                description="发送空请求体",
-                bypass_type="body",
-                apply_func=lambda original: {
-                    'data': ''
-                }
-            ),
-            BypassTechnique(
-                name="JSON to Form",
-                description="JSON 转为表单格式",
-                bypass_type="body",
-                apply_func=lambda original: {
-                    'headers': {'Content-Type': 'application/x-www-form-urlencoded'},
-                    'data': original.get('data', '')
-                }
-            ),
-            BypassTechnique(
-                name="Add _method parameter",
-                description="添加 _method 参数（Ruby on Rails）",
+                name="Parameter - is_admin=1",
+                description="添加 is_admin 参数",
                 bypass_type="parameter",
                 apply_func=lambda original: {
                     'params': {
                         **original.get('params', {}),
-                        '_method': 'POST'
+                        'is_admin': '1'
                     }
-                }
+                },
+                category="idor"
+            ),
+            BypassTechnique(
+                name="Parameter - access_level=admin",
+                description="添加 access_level 参数",
+                bypass_type="parameter",
+                apply_func=lambda original: {
+                    'params': {
+                        **original.get('params', {}),
+                        'access_level': 'admin'
+                    }
+                },
+                category="idor"
+            ),
+            BypassTechnique(
+                name="Parameter - role_id manipulation",
+                description="role_id 参数操作",
+                bypass_type="parameter",
+                apply_func=lambda original: {
+                    'params': {
+                        **original.get('params', {}),
+                        'role_id': '1',
+                        'role': 'admin'
+                    }
+                },
+                category="idor"
+            ),
+
+            # ========== 老旧 API 版本测试 ==========
+            BypassTechnique(
+                name="Version - Test /v1/ endpoint",
+                description="测试 v1 版本 API",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('/v2/', '/v1/').replace('/v3/', '/v1/')
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Version - Test /v3/ endpoint",
+                description="测试 v3 版本 API",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('/v1/', '/v3/').replace('/v2/', '/v3/')
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Version - Test /api/ without version",
+                description="测试无版本前缀 API",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': re.sub(r'/v\d+/', '/', original.get('path', ''))
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Version - Test /old/ endpoint",
+                description="测试 /old/ 路径",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('/api/', '/old/api/')
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Version - Test /deprecated/ endpoint",
+                description="测试 /deprecated/ 路径",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').replace('/api/', '/deprecated/api/')
+                },
+                category="403"
             ),
         ]
     
