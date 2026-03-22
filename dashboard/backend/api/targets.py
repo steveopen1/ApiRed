@@ -41,7 +41,7 @@ def _parse_target(row: dict) -> TargetResponse:
     """解析目标数据"""
     return TargetResponse(**row)
 
-@router.post("/targets", response_model=TargetResponse)
+@router.post("/", response_model=TargetResponse)
 async def create_target(target: TargetCreate):
     """添加目标"""
     target_id = db.create_target(
@@ -49,12 +49,13 @@ async def create_target(target: TargetCreate):
         url=target.url,
         name=target.name
     )
-    targets = db.get_targets(target_id=target_id)
-    if targets:
-        return _parse_target(targets[0])
+    targets = db.get_targets(project_id=target.project_id)
+    for t in targets:
+        if t['id'] == target_id:
+            return _parse_target(t)
     raise HTTPException(status_code=500, detail="Failed to create target")
 
-@router.get("/targets", response_model=TargetListResponse)
+@router.get("/", response_model=TargetListResponse)
 async def list_targets(
     project_id: Optional[int] = None,
     status: Optional[str] = None,
@@ -68,7 +69,7 @@ async def list_targets(
         total=len(targets)
     )
 
-@router.get("/targets/{target_id}", response_model=TargetResponse)
+@router.get("/{target_id}", response_model=TargetResponse)
 async def get_target(target_id: int):
     """获取目标详情"""
     targets = db.get_targets()
@@ -77,7 +78,7 @@ async def get_target(target_id: int):
             return _parse_target(t)
     raise HTTPException(status_code=404, detail="Target not found")
 
-@router.put("/targets/{target_id}", response_model=TargetResponse)
+@router.put("/{target_id}", response_model=TargetResponse)
 async def update_target(target_id: int, target: TargetUpdate):
     """更新目标"""
     kwargs = {}
@@ -96,7 +97,7 @@ async def update_target(target_id: int, target: TargetUpdate):
             return _parse_target(t)
     raise HTTPException(status_code=404, detail="Target not found")
 
-@router.delete("/targets/{target_id}")
+@router.delete("/{target_id}")
 async def delete_target(target_id: int):
     """删除目标"""
     deleted = db.delete_target(target_id)
@@ -104,7 +105,7 @@ async def delete_target(target_id: int):
         raise HTTPException(status_code=404, detail="Target not found")
     return {"message": "Target deleted"}
 
-@router.post("/targets/{target_id}/scan")
+@router.post("/{target_id}/scan")
 async def start_scan(target_id: int):
     """启动扫描"""
     targets = db.get_targets()

@@ -176,7 +176,7 @@ class Database:
         
         with self.get_conn() as conn:
             conn.execute(
-                f"""UPDATE targets SET {set_clause} = ? WHERE id = ?""",
+                f"""UPDATE targets SET {set_clause} WHERE id = ?""",
                 values + [target_id])
             conn.commit()
             return True

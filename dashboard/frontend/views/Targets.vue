@@ -83,7 +83,7 @@ export default {
   methods: {
     async fetchTargets() {
       try {
-        const response = await fetch('/api/targets/targets')
+        const response = await fetch('/api/targets')
         const data = await response.json()
         this.targets = data.targets || []
       } catch (e) {
