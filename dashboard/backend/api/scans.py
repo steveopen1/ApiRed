@@ -77,17 +77,20 @@ async def run_scan(scan_id: int, target_id: int, target_url: str):
         db.update_target(target_id, status='failed')
         _active_scans[scan_id] = {'status': 'failed', 'error': str(e)}
 
-@router.post("/scans", response_model=ScanResponse)
+@router.post("/", response_model=ScanResponse)
 async def create_scan(scan: ScanCreate, background_tasks: BackgroundTasks):
     """创建扫描任务"""
-    targets = db.get_targets(target_id=scan.target_id)
-    if not targets:
+    all_targets = db.get_targets()
+    target = None
+    for t in all_targets:
+        if t['id'] == scan.target_id:
+            target = t
+            break
+    
+    if not target:
         raise HTTPException(status_code=404, detail="Target not found")
     
-    target = targets[0]
     now = datetime.now().isoformat()
-    scan_id = int(now.timestamp())
-    
     scan_result_id = db.create_scan_result(
         target_id=scan.target_id,
         status='running'
@@ -110,11 +113,11 @@ async def create_scan(scan: ScanCreate, background_tasks: BackgroundTasks):
         completed_at=None
     )
 
-@router.get("/scans/{scan_id}", response_model=ScanResponse)
+@router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(scan_id: int):
     """获取扫描状态"""
     scan_results = db.get_scan_results(limit=1000)
-    for i, r in enumerate(scan_results):
+    for r in scan_results:
         if r['id'] == scan_id:
             return ScanResponse(
                 id=r['id'],
@@ -130,7 +133,7 @@ async def get_scan(scan_id: int):
             )
     raise HTTPException(status_code=404, detail="Scan not found")
 
-@router.get("/scans/{scan_id}/result", response_model=ScanResultDetail)
+@router.get("/{scan_id}/result", response_model=ScanResultDetail)
 async def get_scan_result(scan_id: int):
     """获取扫描详情"""
     scan_results = db.get_scan_results(limit=1000)
@@ -138,7 +141,6 @@ async def get_scan_result(scan_id: int):
         if r['id'] == scan_id:
             result_json = r.get('result_json')
             if result_json:
-                data = json.loads(result_json)
                 return ScanResultDetail(
                     apis=[],
                     vulnerabilities=[],
@@ -147,7 +149,7 @@ async def get_scan_result(scan_id: int):
             return ScanResultDetail()
     raise HTTPException(status_code=404, detail="Scan not found")
 
-@router.get("/scans", response_model=List[ScanResponse])
+@router.get("/", response_model=List[ScanResponse])
 async def list_scans(
     target_id: Optional[int] = None,
     limit: int = 50
@@ -169,7 +171,7 @@ async def list_scans(
         ) for r in scan_results
     ]
 
-@router.post("/scans/{scan_id}/cancel")
+@router.post("/{scan_id}/cancel")
 async def cancel_scan(scan_id: int):
     """取消扫描"""
     if scan_id in _active_scans:

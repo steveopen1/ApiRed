@@ -120,8 +120,8 @@ async def export_report(project_id: int, format: str = Query(default="json")):
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
-@router.get("/{project_id}/vulnerabilities")
-async def get_vulnerabilities(project_id: int):
+@router.get("/vulnerabilities")
+async def get_vulnerabilities(project_id: Optional[int] = None):
     """获取漏洞列表"""
     return {
         "vulnerabilities": []
