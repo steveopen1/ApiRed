@@ -29,7 +29,10 @@ from plugins.htmlRestorer import restore_html_pages
 from plugins.sensitive_report import generate_sensitive_report
 from plugins.ai_engine import AIEngine
 import tldextract
-import msvcrt
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 import shutil
 import posixpath
 from urllib.parse import urlparse, urlunparse

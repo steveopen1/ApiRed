@@ -432,9 +432,9 @@ def get_js_and_staticUrl(i, headers, js_and_staticUrl_info, url, urls, domain, j
     # 如果文件是 .js 结尾，或者内容特征像 JS
     is_js_file = url.lower().endswith('.js') or 'javascript' in res.headers.get('Content-Type', '').lower()
     
-    # 限制分析条件：是JS文件，且不是太小(没意义)或太大(超时)，且没有被SourceMap覆盖(SourceMap流程会自己做AST)
-    # 这里我们直接做，因为SourceMap是异步的，而且SourceMap分析的是还原后的代码，这里分析的是混淆/未混淆的原代码，互为补充
-    if is_js_file and len(text) > 100 and len(text) < 2 * 1024 * 1024: # 2MB limit
+    # 限制分析条件：是JS文件，且不是太小(没意义)或太大(超时)
+    # 大文件(>500KB)由ASTAnalyzer自动进行分片/正则优化处理
+    if is_js_file and len(text) > 100:
         if ast_tasks_list is not None:
              ast_tasks_list.append({
                  'file_path': file_path, 

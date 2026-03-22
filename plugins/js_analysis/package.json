@@ -2,7 +2,7 @@
   "name": "js-ast-analyzer",
   "version": "1.0.0",
   "dependencies": {
-    "@babel/parser": "^7.23.0",
+    "@babel/parser": "^7.29.2",
     "@babel/traverse": "^7.23.0"
   }
 }
