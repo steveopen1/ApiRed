@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApiRed 设置</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eaeaea;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    
+    .options-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .page-header {
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .page-header h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #00d4ff;
+      margin-bottom: 8px;
+    }
+    
+    .page-header p {
+      font-size: 14px;
+      color: #888;
+    }
+    
+    section {
+      background: #252540;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    
+    section h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    section h2 .icon {
+      font-size: 20px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #ccc;
+    }
+    
+    .form-group .description {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+    }
+    
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 10px 14px;
+      background: #1a1a2e;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #eaeaea;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus {
+      outline: none;
+      border-color: #00d4ff;
+    }
+    
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #00d4ff;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .checkbox-group label {
+      margin-bottom: 0;
+    }
+    
+    .domain-list {
+      background: #1a1a2e;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 12px;
+      min-height: 120px;
+    }
+    
+    .domain-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #333;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin: 4px;
+    }
+    
+    .domain-tag button {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      padding: 0;
+      font-size: 14px;
+    }
+    
+    .domain-tag button:hover {
+      color: #ff4757;
+    }
+    
+    .add-domain {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .add-domain input {
+      flex: 1;
+    }
+    
+    .add-domain button {
+      padding: 10px 16px;
+      background: #00d4ff;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    .btn-primary {
+      background: #00d4ff;
+      color: #1a1a2e;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    .btn-primary:hover {
+      opacity: 0.85;
+    }
+    
+    .btn-secondary {
+      background: #333;
+      color: #fff;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .status-badge.success {
+      background: #00ff9933;
+      color: #00ff99;
+    }
+    
+    .status-badge.warning {
+      background: #ffa50033;
+      color: #ffa500;
+    }
+    
+    .status-badge.error {
+      background: #ff475733;
+      color: #ff4757;
+    }
+    
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .slider-container input[type="range"] {
+      flex: 1;
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      -webkit-appearance: none;
+    }
+    
+    .slider-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #00d4ff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    
+    .slider-value {
+      min-width: 60px;
+      text-align: right;
+      font-size: 14px;
+      color: #00d4ff;
+    }
+    
+    .radio-group {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #00d4ff;
+    }
+    
+    .radio-option label {
+      margin-bottom: 0;
+    }
+    
+    .cert-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: #1a1a2e;
+      border-radius: 8px;
+    }
+    
+    .cert-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .cert-title {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .cert-status {
+      font-size: 12px;
+      color: #888;
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 14px 20px;
+      background: #333;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 14px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s;
+    }
+    
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .toast.success {
+      background: #00ff99;
+      color: #1a1a2e;
+    }
+    
+    .toast.error {
+      background: #ff4757;
+    }
+  </style>
+</head>
+<body>
+  <div class="options-container">
+    <div class="page-header">
+      <h1>ApiRed 设置</h1>
+      <p>配置ApiRed扩展的行为和功能</p>
+    </div>
+    
+    <section>
+      <h2><span class="icon">🌐</span> 域名过滤</h2>
+      
+      <div class="form-group">
+        <label>过滤模式</label>
+        <div class="radio-group">
+          <div class="radio-option">
+            <input type="radio" id="mode-blacklist" name="filterMode" value="blacklist" checked>
+            <label for="mode-blacklist">黑名单 (排除指定域名)</label>
+          </div>
+          <div class="radio-option">
+            <input type="radio" id="mode-whitelist" name="filterMode" value="whitelist">
+            <label for="mode-whitelist">白名单 (仅捕获指定域名)</label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>域名列表</label>
+        <div class="domain-list" id="domainList">
+          <span style="color: #666; font-size: 12px;">暂无域名</span>
+        </div>
+        <div class="add-domain">
+          <input type="text" id="newDomain" placeholder="输入域名 (例如: example.com)">
+          <button onclick="addDomain()">添加</button>
+        </div>
+        <p class="description">输入域名并点击添加,可添加多个域名</p>
+      </div>
+    </section>
+    
+    <section>
+      <h2><span class="icon">⚙️</span> 捕获设置</h2>
+      
+      <div class="form-group">
+        <label>每个域名的最大捕获数量</label>
+        <div class="slider-container">
+          <input type="range" id="maxPerDomain" min="100" max="2000" step="100" value="500">
+          <span class="slider-value" id="maxPerDomainValue">500</span>
+        </div>
+        <p class="description">超过限制后会自动清理最旧的数据</p>
+      </div>
+      
+      <div class="form-group">
+        <label>请求体最大存储大小 (KB)</label>
+        <div class="slider-container">
+          <input type="range" id="maxBodySize" min="10" max="500" step="10" value="100">
+          <span class="slider-value" id="maxBodySizeValue">100 KB</span>
+        </div>
+        <p class="description">超过限制的请求体将被截断</p>
+      </div>
+      
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="autoCleanup" checked>
+          <label for="autoCleanup">自动清理旧数据</label>
+        </div>
+      </div>
+    </section>
+    
+    <section>
+      <h2><span class="icon">🔐</span> HTTPS 证书</h2>
+      
+      <div class="cert-section">
+        <div class="cert-info">
+          <span class="cert-title">mitmproxy 证书</span>
+          <span class="cert-status" id="certStatus">未安装</span>
+        </div>
+        <button class="btn-secondary" onclick="installCert()">安装证书</button>
+      </div>
+      <p class="description" style="margin-top: 12px;">
+        要解密HTTPS流量,需要安装mitmproxy证书。请在Chrome设置中搜索"证书"并导入证书文件。
+      </p>
+    </section>
+    
+    <section>
+      <h2><span class="icon">🔌</span> 代理设置</h2>
+      
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="proxyEnabled">
+          <label for="proxyEnabled">启用代理</label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>代理地址</label>
+        <input type="text" id="proxyHost" value="127.0.0.1" placeholder="127.0.0.1">
+      </div>
+      
+      <div class="form-group">
+        <label>代理端口</label>
+        <input type="number" id="proxyPort" value="8080" placeholder="8080">
+      </div>
+    </section>
+    
+    <div class="actions">
+      <button class="btn-primary" onclick="saveSettings()">保存设置</button>
+      <button class="btn-secondary" onclick="resetSettings()">重置为默认</button>
+    </div>
+  </div>
+  
+  <div class="toast" id="toast"></div>
+  
+  <script src="options.js"></script>
+</body>
+</html>

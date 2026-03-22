@@ -1,0 +1,425 @@
+# Test Case Library - 国内专项测试用例
+# ApiRed v3.2 Domestic Tests
+
+api_version: "1.0"
+category: domestic
+
+test_suites:
+
+  - id: DOM-AUTH-1
+    name: 微信OAuth2认证绕过
+    severity: HIGH
+    description: |
+      测试微信OAuth2认证中的常见漏洞
+      - state参数固定
+      - redirect_uri可伪造
+      - token泄露
+    vuln_type: OAUTH2_BYPASS
+    method: GET
+    path: /oauth2/wechat
+    checks:
+      - name: state_validation
+        description: 检查state参数是否验证
+      - name: redirect_uri
+        description: 检查redirect_uri是否严格匹配
+    remediation: |
+      1. 严格验证redirect_uri
+      2. 使用随机state参数并验证
+      3. 避免在URL中传递敏感token
+
+  - id: DOM-AUTH-2
+    name: 钉钉OAuth2认证绕过
+    severity: HIGH
+    description: |
+      测试钉钉OAuth2认证中的常见漏洞
+    vuln_type: OAUTH2_BYPASS
+    method: GET
+    path: /oauth2/dingtalk
+    checks:
+      - name: appkey_validation
+        description: 检查appKey是否验证
+      - name: state_validation
+        description: 检查state参数
+    remediation: |
+      1. 验证OAuth2回调参数
+      2. 避免敏感信息客户端存储
+
+  - id: DOM-AUTH-3
+    name: 飞书OAuth2认证绕过
+    severity: HIGH
+    description: |
+      测试飞书OAuth2认证中的常见漏洞
+    vuln_type: OAUTH2_BYPASS
+    method: GET
+    path: /oauth2/feishu
+    remediation: |
+      遵循飞书OAuth2安全最佳实践
+
+  - id: DOM-AUTH-4
+    name: 企业微信OAuth2认证绕过
+    severity: HIGH
+    description: |
+      测试企业微信OAuth2认证中的常见漏洞
+    vuln_type: OAUTH2_BYPASS
+    method: GET
+    path: /oauth2/wecom
+    remediation: |
+      验证OAuth2回调URL合法性
+
+  - id: DOM-AUTH-5
+    name: JWT None Algorithm绕过
+    severity: CRITICAL
+    description: |
+      测试JWT认证中是否允许none算法
+    vuln_type: JWT_NONE_ALG
+    method: POST
+    path: /api/auth/login
+    payloads:
+      - header: '{"alg":"none","typ":"JWT"}'
+        payload: '{"sub":"admin","iat":1609459200}'
+        signature: ''
+    expected_response:
+      check_pattern: token
+    remediation: |
+      1. 禁用JWT的none算法
+      2. 使用强密钥(256-bit+)
+      3. 验证所有必要声明
+
+  - id: DOM-AUTH-6
+    name: JWT弱密钥爆破
+    severity: CRITICAL
+    description: |
+      测试JWT是否使用弱密钥
+    vuln_type: JWT_WEAK_SECRET
+    method: POST
+    path: /api/auth/login
+    payloads:
+      - '123456'
+      - 'admin'
+      - 'password'
+      - 'secret'
+      - 'jwt_secret'
+    remediation: |
+      1. 使用强随机密钥
+      2. 定期轮换密钥
+      3. 使用HS256以上算法
+
+  - id: DOM-AUTH-7
+    name: Session会话固定攻击
+    severity: HIGH
+    description: |
+      测试Session认证是否会话固定
+    vuln_type: SESSION_FIXATION
+    method: POST
+    path: /api/auth/login
+    attack_vectors:
+      - name: pre_auth_session
+        description: 登录前设置session ID
+    remediation: |
+      1. 登录后生成新session ID
+      2. 设置HttpOnly和Secure属性
+      3. 定期轮换session
+
+  - id: DOM-AUTH-8
+    name: Session Cookie属性缺失
+    severity: MEDIUM
+    description: |
+      测试Session Cookie是否缺少安全属性
+    checks:
+      - name: http_only
+        description: 检查HttpOnly属性
+      - name: secure
+        description: 检查Secure属性
+      - name: same_site
+        description: 检查SameSite属性
+    remediation: |
+      设置完整的Cookie安全属性
+
+  - id: DOM-CLOUD-1
+    name: 阿里云OSS未授权访问
+    severity: CRITICAL
+    description: |
+      测试阿里云OSS存储桶是否公开访问
+    vuln_type: OSS_UNAUTHORIZED
+    method: GET
+    paths:
+      - https://{bucket}.oss-cn-hangzhou.aliyuncs.com
+      - https://{bucket}.oss-cn-beijing.aliyuncs.com
+    checks:
+      - name: public_read
+        description: 检查是否可列出对象
+      - name: public_write
+        description: 检查是否可上传对象
+    remediation: |
+      1. 启用Bucket Policy
+      2. 禁止公开访问
+      3. 使用RAM凭证访问
+
+  - id: DOM-CLOUD-2
+    name: 腾讯云COS未授权访问
+    severity: CRITICAL
+    description: |
+      测试腾讯云COS存储桶是否公开访问
+    vuln_type: COS_UNAUTHORIZED
+    method: GET
+    paths:
+      - https://{bucket}-{$appid}.cos.{$region}.myqcloud.com
+    remediation: |
+      1. 启用COS访问策略
+      2. 配置防盗链
+      3. 使用临时凭证
+
+  - id: DOM-CLOUD-3
+    name: 华为云OBS未授权访问
+    severity: CRITICAL
+    description: |
+      测试华为云OBS存储桶是否公开访问
+    vuln_type: OBS_UNAUTHORIZED
+    method: GET
+    paths:
+      - https://{bucket}.obs.cn-east-3.myhwclouds.com
+    remediation: |
+      配置OBS桶策略禁止公开访问
+
+  - id: DOM-CLOUD-4
+    name: 阿里云短信服务溢出
+    severity: HIGH
+    description: |
+      测试阿里云SMS服务是否存在溢出风险
+    vuln_type: SMS_OVERFLOW
+    method: POST
+    path: /api/sms/send
+    payloads:
+      - phone: 13800138000
+        count: 100
+    remediation: |
+      1. 启用短信配额限制
+      2. 添加图形验证码
+      3. IP限流
+
+  - id: DOM-CLOUD-5
+    name: 云服务凭证泄露
+    severity: CRITICAL
+    description: |
+      检测JS/响应中是否泄露云服务凭证
+    vuln_type: CREDENTIAL_EXPOSURE
+    checks:
+      - name: access_key
+        pattern: 'LTAI[a-zA-Z0-9]{20,}'
+      - name: secret_key
+        pattern: '[a-zA-Z0-9/+=]{40}'
+      - name: cos_key
+        pattern: 'COS[a-zA-Z0-9+/=]{50,}'
+    remediation: |
+      1. 及时轮换泄露的凭证
+      2. 使用RAM子账号凭证
+      3. 启用凭证自动轮换
+
+  - id: DOM-BIZ-1
+    name: IDOR水平越权
+    severity: HIGH
+    description: |
+      测试用户水平越权漏洞
+    vuln_type: IDOR
+    method: GET
+    paths:
+      - /api/user/{user_id}/info
+      - /api/order/{order_id}/detail
+    payloads:
+      - user_id: 10001
+      - user_id: 99999
+    remediation: |
+      1. 当前用户身份验证
+      2. 资源所有权验证
+      3. 使用间接引用
+
+  - id: DOM-BIZ-2
+    name: API参数篡改
+    severity: MEDIUM
+    description: |
+      测试是否可通过参数篡改获取额外数据
+    vuln_type: PARAM_TAMPERING
+    method: GET
+    path: /api/list
+    parameters:
+      - name: page_size
+        tampering_values: [1000, 9999, -1]
+    remediation: |
+      1. 服务端校验参数范围
+      2. 限制返回数量
+      3. 防止负数索引
+
+  - id: DOM-BIZ-3
+    name: 批量用户数据遍历
+    severity: MEDIUM
+    description: |
+      测试是否存在用户ID遍历漏洞
+    vuln_type: IDOR
+    method: GET
+    path: /api/user/{id}/profile
+    payloads:
+      - '1'
+      - '100'
+      - '1000'
+      - '10000'
+    remediation: |
+      验证当前用户有权访问该数据
+
+  - id: DOM-BIZ-4
+    name: 订单数据遍历
+    severity: MEDIUM
+    description: |
+      测试订单ID是否可遍历
+    vuln_type: IDOR
+    method: GET
+    path: /api/order/{order_id}
+    remediation: |
+      验证订单所属用户身份
+
+  - id: DOM-SENS-1
+    name: 手机号批量泄露
+    severity: HIGH
+    description: |
+      测试用户手机号是否批量泄露
+    vuln_type: DATA_EXPOSURE
+    method: GET
+    path: /api/user/list
+    sensitive_patterns:
+      - phone: '1[3-9]\d{9}'
+      - mobile: '1[3-9]\d{9}'
+    remediation: |
+      1. 脱敏显示手机号
+      2. 限制查询权限
+      3. 添加查询日志
+
+  - id: DOM-SENS-2
+    name: 身份证号泄露
+    severity: CRITICAL
+    description: |
+      测试身份证号是否泄露
+    vuln_type: DATA_EXPOSURE
+    method: GET
+    path: /api/user/{id}/info
+    sensitive_patterns:
+      - id_card: '[1-9]\d{5}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]'
+    remediation: |
+      1. 禁止在响应中返回完整身份证
+      2. 脱敏显示
+      3. 敏感操作需要二次验证
+
+  - id: DOM-SENS-3
+    name: 微信号/QQ号泄露
+    severity: MEDIUM
+    description: |
+      测试社交账号是否泄露
+    vuln_type: DATA_EXPOSURE
+    method: GET
+    path: /api/user/{id}/profile
+    sensitive_patterns:
+      - wechat: '[a-zA-Z][a-zA-Z0-9_-]{5,19}'
+      - qq: '[1-9]\d{4,10}'
+    remediation: |
+      1. 评估公开必要性
+      2. 添加隐私设置
+      3. 日志记录查询
+
+  - id: DOM-SENS-4
+    name: 内部IP地址泄露
+    severity: LOW
+    description: |
+      测试响应中是否泄露内网IP
+    vuln_type: INFO_DISCLOSURE
+    method: GET
+    path: /api/*/debug
+    sensitive_patterns:
+      - internal_ip: '10\.\d{1,3}\.\d{1,3}\.\d{1,3}'
+      - internal_ip: '172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}'
+      - internal_ip: '192\.168\.\d{1,3}\.\d{1,3}'
+    remediation: |
+      1. 生产环境禁用debug接口
+      2. 过滤内部信息
+      3. 使用统一错误响应
+
+  - id: DOM-SENS-5
+    name: 数据库连接信息泄露
+    severity: CRITICAL
+    description: |
+      测试错误响应中是否泄露数据库信息
+    vuln_type: INFO_DISCLOSURE
+    method: GET
+    path: /api/*
+    checks:
+      - name: sql_error
+        patterns:
+          - 'MySQL'
+          - 'SQLite'
+          - 'PostgreSQL'
+          - 'Oracle'
+          - 'sql syntax'
+      - name: connection_error
+        patterns:
+          - 'Connection refused'
+          - 'Connection timed out'
+    remediation: |
+      1. 使用统一错误页面
+      2. 日志记录详细错误
+      3. 过滤敏感信息
+
+  - id: DOM-RATE-1
+    name: API频率限制绕过
+    severity: MEDIUM
+    description: |
+      测试API频率限制是否可绕过
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/*/login
+    bypass_techniques:
+      - header_injection: "X-Forwarded-For: 1.1.1.1"
+      - header_injection: "X-Real-IP: 1.1.1.1"
+      - method_tampering: "POST instead of GET"
+      - path_traversal: "/api//login"
+    remediation: |
+      1. 服务端验证真实IP
+      2. 多层防护
+      3. 账号级别限流
+
+  - id: DOM-RATE-2
+    name: 短信验证码暴力破解
+    severity: HIGH
+    description: |
+      测试短信验证码是否可暴力破解
+    vuln_type: BRUTE_FORCE
+    method: POST
+    path: /api/auth/verify
+    checks:
+      - name: code_length
+        min: 4
+        max: 6
+      - name: attempts_limit
+        max_attempts: 5
+      - name: lockout
+        description: 检查是否锁定
+    remediation: |
+      1. 增加验证码长度
+      2. 限制尝试次数
+      3. 锁定+冷却时间
+
+  - id: DOM-RATE-3
+    name: 密码暴力破解
+    severity: HIGH
+    description: |
+      测试登录接口是否抗暴力破解
+    vuln_type: BRUTE_FORCE
+    method: POST
+    path: /api/auth/login
+    checks:
+      - name: captcha
+        description: 检查是否有验证码
+      - name: lockout
+        description: 检查是否锁定
+      - name: ip_block
+        description: 检查IP封锁
+    remediation: |
+      1. 强制复杂密码
+      2. 多次失败后锁定
+      3. 添加图形验证码

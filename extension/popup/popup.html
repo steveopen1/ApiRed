@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApiRed</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 380px;
+      min-height: 500px;
+      background: #1a1a2e;
+      color: #eaeaea;
+    }
+    
+    .popup-container {
+      padding: 16px;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #00d4ff;
+    }
+    
+    .header .version {
+      font-size: 11px;
+      color: #666;
+    }
+    
+    .capture-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #252540;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    
+    .capture-toggle .label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 24px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      transition: 0.3s;
+      border-radius: 24px;
+    }
+    
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+    
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #00d4ff;
+    }
+    
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+    
+    .stats-panel {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .stat-card {
+      background: #252540;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    
+    .stat-card .value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+    
+    .stat-card .label {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+    
+    .domain-info {
+      background: #252540;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #aaa;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .api-list {
+      background: #252540;
+      border-radius: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    
+    .api-list-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid #333;
+      font-size: 13px;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      background: #252540;
+    }
+    
+    .api-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid #333;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .api-item:hover {
+      background: #2a2a45;
+    }
+    
+    .api-item:last-child {
+      border-bottom: none;
+    }
+    
+    .api-item.sensitive {
+      border-left: 3px solid #ff4757;
+    }
+    
+    .api-method {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+    
+    .api-method.get { background: #00d4ff33; color: #00d4ff; }
+    .api-method.post { background: #00ff9933; color: #00ff99; }
+    .api-method.put { background: #ffa50033; color: #ffa500; }
+    .api-method.delete { background: #ff475733; color: #ff4757; }
+    .api-method.patch { background: #9b59b633; color: #9b59b6; }
+    
+    .api-path {
+      font-size: 12px;
+      color: #ccc;
+      font-family: 'Monaco', 'Menlo', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .api-status {
+      font-size: 10px;
+      color: #888;
+      margin-top: 4px;
+    }
+    
+    .api-detail-panel {
+      background: #1e1e35;
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 12px;
+      display: none;
+    }
+    
+    .api-detail-panel.show {
+      display: block;
+    }
+    
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .detail-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    
+    .detail-section {
+      margin-bottom: 10px;
+    }
+    
+    .detail-section h4 {
+      font-size: 11px;
+      color: #666;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    
+    .detail-section pre {
+      background: #252540;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      overflow-x: auto;
+      max-height: 150px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    
+    .btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    .btn:hover {
+      opacity: 0.85;
+    }
+    
+    .btn-primary {
+      background: #00d4ff;
+      color: #1a1a2e;
+    }
+    
+    .btn-secondary {
+      background: #333;
+      color: #fff;
+    }
+    
+    .btn-danger {
+      background: #ff4757;
+      color: #fff;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+    
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    .empty-state p {
+      font-size: 13px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .loading {
+      animation: spin 1s linear infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

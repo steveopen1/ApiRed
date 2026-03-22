@@ -49,6 +49,7 @@ class EngineConfig:
     concurrent_targets: int = 5
     aggregate: bool = False
     agent_mode: bool = False
+    domestic_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -105,6 +106,14 @@ class ScanEngine:
         }
         
         self._stage_names = ["collect", "analyze", "test"]
+        
+        self._har_collector = None
+        self._burp_collector = None
+        self._domestic_auth_detector = None
+        self._cloud_detector = None
+        self._domestic_fuzz_tester = None
+        
+        self._domestic_config = getattr(config, 'domestic_config', None) or {}
     
     def on(self, event: str, callback: Any):
         """注册事件回调"""
@@ -194,10 +203,37 @@ class ScanEngine:
             self.analyzer_agent = AnalyzerAgent(analyzer_config, llm_client)
             self.tester_agent = TesterAgent(tester_config, llm_client)
         
+        self._init_domestic_modules()
+        
         self.result = ScanResult(
             target_url=self.config.target,
             start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
+    
+    def _init_domestic_modules(self):
+        """初始化国内增强模块"""
+        domestic_cfg = self._domestic_config
+        
+        if domestic_cfg.get('har_file') or domestic_cfg.get('burp_file') or domestic_cfg.get('burp_api'):
+            from .collectors.domestic import HARCollector, BurpCollector
+            if domestic_cfg.get('har_file'):
+                self._har_collector = HARCollector(self.db_storage)
+            if domestic_cfg.get('burp_file') or domestic_cfg.get('burp_api'):
+                self._burp_collector = BurpCollector(self.db_storage)
+        
+        if domestic_cfg.get('domestic_auth') or domestic_cfg.get('cloud_check'):
+            from .analyzers.domestic import DomesticAuthDetector, CloudServiceDetector
+            if domestic_cfg.get('domestic_auth'):
+                self._domestic_auth_detector = DomesticAuthDetector(self._http_client)
+            if domestic_cfg.get('cloud_check'):
+                self._cloud_detector = CloudServiceDetector(self._http_client)
+        
+        if domestic_cfg.get('domestic_tests') or domestic_cfg.get('fuzz_dict'):
+            from .testers.domestic import DomesticFuzzTester
+            self._domestic_fuzz_tester = DomesticFuzzTester(
+                self._http_client,
+                dict_path=domestic_cfg.get('fuzz_dict')
+            )
     
     async def run(self) -> ScanResult:
         """运行扫描流程"""
@@ -332,7 +368,67 @@ class ScanEngine:
         if 'api' in active_collectors:
             collector_results['api'] = await self._extract_apis()
         
+        if self._har_collector:
+            try:
+                har_result = self._run_har_import()
+                collector_results['har'] = har_result
+            except Exception as e:
+                print(f"HAR import failed: {e}")
+        
+        if self._burp_collector:
+            try:
+                burp_result = self._run_burp_import()
+                collector_results['burp'] = burp_result
+            except Exception as e:
+                print(f"Burp import failed: {e}")
+        
         self._collector_results = collector_results
+    
+    def _run_har_import(self) -> Dict[str, Any]:
+        """运行HAR文件导入"""
+        har_file = self._domestic_config.get('har_file')
+        if not har_file:
+            return {'status': 'skipped'}
+        
+        result = self._har_collector.parse_file(har_file)
+        endpoints = result.endpoints
+        
+        for endpoint in endpoints:
+            if self.result:
+                self.result.api_endpoints.append(endpoint)
+        
+        if self.result:
+            self.result.total_apis = len(self.result.api_endpoints)
+        
+        return {
+            'status': 'success',
+            'total_requests': result.total_requests,
+            'total_endpoints': len(endpoints),
+            'domains': list(result.domain_groups.keys())
+        }
+    
+    def _run_burp_import(self) -> Dict[str, Any]:
+        """运行BurpSuite文件导入"""
+        burp_file = self._domestic_config.get('burp_file')
+        if not burp_file:
+            return {'status': 'skipped'}
+        
+        result = self._burp_collector.parse_json_file(burp_file)
+        endpoints = result.endpoints
+        
+        for endpoint in endpoints:
+            if self.result:
+                self.result.api_endpoints.append(endpoint)
+        
+        if self.result:
+            self.result.total_apis = len(self.result.api_endpoints)
+        
+        return {
+            'status': 'success',
+            'total_requests': result.total_requests,
+            'total_endpoints': len(endpoints),
+            'domains': list(result.domain_groups.keys())
+        }
     
     async def _collect_js(self) -> Dict[str, Any]:
         """采集JS资源 + 框架检测 + 浏览器动态采集"""
@@ -517,7 +613,102 @@ class ScanEngine:
         if 'sensitive' in active_analyzers:
             analyzer_results['sensitive'] = await self._detect_sensitive()
         
+        if self._domestic_auth_detector:
+            try:
+                auth_result = await self._run_domestic_auth_detection()
+                analyzer_results['domestic_auth'] = auth_result
+            except Exception as e:
+                print(f"Domestic auth detection failed: {e}")
+        
+        if self._cloud_detector:
+            try:
+                cloud_result = await self._run_cloud_detection()
+                analyzer_results['cloud'] = cloud_result
+            except Exception as e:
+                print(f"Cloud detection failed: {e}")
+        
         self._analyzer_results = analyzer_results
+    
+    async def _run_domestic_auth_detection(self) -> Dict[str, Any]:
+        """运行国内认证检测"""
+        if not self.result or not self.result.api_endpoints:
+            return {'status': 'skipped', 'vulnerabilities': 0}
+        
+        vulnerabilities_found = []
+        
+        for endpoint in self.result.api_endpoints:
+            try:
+                auth_result = await self._domestic_auth_detector.detect_auth_type(endpoint)
+                if auth_result and auth_result.confidence > 0.5:
+                    bypass_results = await self._domestic_auth_detector.test_bypass(
+                        endpoint, auth_result.auth_type
+                    )
+                    for bypass_result in bypass_results:
+                        if bypass_result.is_vulnerable:
+                            from .models import Vulnerability, Severity
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=f"DOM-AUTH-{bypass_result.test_name}",
+                                severity=bypass_result.severity,
+                                title=f"国内认证绕过: {bypass_result.test_name}",
+                                evidence=bypass_result.evidence,
+                                payload=bypass_result.payload,
+                                remediation=bypass_result.remediation
+                            )
+                            vulnerabilities_found.append(vuln)
+                            self.result.vulnerabilities.append(vuln)
+            except Exception:
+                pass
+        
+        return {
+            'status': 'success',
+            'vulnerabilities': len(vulnerabilities_found)
+        }
+    
+    async def _run_cloud_detection(self) -> Dict[str, Any]:
+        """运行云服务检测"""
+        if not self.result or not self.result.api_endpoints:
+            return {'status': 'skipped', 'vulnerabilities': 0}
+        
+        vulnerabilities_found = []
+        
+        try:
+            cloud_results = await self._cloud_detector.detect_cloud_services(
+                self.result.api_endpoints
+            )
+            
+            for cloud_result in cloud_results:
+                service = type('CloudService', (), {
+                    'provider': cloud_result.provider,
+                    'service_type': cloud_result.service_type,
+                    'endpoint': cloud_result.endpoint_url,
+                    'region': cloud_result.region,
+                    'bucket_name': cloud_result.bucket_name
+                })()
+                
+                test_results = await self._cloud_detector.test_unauthorized_access(service)
+                
+                for test_result in test_results:
+                    if test_result.is_vulnerable:
+                        from .models import Vulnerability, Severity
+                        vuln = Vulnerability(
+                            api_id=cloud_result.api_id,
+                            vuln_type=f"CLOUD-{test_result.service_type.value.upper()}",
+                            severity=test_result.severity,
+                            title=f"云服务未授权访问: {test_result.service_type.value}",
+                            evidence=test_result.evidence,
+                            remediation=test_result.remediation
+                        )
+                        vulnerabilities_found.append(vuln)
+                        self.result.vulnerabilities.append(vuln)
+        except Exception as e:
+            print(f"Cloud detection error: {e}")
+        
+        return {
+            'status': 'success',
+            'vulnerabilities': len(vulnerabilities_found),
+            'services_found': len(cloud_results) if 'cloud_results' in dir() else 0
+        }
     
     async def _score_apis(self) -> Dict[str, Any]:
         """API评分"""

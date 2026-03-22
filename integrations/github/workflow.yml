@@ -1,0 +1,132 @@
+name: ApiRed Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scan'
+        required: false
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install ApiRed
+        run: |
+          pip install --upgrade pip
+          pip install apired
+          pip install apired[dashboard]
+      
+      - name: Run Security Scan
+        id: scan
+        run: |
+          TARGET=${{ github.event.inputs.target_url || github.event.inputs.target || vars.DEFAULT_SCAN_TARGET || 'https://example.com' }}
+          echo "Scanning target: $TARGET"
+          apired scan -u "$TARGET" \
+            --output ./scan-results \
+            --format json \
+            --domestic-auth \
+            --cloud-check \
+            --domestic-tests \
+            --verbose || true
+      
+      - name: Upload Scan Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results-${{ github.run_id }}
+          path: |
+            ./scan-results/
+            scan-output.json
+            scan-report.html
+          retention-days: 30
+      
+      - name: Parse Vulnerability Results
+        id: parse-results
+        if: always()
+        run: |
+          if [ -f scan-results/summary.json ]; then
+            echo "VULN_COUNT=$(cat scan-results/summary.json | jq -r '.total_vulns // 0')" >> $GITHUB_OUTPUT
+            echo "CRITICAL_COUNT=$(cat scan-results/summary.json | jq -r '.critical_vulns // 0')" >> $GITHUB_OUTPUT
+            echo "HIGH_COUNT=$(cat scan-results/summary.json | jq -r '.high_vulns // 0')" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create GitHub Security Alert
+        if: github.event_name == 'pull_request' && (vars.ENABLE_SECURITY_ALERTS == 'true')
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scan-results/results.sarif
+      
+      - name: Post Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('./scan-results/summary.json', 'utf8'));
+            
+            const criticalCount = results.critical_vulns || 0;
+            const highCount = results.high_vulns || 0;
+            const totalCount = results.total_vulns || 0;
+            
+            let body = '## 🔒 ApiRed Security Scan Results\n\n';
+            body += `| Severity | Count |\n`;
+            body += `|----------|-------|\n`;
+            body += `| 🔴 Critical | ${criticalCount} |\n`;
+            body += `| 🟠 High | ${highCount} |\n`;
+            body += `| Total | ${totalCount} |\n\n`;
+            
+            if (criticalCount > 0) {
+              body += '> ⚠️ **Warning:** Critical vulnerabilities detected!\n';
+            }
+            
+            body += `\n📊 [View Full Report](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})\n`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+      
+      - name: Check for Blocking Vulnerabilities
+        if: github.event_name == 'pull_request'
+        run: |
+          CRITICAL=${{ fromJson(steps.parse-results.outputs.CRITICAL_COUNT || 0) }}
+          HIGH=${{ fromJson(steps.parse-results.outputs.HIGH_COUNT || 0) }}
+          BLOCK_THRESHOLD=${{ vars.BLOCK_THRESHOLD || 3 }}
+          
+          TOTAL=$((CRITICAL + HIGH))
+          if [ $TOTAL -ge $BLOCK_THRESHOLD ]; then
+            echo "Blocking CI due to $TOTAL high/critical vulnerabilities (threshold: $BLOCK_THRESHOLD)"
+            exit 1
+          fi
+          echo "Found $TOTAL high/critical vulnerabilities (threshold: $BLOCK_THRESHOLD) - passing"

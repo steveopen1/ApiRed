@@ -1,0 +1,77 @@
+variables:
+  PYTHON_VERSION: "3.11"
+  APISHED_VERSION: "latest"
+
+stages:
+  - security
+
+apired-scan:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install --upgrade pip
+    - pip install apired[dashboard]
+  script:
+    - |
+      TARGET="${TARGET_URL:-https://example.com}"
+      echo "Scanning target: $TARGET"
+      apired scan -u "$TARGET" \
+        --output ./scan-results \
+        --format json \
+        --domestic-auth \
+        --cloud-check \
+        --domestic-tests \
+        --verbose || true
+  artifacts:
+    paths:
+      - ./scan-results/
+    reports:
+      junit: ./scan-results/junit.xml
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_MERGE_REQUEST_IID'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+apired-scan-scheduled:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install apired
+  script:
+    - |
+      for TARGET in $SCHEDULED_TARGETS; do
+        echo "Scanning scheduled target: $TARGET"
+        apired scan -u "$TARGET" \
+          --output ./scan-results-${TARGET//[:\/]/_} \
+          --format json || true
+      done
+  artifacts:
+    paths:
+      - ./scan-results-*/
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  only:
+    variables:
+      - $SCHEDULED_TARGETS
+
+apired-report:
+  stage: security
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install apired
+  script:
+    - |
+      echo "Generating scan report..."
+      if [ -d ./scan-results ]; then
+        for dir in ./scan-results-*/; do
+          project=$(basename "$dir")
+          echo "Report for $project"
+        done
+      fi
+  needs:
+    - apired-scan
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
