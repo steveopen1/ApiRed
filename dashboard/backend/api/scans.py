@@ -113,6 +113,28 @@ async def create_scan(scan: ScanCreate, background_tasks: BackgroundTasks):
         completed_at=None
     )
 
+@router.get("/", response_model=List[ScanResponse])
+async def list_scans(
+    target_id: Optional[int] = None,
+    limit: int = 50
+):
+    """获取扫描列表"""
+    scan_results = db.get_scan_results(target_id=target_id, limit=limit)
+    return [
+        ScanResponse(
+            id=r['id'],
+            target_id=r['target_id'],
+            status=r['status'],
+            total_apis=r.get('total_apis', 0),
+            alive_apis=r.get('alive_apis', 0),
+            high_vulns=r.get('high_vulns', 0),
+            medium_vulns=r.get('medium_vulns', 0),
+            low_vulns=r.get('low_vulns', 0),
+            started_at=r.get('created_at', ''),
+            completed_at=r.get('created_at') if r['status'] == 'completed' else None
+        ) for r in scan_results
+    ]
+
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(scan_id: int):
     """获取扫描状态"""
@@ -148,28 +170,6 @@ async def get_scan_result(scan_id: int):
                 )
             return ScanResultDetail()
     raise HTTPException(status_code=404, detail="Scan not found")
-
-@router.get("/", response_model=List[ScanResponse])
-async def list_scans(
-    target_id: Optional[int] = None,
-    limit: int = 50
-):
-    """获取扫描列表"""
-    scan_results = db.get_scan_results(target_id=target_id, limit=limit)
-    return [
-        ScanResponse(
-            id=r['id'],
-            target_id=r['target_id'],
-            status=r['status'],
-            total_apis=r.get('total_apis', 0),
-            alive_apis=r.get('alive_apis', 0),
-            high_vulns=r.get('high_vulns', 0),
-            medium_vulns=r.get('medium_vulns', 0),
-            low_vulns=r.get('low_vulns', 0),
-            started_at=r.get('created_at', ''),
-            completed_at=r.get('created_at') if r['status'] == 'completed' else None
-        ) for r in scan_results
-    ]
 
 @router.post("/{scan_id}/cancel")
 async def cancel_scan(scan_id: int):
