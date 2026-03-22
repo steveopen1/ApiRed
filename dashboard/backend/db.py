@@ -52,8 +52,29 @@ CREATE TABLE IF NOT EXISTS scan_results (
     FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS vulnerabilities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id INTEGER NOT NULL,
+    target_id INTEGER NOT NULL,
+    vuln_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    url TEXT NOT NULL,
+    method TEXT DEFAULT 'GET',
+    title TEXT,
+    description TEXT,
+    payload TEXT,
+    remediation TEXT,
+    status TEXT DEFAULT 'open',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (scan_id) REFERENCES scan_results(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_targets_project ON targets(project_id);
 CREATE INDEX IF NOT EXISTS idx_results_target ON scan_results(target_id);
+CREATE INDEX IF NOT EXISTS idx_vulns_scan ON vulnerabilities(scan_id);
+CREATE INDEX IF NOT EXISTS idx_vulns_target ON vulnerabilities(target_id);
+CREATE INDEX IF NOT EXISTS idx_vulns_severity ON vulnerabilities(severity);
 """
 
 
@@ -249,6 +270,57 @@ class Database:
                 "medium_vulns": medium,
                 "low_vulns": low
             }
+    
+    def create_vulnerability(self, scan_id: int, target_id: int, vuln_type: str,
+                            severity: str, url: str, description: str = None,
+                            payload: str = None, remediation: str = None) -> int:
+        """创建漏洞记录"""
+        with self.get_conn() as conn:
+            cursor = conn.execute(
+                """INSERT INTO vulnerabilities (scan_id, target_id, vuln_type, severity, url, description, payload, remediation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (scan_id, target_id, vuln_type, severity, url, description, payload, remediation))
+            conn.commit()
+            return cursor.lastrowid
+    
+    def get_vulnerabilities(self, scan_id: int = None, target_id: int = None,
+                           severity: str = None, limit: int = 100) -> List[Dict]:
+        """获取漏洞列表"""
+        conditions = []
+        params = []
+        
+        if scan_id is not None:
+            conditions.append("scan_id = ?")
+            params.append(scan_id)
+        if target_id is not None:
+            conditions.append("target_id = ?")
+            params.append(target_id)
+        if severity:
+            conditions.append("severity = ?")
+            params.append(severity)
+        
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        
+        with self.get_conn() as conn:
+            cursor = conn.execute(
+                f"""SELECT * FROM vulnerabilities WHERE {where_clause} ORDER BY created_at DESC LIMIT ?""",
+                params + [limit])
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def delete_vulnerability(self, vuln_id: int) -> bool:
+        """删除漏洞"""
+        with self.get_conn() as conn:
+            conn.execute("""DELETE FROM vulnerabilities WHERE id = ?""", (vuln_id,))
+            conn.commit()
+            return True
+    
+    def update_vulnerability_status(self, vuln_id: int, status: str) -> bool:
+        """更新漏洞状态"""
+        with self.get_conn() as conn:
+            conn.execute(
+                """UPDATE vulnerabilities SET status = ? WHERE id = ?""",
+                (status, vuln_id))
+            conn.commit()
+            return True
 
 
 db = Database()

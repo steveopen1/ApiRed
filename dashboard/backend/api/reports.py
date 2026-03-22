@@ -10,6 +10,8 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from ..db import db
+
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 class ReportSummary(BaseModel):
@@ -23,10 +25,42 @@ class ReportSummary(BaseModel):
     scan_date: str
 
 @router.get("/vulnerabilities")
-async def get_vulnerabilities(project_id: Optional[int] = None):
+async def get_vulnerabilities(
+    project_id: Optional[int] = None,
+    target_id: Optional[int] = None,
+    severity: Optional[str] = None,
+    limit: int = 100
+):
     """获取漏洞列表"""
+    if target_id:
+        vulns = db.get_vulnerabilities(target_id=target_id, severity=severity, limit=limit)
+    else:
+        if project_id:
+            targets = db.get_targets(project_id=project_id)
+            target_ids = [t['id'] for t in targets]
+            all_vulns = []
+            for tid in target_ids:
+                all_vulns.extend(db.get_vulnerabilities(target_id=tid, severity=severity, limit=limit))
+            vulns = all_vulns[:limit]
+        else:
+            vulns = db.get_vulnerabilities(severity=severity, limit=limit)
+    
     return {
-        "vulnerabilities": []
+        "vulnerabilities": [
+            {
+                "id": v['id'],
+                "vuln_type": v['vuln_type'],
+                "severity": v['severity'],
+                "url": v['url'],
+                "method": v.get('method', 'GET'),
+                "title": v.get('title', v['vuln_type']),
+                "description": v.get('description', ''),
+                "payload": v.get('payload'),
+                "remediation": v.get('remediation'),
+                "status": v.get('status', 'open'),
+                "created_at": v.get('created_at', '')
+            } for v in vulns
+        ]
     }
 
 @router.get("/{project_id}/summary", response_model=ReportSummary)
