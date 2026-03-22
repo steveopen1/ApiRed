@@ -69,12 +69,28 @@ Examples:
                                   help='Disable SSL verification (not recommended)')
         scan_parser.add_argument('--resume', action='store_true',
                                   help='Resume from previous scan checkpoint')
+        scan_parser.add_argument('--incremental', action='store_true',
+                                  help='Enable incremental scan mode')
         scan_parser.add_argument('--concurrent-targets', '-ct', type=int, default=5,
                                   help='Maximum concurrent targets for multi-target scan')
         scan_parser.add_argument('--aggregate', action='store_true',
                                   help='Aggregate results from multiple targets')
         scan_parser.add_argument('--output', '-o', help='Output directory')
-        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html', 'csv'], default='json')
+        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html', 'csv', 'all'], default='json',
+                                  help='Report format: json, html, csv, or all (default: json)')
+        
+        vuln_group = scan_parser.add_argument_group('Vulnerability Tests')
+        vuln_group.add_argument('--no-sql-test', dest='no_sql_test', action='store_true',
+                                help='Disable SQL injection test')
+        vuln_group.add_argument('--no-xss-test', dest='no_xss_test', action='store_true',
+                                help='Disable XSS test')
+        vuln_group.add_argument('--no-ssrf-test', dest='no_ssrf_test', action='store_true',
+                                help='Disable SSRF test')
+        vuln_group.add_argument('--no-bypass-test', dest='no_bypass_test', action='store_true',
+                                help='Disable bypass techniques test')
+        vuln_group.add_argument('--no-jwt-test', dest='no_jwt_test', action='store_true',
+                                help='Disable JWT weak key test')
+        
         scan_parser.add_argument('--verbose', '-v', action='store_true')
 
         dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')
@@ -85,6 +101,12 @@ Examples:
 
     def _build_engine_config(self, parsed_args, target: str, targets: List[str]) -> EngineConfig:
         """构建 EngineConfig"""
+        formats = ['json']
+        if getattr(parsed_args, 'format', 'json') == 'all':
+            formats = ['json', 'html', 'excel']
+        elif getattr(parsed_args, 'format', 'json') != 'json':
+            formats = [getattr(parsed_args, 'format', 'json')]
+        
         return EngineConfig(
             target=target,
             collectors=['js', 'api'],
@@ -105,7 +127,14 @@ Examples:
             targets=targets,
             concurrent_targets=getattr(parsed_args, 'concurrent_targets', 5),
             aggregate=getattr(parsed_args, 'aggregate', False),
-            agent_mode=getattr(parsed_args, 'agent_mode', False)
+            agent_mode=getattr(parsed_args, 'agent_mode', False),
+            incremental=getattr(parsed_args, 'incremental', False),
+            report_formats=formats,
+            enable_sql_test=not getattr(parsed_args, 'no_sql_test', False),
+            enable_xss_test=not getattr(parsed_args, 'no_xss_test', False),
+            enable_ssrf_test=not getattr(parsed_args, 'no_ssrf_test', False),
+            enable_bypass_test=not getattr(parsed_args, 'no_bypass_test', False),
+            enable_jwt_test=not getattr(parsed_args, 'no_jwt_test', False),
         )
 
     async def run_scan(self, parsed_args) -> int:

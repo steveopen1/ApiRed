@@ -24,6 +24,7 @@ from .agents.orchestrator import ScanContext
 from .knowledge_base import KnowledgeBase
 from .models import ScanResult, APIEndpoint
 from .framework import FrameworkDetector
+from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
 
 
 @dataclass
@@ -49,6 +50,17 @@ class EngineConfig:
     concurrent_targets: int = 5
     aggregate: bool = False
     agent_mode: bool = False
+    # 漏洞测试开关
+    enable_sql_test: bool = True
+    enable_xss_test: bool = True
+    enable_ssrf_test: bool = True
+    enable_bypass_test: bool = True
+    enable_jwt_test: bool = True
+    enable_idor_test: bool = True
+    enable_unauthorized_test: bool = True
+    enable_info_disclosure_test: bool = True
+    # 报告格式
+    report_formats: List[str] = field(default_factory=lambda: ['json', 'html'])
 
 
 @dataclass
@@ -193,6 +205,20 @@ class ScanEngine:
             self.scanner_agent = ScannerAgent(scanner_config, llm_client)
             self.analyzer_agent = AnalyzerAgent(analyzer_config, llm_client)
             self.tester_agent = TesterAgent(tester_config, llm_client)
+        
+        self._incremental_scanner: Optional[IncrementalScanner] = None
+        if getattr(self.config, 'resume', False) or getattr(self.config, 'incremental', False):
+            storage_path = os.path.join(results_dir, "incremental.db")
+            try:
+                self._incremental_scanner = IncrementalScanner(storage_path)
+                latest = self._incremental_scanner.get_latest_snapshot(self.config.target)
+                if latest:
+                    print(f"Found previous scan snapshot: {latest.api_count} APIs, {latest.js_count} JS files")
+            except Exception as e:
+                print(f"Incremental scanner init error: {e}")
+                self._incremental_scanner = None
+        
+        self._url_deduplicator = URLDeduplicator()
         
         self.result = ScanResult(
             target_url=self.config.target,
@@ -654,39 +680,136 @@ class ScanEngine:
         vuln_count = 0
         from .models import Severity
         
+        cfg = self.config
+        
         for endpoint in high_value_apis:
             try:
-                ssrf_result = await self._vulnerability_tester.test_ssrf(endpoint.full_url)
-                if ssrf_result.is_vulnerable:
-                    from .models import Vulnerability
-                    vuln = Vulnerability(
-                        api_id=endpoint.api_id,
-                        vuln_type=ssrf_result.vuln_type.value,
-                        severity=Severity[ssrf_result.severity.upper()] if isinstance(ssrf_result.severity, str) else ssrf_result.severity,
-                        evidence=ssrf_result.evidence,
-                        payload=ssrf_result.payload,
-                        remediation=ssrf_result.remediation,
-                        cwe_id=ssrf_result.cwe_id
-                    )
-                    if self.result:
-                        self.result.vulnerabilities.append(vuln)
-                    vuln_count += 1
+                # SSRF 测试
+                if getattr(cfg, 'enable_ssrf_test', True):
+                    ssrf_result = await self._vulnerability_tester.test_ssrf(endpoint.full_url)
+                    if ssrf_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=ssrf_result.vuln_type.value,
+                            severity=Severity[ssrf_result.severity.upper()] if isinstance(ssrf_result.severity, str) else ssrf_result.severity,
+                            evidence=ssrf_result.evidence,
+                            payload=ssrf_result.payload,
+                            remediation=ssrf_result.remediation,
+                            cwe_id=ssrf_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
                 
-                info_disclosure = await self._vulnerability_tester.test_information_disclosure(endpoint.full_url)
-                if info_disclosure.is_vulnerable:
-                    from .models import Vulnerability
-                    vuln = Vulnerability(
-                        api_id=endpoint.api_id,
-                        vuln_type=info_disclosure.vuln_type.value,
-                        severity=Severity[info_disclosure.severity.upper()] if isinstance(info_disclosure.severity, str) else info_disclosure.severity,
-                        evidence=info_disclosure.evidence,
-                        payload=info_disclosure.payload,
-                        remediation=info_disclosure.remediation,
-                        cwe_id=info_disclosure.cwe_id
-                    )
-                    if self.result:
-                        self.result.vulnerabilities.append(vuln)
-                    vuln_count += 1
+                # 信息泄露测试
+                if getattr(cfg, 'enable_info_disclosure_test', True):
+                    info_disclosure = await self._vulnerability_tester.test_information_disclosure(endpoint.full_url)
+                    if info_disclosure.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=info_disclosure.vuln_type.value,
+                            severity=Severity[info_disclosure.severity.upper()] if isinstance(info_disclosure.severity, str) else info_disclosure.severity,
+                            evidence=info_disclosure.evidence,
+                            payload=info_disclosure.payload,
+                            remediation=info_disclosure.remediation,
+                            cwe_id=info_disclosure.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                
+                # SQL 注入测试
+                if getattr(cfg, 'enable_sql_test', True):
+                    sql_result = await self._vulnerability_tester.test_sql_injection(endpoint.full_url, endpoint.method)
+                    if sql_result and sql_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=sql_result.vuln_type.value,
+                            severity=Severity[sql_result.severity.upper()] if isinstance(sql_result.severity, str) else sql_result.severity,
+                            evidence=sql_result.evidence,
+                            payload=sql_result.payload,
+                            remediation=sql_result.remediation,
+                            cwe_id=sql_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                
+                # XSS 测试
+                if getattr(cfg, 'enable_xss_test', True):
+                    xss_result = await self._vulnerability_tester.test_xss(endpoint.full_url, endpoint.method)
+                    if xss_result and xss_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=xss_result.vuln_type.value,
+                            severity=Severity[xss_result.severity.upper()] if isinstance(xss_result.severity, str) else xss_result.severity,
+                            evidence=xss_result.evidence,
+                            payload=xss_result.payload,
+                            remediation=xss_result.remediation,
+                            cwe_id=xss_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                
+                # Bypass 技术测试
+                if getattr(cfg, 'enable_bypass_test', True):
+                    bypass_result = await self._vulnerability_tester.test_bypass_techniques(endpoint.full_url, endpoint.method)
+                    if bypass_result and bypass_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=bypass_result.vuln_type.value,
+                            severity=Severity[bypass_result.severity.upper()] if isinstance(bypass_result.severity, str) else bypass_result.severity,
+                            evidence=bypass_result.evidence,
+                            payload=bypass_result.payload,
+                            remediation=bypass_result.remediation,
+                            cwe_id=bypass_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                
+                # JWT 弱密钥测试
+                if getattr(cfg, 'enable_jwt_test', True):
+                    jwt_result = await self._vulnerability_tester.test_jwt_weak(endpoint.full_url)
+                    if jwt_result and jwt_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=jwt_result.vuln_type.value,
+                            severity=Severity[jwt_result.severity.upper()] if isinstance(jwt_result.severity, str) else jwt_result.severity,
+                            evidence=jwt_result.evidence,
+                            payload=jwt_result.payload,
+                            remediation=jwt_result.remediation,
+                            cwe_id=jwt_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                
+                # 未授权访问测试
+                if getattr(cfg, 'enable_unauthorized_test', True):
+                    auth_result = await self._vulnerability_tester.test_unauthorized_access(endpoint.full_url, endpoint.method)
+                    if auth_result and auth_result.is_vulnerable:
+                        from .models import Vulnerability
+                        vuln = Vulnerability(
+                            api_id=endpoint.api_id,
+                            vuln_type=auth_result.vuln_type.value,
+                            severity=Severity[auth_result.severity.upper()] if isinstance(auth_result.severity, str) else auth_result.severity,
+                            evidence=auth_result.evidence,
+                            payload=auth_result.payload,
+                            remediation=auth_result.remediation,
+                            cwe_id=auth_result.cwe_id
+                        )
+                        if self.result:
+                            self.result.vulnerabilities.append(vuln)
+                        vuln_count += 1
+                        
             except Exception:
                 pass
         
@@ -697,11 +820,32 @@ class ScanEngine:
     
     async def _stage_reporting(self):
         """报告生成阶段"""
-        if self.file_storage and self.result:
-            self.file_storage.save_json(
-                self.result.to_dict(),
-                'scan_result.json'
+        if not self.file_storage or not self.result:
+            return
+        
+        scan_dict = self.result.to_dict()
+        
+        self.file_storage.save_json(scan_dict, 'scan_result.json')
+        
+        report_exporter = ReportExporter(output_dir=self.config.output_dir)
+        formats = getattr(self.config, 'report_formats', ['json', 'html'])
+        
+        try:
+            report_exporter.export(
+                scan_result=scan_dict,
+                target=self.result.target_url,
+                formats=formats
             )
+        except Exception as e:
+            print(f"Report export error: {e}")
+        
+        try:
+            attack_chain_exporter = AttackChainExporter()
+            folder_name = self.result.target_url.replace('://', '_').replace('/', '_').replace('.', '_')
+            html_path = os.path.join(self.config.output_dir, folder_name, 'attack_chain.html')
+            attack_chain_exporter.generate_html_report(self.result, html_path)
+        except Exception as e:
+            print(f"Attack chain export error: {e}")
     
     async def _save_checkpoint(self):
         """保存检查点"""
