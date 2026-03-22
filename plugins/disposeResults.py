@@ -16,6 +16,7 @@ except Exception as e:
     from nodeCommon import *
 
 unified_rules = []
+hae_rules = []
 try:
     root_dir = os.path.dirname(os.path.dirname(__file__))
     cfg_path = os.path.join(root_dir, 'config.yaml')
@@ -23,6 +24,7 @@ try:
         with open(cfg_path, 'r', encoding='utf-8') as f:
             cfg = yaml.safe_load(f) or {}
             unified_rules = (cfg.get('rules') or [])
+            hae_rules = (cfg.get('hae_rules') or [])
 except Exception:
     pass
 
@@ -53,6 +55,7 @@ def reconstruct_url_from_filename(filename):
 
 # 编译并统一规则池
 unified_rules_list = []
+hae_rules_list = []
 logger_print_content(f"[敏感信息扫描] 开始加载规则...")
 for rule in unified_rules:
     if not rule.get('enabled', True): continue
@@ -61,7 +64,18 @@ for rule in unified_rules:
         unified_rules_list.append(rule)
     except Exception as e:
         logger_print_content(f"规则 {rule.get('id')} 正则编译失败: {e}")
+
+for rule in hae_rules:
+    if not rule.get('enabled', True): continue
+    try:
+        rule['compiled_pattern'] = re.compile(rule['pattern'])
+        hae_rules_list.append(rule)
+    except Exception as e:
+        logger_print_content(f"HAE规则 {rule.get('id')} 正则编译失败: {e}")
+
 logger_print_content(f"[敏感信息扫描] 成功加载 {len(unified_rules_list)} 条规则")
+if hae_rules_list:
+    logger_print_content(f"[敏感信息扫描] 成功加载 {len(hae_rules_list)} 条HAE规则")
 
 try:
     from plugins.sensitive_report import generate_sensitive_report
@@ -391,7 +405,8 @@ def disposeResults_api(folder_path, filePath_url_info, db_path=None, aiScan=Fals
 
     # --- Scanning Phase ---
     total_findings = []
-    rules_compact = [{'id':r.get('id'), 'name':r.get('name'), 'compiled_pattern':r['compiled_pattern'], 'severity':r.get('severity'), 'group':r.get('group'), 'source':r.get('source')} for r in unified_rules_list]
+    all_rules = list(unified_rules_list) + list(hae_rules_list)
+    rules_compact = [{'id':r.get('id'), 'name':r.get('name'), 'compiled_pattern':r['compiled_pattern'], 'severity':r.get('severity'), 'group':r.get('group'), 'source':r.get('source')} for r in all_rules]
     
     max_workers = min(os.cpu_count() or 1, 8)
     BATCH_SIZE = 1000

@@ -281,3 +281,125 @@ rules:
     severity: high
     enabled: true
     source: custom
+  - id: slack_token
+    name: Slack Token
+    group: Sensitive
+    pattern: \bxox[baprs]-[0-9a-zA-Z-]{10,}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: stripe_api_key
+    name: Stripe API Key
+    group: Sensitive
+    pattern: \b(?:sk|pk)_(?:test|live)_[0-9a-zA-Z]{24,}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: sendgrid_api_key
+    name: SendGrid API Key
+    group: Sensitive
+    pattern: \bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: mailgun_api_key
+    name: Mailgun API Key
+    group: Sensitive
+    pattern: \bkey-[a-z0-9]{32}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: twilio_api_key
+    name: Twilio API Key
+    group: Sensitive
+    pattern: \bSK[a-z0-9]{32}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: aws_secret_key
+    name: AWS Secret Access Key
+    group: Sensitive
+    pattern: (?:aws)?(?:secret)?(?:access)?[-_]?key["\s]*[:=]["\s]*[A-Za-z0-9/+=]{40}
+    severity: high
+    enabled: true
+    source: custom
+  - id: aliyun_secret
+    name: Aliyun AccessKey Secret
+    group: Sensitive
+    pattern: \b[a-zA-Z0-9]{30}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: telegram_bot_token
+    name: Telegram Bot Token
+    group: Sensitive
+    pattern: \b\d{8,10}:[a-zA-Z0-9_-]{35}\b
+    severity: medium
+    enabled: true
+    source: custom
+  - id: google_api_key
+    name: Google API Key
+    group: Sensitive
+    pattern: \bAIza[0-9A-Za-z_-]{35}\b
+    severity: high
+    enabled: true
+    source: custom
+  - id: vue_api_key
+    name: Vue API Key
+    group: Sensitive
+    pattern: \bVUE_[A-Z_0-9]{1,15}_(?:KEY|PASS|PASSWORD|TOKEN|APIKEY)["\s]*[:=]["\s]*(?:[A-Za-z0-9_\-]{15,50}|[a-z0-9/+]{50,100}==?)
+    severity: medium
+    enabled: true
+    source: custom
+
+# HAE (High-risk API Endpoints) 专用规则
+hae_rules:
+  - id: hae_admin_user
+    name: 管理员用户接口
+    group: High Risk
+    pattern: (\/(admin|manage|console|dashboard)\/user|\/api\/v1\/users\/list)
+    severity: high
+    enabled: true
+    source: hae
+  - id: hae_file_upload
+    name: 文件上传接口
+    group: High Risk
+    pattern: (\/upload|\/file\/add|\/attach\/upload|\/media\/upload)
+    severity: high
+    enabled: true
+    source: hae
+  - id: hae_file_read
+    name: 文件读取接口
+    group: High Risk
+    pattern: (\/file\/read|\/file\/get|\/download|\/preview|\/readfile)
+    severity: high
+    enabled: true
+    source: hae
+  - id: hae_sql_debug
+    name: SQL调试接口
+    group: High Risk
+    pattern: (\/debug\/sql|\/sql\/exec|\/db\/query|\/database\/sql)
+    severity: high
+    enabled: true
+    source: hae
+  - id: hae_exec_cmd
+    name: 命令执行接口
+    group: Critical
+    pattern: (\/exec|\/run|\/command|\/shell|\/bash|\/cmd\/run)
+    severity: critical
+    enabled: true
+    source: hae
+  - id: hae_config_view
+    name: 配置查看接口
+    group: High Risk
+    pattern: (\/config\/view|\/setting\/get|\/system\/config)
+    severity: medium
+    enabled: true
+    source: hae
+  - id: hae_memcache
+    name: 缓存管理接口
+    group: High Risk
+    pattern: (\/memcache|\/redis\/|\/cache\/clear|\/session\/)
+    severity: medium
+    enabled: true
+    source: hae

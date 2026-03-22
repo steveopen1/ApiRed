@@ -255,8 +255,20 @@ invalid_keywords = {
     'httpagent', 'httpsagent', 'httpversionnotsupported', 
     'xmlhttprequest', 'activexobject', 'mssxml2', 'microsoft',
     'window', 'document', 'location', 'navigator', 'console',
-    'function', 'return', 'var', 'let', 'const', 'import', 'export'
+    'function', 'return', 'var', 'let', 'const', 'import', 'export',
+    'anonymous', 'callback', 'promise', 'resolve', 'reject'
 }
+
+# 无效路径字符模式（包含这些字符的路径极有可能是误报）
+invalid_path_patterns = [
+    r'[,;]\s*(RegExp|function|var|let|const)',  # /g,mt=RegExp(
+    r'^\/[\w]+[,;]',  # 以 /xxx, 或 /xxx; 开头
+    r'[,\(\)\{\}\[\]]{2,}',  # 连续多个特殊字符
+    r'\/[a-z]{1,3}\s*[,;]\s*\w',  # 短路径后跟逗号分号
+]
+
+import re
+_compiled_invalid_patterns = [re.compile(p, re.IGNORECASE) for p in invalid_path_patterns]
 
 def urlFilter(lst):
     tmp = []
@@ -266,6 +278,10 @@ def urlFilter(lst):
         
         # 匹配到的api接口如果以['\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~', '[', ']']为开头，则认为这个api接口是错误的
         if any(line.strip("\"").strip("'").strip("/").startswith(x) for x in apiRootBlackListDuringSpider):
+            continue
+            
+        # 2. 过滤包含无效字符模式的路径
+        if any(pattern.search(line) for pattern in _compiled_invalid_patterns):
             continue
             
         line = line.replace(" ", "")
