@@ -409,21 +409,23 @@ def get_js_and_staticUrl(i, headers, js_and_staticUrl_info, url, urls, domain, j
         # 3. Webpack 提取
         wp_js = webpack_js_find(content)
         if wp_js:
-            if not is_sourcemap_file:
-                logger_print_content(f"[+][D{current_depth+1}] 【WEBPACK】{ref_url} 扫描到新分片")
-            js_and_staticUrl_info['js_paths'].extend(wp_js)
-            for js_path in wp_js:
-                new_js_url = get_new_url(scheme, base, root_path, js_path)
-                new_js_url = rewrite_internal_host(new_js_url, base)
-                if new_js_url and new_js_url not in urls:
-                    urls.append(new_js_url)
-                    if current_depth < max_depth:
-                        try:
-                            if not is_blacklisted(new_js_url):
-                                queue.put((new_js_url, current_depth + 1))
-                        except Exception:
-                            pass
-                js_and_staticUrl_info['js_url'].append({'url': new_js_url, 'referer': ref_url, 'url_type': "js_url"})
+            wp_js = jsFilter(wp_js)
+            if wp_js:
+                if not is_sourcemap_file:
+                    logger_print_content(f"[+][D{current_depth+1}] 【WEBPACK】{ref_url} 扫描到新分片")
+                js_and_staticUrl_info['js_paths'].extend(wp_js)
+                for js_path in wp_js:
+                    new_js_url = get_new_url(scheme, base, root_path, js_path)
+                    new_js_url = rewrite_internal_host(new_js_url, base)
+                    if new_js_url and new_js_url not in urls:
+                        urls.append(new_js_url)
+                        if current_depth < max_depth:
+                            try:
+                                if not is_blacklisted(new_js_url):
+                                    queue.put((new_js_url, current_depth + 1))
+                            except Exception:
+                                pass
+                    js_and_staticUrl_info['js_url'].append({'url': new_js_url, 'referer': ref_url, 'url_type': "js_url"})
 
     # 处理主响应内容
     process_content_for_urls(text, url)
@@ -608,27 +610,30 @@ def js_find_api(domain, urls, cookies, folder_path, filePath_url_info, db_path=N
         queue.put((url, 0))
 
     # Use ThreadPoolExecutor for better management
-    max_workers = min(os.cpu_count() or 4, 32) # Increased threads for IO bound task
+    max_workers = min(os.cpu_count() or 4, 32)
     
     ast_tasks_list = []
+    futures = []
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        while not queue.empty() or getattr(executor, '_work_queue', None) and executor._work_queue.qsize() > 0:
+        while True:
             try:
-                # Get task with timeout
                 url_data = queue.get(timeout=1)
                 url, depth = url_data
-                
-                # Submit task
-                executor.submit(get_js_and_staticUrl, 0, headers, js_and_staticUrl_info, url, urls, domain, js_and_staticUrl_alive_info_tmp, folder_path, filePath_url_info, db_path, depth, max_depth, ast_tasks_list)
-                
+                future = executor.submit(get_js_and_staticUrl, 0, headers, js_and_staticUrl_info, url, urls, domain, js_and_staticUrl_alive_info_tmp, folder_path, filePath_url_info, db_path, depth, max_depth, ast_tasks_list)
+                futures.append(future)
             except Empty:
-                # Wait a bit to see if new tasks are added
-                time.sleep(0.5)
+                if not futures:
+                    break
                 if queue.empty():
+                    for f in concurrent.futures.as_completed(futures):
+                        pass
                     break
             except Exception:
                 pass
+    
+    # 确保所有任务完成后再进行 AST 分析
+    time.sleep(0.5)
     
     # 批量执行 AST 分析
     if ast_tasks_list:
