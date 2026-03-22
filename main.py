@@ -90,6 +90,8 @@ Examples:
                                 help='Disable bypass techniques test')
         vuln_group.add_argument('--no-jwt-test', dest='no_jwt_test', action='store_true',
                                 help='Disable JWT weak key test')
+        vuln_group.add_argument('--no-idor-test', dest='no_idor_test', action='store_true',
+                                help='Disable IDOR test')
         
         scan_parser.add_argument('--verbose', '-v', action='store_true')
 
@@ -135,6 +137,7 @@ Examples:
             enable_ssrf_test=not getattr(parsed_args, 'no_ssrf_test', False),
             enable_bypass_test=not getattr(parsed_args, 'no_bypass_test', False),
             enable_jwt_test=not getattr(parsed_args, 'no_jwt_test', False),
+            enable_idor_test=not getattr(parsed_args, 'no_idor_test', False),
         )
 
     async def run_scan(self, parsed_args) -> int:
