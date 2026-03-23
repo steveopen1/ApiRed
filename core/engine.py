@@ -666,72 +666,115 @@ class ScanEngine:
                     method='HEAD',
                     timeout=5
                 )
+            except Exception:
+                try:
+                    response = await self._http_client.request(
+                        full_url,
+                        method='GET',
+                        timeout=5
+                    )
+                except Exception as e:
+                    logger.debug(f"Parent path probe failed: {parent_path} - {e}")
+                    continue
+            
+            if 200 <= response.status_code < 400:
+                logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
+                probed_results[parent_path] = set()
                 
-                if 200 <= response.status_code < 400:
-                    logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
-                    probed_results[parent_path] = set()
+                probed_suffixes = set()
+                
+                for suffix in combined_suffixes:
+                    if suffix.startswith('//'):
+                        continue
                     
-                    probed_suffixes = set()
+                    if suffix.startswith('/'):
+                        sub_path = parent_path.rstrip('/') + suffix
+                    else:
+                        sub_path = parent_path.rstrip('/') + '/' + suffix
                     
-                    for suffix in combined_suffixes:
-                        if suffix.startswith('//'):
+                    if sub_path in existing_apis or sub_path in probed_suffixes:
+                        continue
+                    
+                    sub_url = base_url + sub_path
+                    
+                    try:
+                        sub_response = await self._http_client.request(
+                            sub_url,
+                            method='HEAD',
+                            timeout=3
+                        )
+                        
+                        if 200 <= sub_response.status_code < 400:
+                            probed_results[parent_path].add(sub_path)
+                            probed_suffixes.add(sub_path)
+                            existing_apis.add(sub_path)
+                            logger.debug(f"  Found: {sub_path} (status: {sub_response.status_code})")
+                    except Exception:
+                        pass
+                
+                for js_resource in js_resource_list[:10]:
+                    for js_suffix in js_suffix_list[:5]:
+                        combo_path = parent_path.rstrip('/') + '/' + js_resource + '/' + js_suffix
+                        
+                        if combo_path in existing_apis or combo_path in probed_suffixes:
                             continue
                         
-                        if suffix.startswith('/'):
-                            sub_path = parent_path.rstrip('/') + suffix
-                        else:
-                            sub_path = parent_path.rstrip('/') + '/' + suffix
-                        
-                        if sub_path in existing_apis or sub_path in probed_suffixes:
-                            continue
-                        
-                        sub_url = base_url + sub_path
+                        combo_url = base_url + combo_path
                         
                         try:
-                            sub_response = await self._http_client.request(
-                                sub_url,
+                            combo_response = await self._http_client.request(
+                                combo_url,
                                 method='HEAD',
                                 timeout=3
                             )
                             
-                            if 200 <= sub_response.status_code < 400:
-                                probed_results[parent_path].add(sub_path)
-                                probed_suffixes.add(sub_path)
-                                existing_apis.add(sub_path)
-                                logger.debug(f"  Found: {sub_path} (status: {sub_response.status_code})")
+                            if 200 <= combo_response.status_code < 400:
+                                probed_results[parent_path].add(combo_path)
+                                probed_suffixes.add(combo_path)
+                                existing_apis.add(combo_path)
+                                logger.debug(f"  Found (combo): {combo_path} (status: {combo_response.status_code})")
                         except Exception:
                             pass
-                    
-                    for js_resource in js_resource_list[:10]:
-                        for js_suffix in js_suffix_list[:5]:
-                            combo_path = parent_path.rstrip('/') + '/' + js_resource + '/' + js_suffix
-                            
-                            if combo_path in existing_apis or combo_path in probed_suffixes:
-                                continue
-                            
-                            combo_url = base_url + combo_path
-                            
-                            try:
-                                combo_response = await self._http_client.request(
-                                    combo_url,
-                                    method='HEAD',
-                                    timeout=3
-                                )
-                                
-                                if 200 <= combo_response.status_code < 400:
-                                    probed_results[parent_path].add(combo_path)
-                                    probed_suffixes.add(combo_path)
-                                    existing_apis.add(combo_path)
-                                    logger.debug(f"  Found (combo): {combo_path} (status: {combo_response.status_code})")
-                            except Exception:
-                                pass
-                
-                elif response.status_code == 401 or response.status_code == 403:
-                    probed_results[parent_path] = set()
-                    logger.info(f"Parent path exists (auth required): {parent_path} (status: {response.status_code})")
             
-            except Exception as e:
-                logger.debug(f"Parent path probe failed: {parent_path} - {e}")
+            elif response.status_code in (401, 403):
+                probed_results[parent_path] = set()
+                logger.info(f"Parent path exists (auth required): {parent_path} (status: {response.status_code}), 继续探测子路径...")
+                
+                probed_suffixes = set()
+                
+                for suffix in combined_suffixes[:30]:
+                    if suffix.startswith('//'):
+                        continue
+                    
+                    if suffix.startswith('/'):
+                        sub_path = parent_path.rstrip('/') + suffix
+                    else:
+                        sub_path = parent_path.rstrip('/') + '/' + suffix
+                    
+                    if sub_path in existing_apis or sub_path in probed_suffixes:
+                        continue
+                    
+                    sub_url = base_url + sub_path
+                    
+                    try:
+                        sub_response = await self._http_client.request(
+                            sub_url,
+                            method='HEAD',
+                            timeout=3
+                        )
+                        
+                        if 200 <= sub_response.status_code < 400:
+                            probed_results[parent_path].add(sub_path)
+                            probed_suffixes.add(sub_path)
+                            existing_apis.add(sub_path)
+                            logger.debug(f"  Found (auth): {sub_path} (status: {sub_response.status_code})")
+                    except Exception:
+                        pass
+            
+            else:
+                logger.debug(f"Parent path not accessible: {parent_path} (status: {response.status_code})")
+        
+        return probed_results
         
         return probed_results
     
@@ -834,7 +877,7 @@ class ScanEngine:
         
         all_paths_count = len(paths_to_probe)
         js_result_count = len(js_results)
-        max_fuzz = min(500, max(200, js_result_count * 50))
+        max_fuzz = min(1000, max(300, js_result_count * 80))
         
         paths_to_probe = list(set(paths_to_probe))[:max_fuzz]
         

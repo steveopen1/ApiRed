@@ -386,9 +386,10 @@ class JSParser:
         import re
         is_likely_id = lambda s: (
             s.isdigit() or 
-            bool(re.match(r'^[a-f0-9-]{8,}$', s)) or
-            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            bool(re.match(r'^[a-f0-9]{8,}-[a-f0-9]{4,}-[a-f0-9]{4,}-[a-f0-9]{4,}-[a-f0-9]{12,}$', s)) or
+            bool(re.match(r'^[a-f0-9]{32,}$', s)) or
+            (len(s) > 3 and len(s) <= 36 and s[:2].isalpha() and s[2:].isdigit()) or
+            (len(s) > 10 and len(s) <= 40 and re.match(r'^[a-f0-9]+$', s))
         )
         
         parent_paths = []
