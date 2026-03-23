@@ -15,6 +15,7 @@ from ..collectors.js_collector import JSParser, WebpackAnalyzer
 from ..collectors.browser_collector import HeadlessBrowserCollector
 from ..framework import FrameworkDetector
 from ..analyzers.response_cluster import ResponseCluster
+from ..utils.api_spec_parser import APISpecParser
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ class DiscoverAgent(AgentInterface):
         self._browser = None
         self._framework_detector = None
         self._response_cluster = None
+        self._api_spec_parser = None
+        self._http_client = None
     
     async def initialize(self, context: ScanContext) -> None:
         """初始化发现代理"""
@@ -141,31 +144,56 @@ class DiscoverAgent(AgentInterface):
         return endpoints
     
     async def _discover_from_swagger(self, target: str) -> List[APIEndpoint]:
-        """从 Swagger/OpenAPI 发现"""
+        """从 Swagger/OpenAPI 发现 (使用 APISpecParser)"""
         endpoints = []
         
-        swagger_urls = APIRouter.find_swagger_endpoints(target)
-        
-        for swagger_url in swagger_urls:
-            try:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(swagger_url, timeout=5) as resp:
-                        if resp.status == 200:
-                            content = await resp.text()
-                            results = APIRouter.extract_from_swagger(content)
-                            
-                            for result in results:
-                                endpoint = APIEndpoint(
-                                    path=result.path,
-                                    method=result.method,
-                                    source=f"swagger:{swagger_url}",
-                                    tags=['swagger', 'openapi']
-                                )
-                                endpoints.append(endpoint)
+        try:
+            from ..http_client import HTTPClient
+            http_client = HTTPClient()
+            parser = APISpecParser(http_client)
+            
+            spec_result = await parser.discover_and_parse(target)
+            
+            if spec_result:
+                for api_endpoint in spec_result.endpoints:
+                    endpoint = APIEndpoint(
+                        path=api_endpoint.path,
+                        method=api_endpoint.method,
+                        source=f"{spec_result.spec_type}:{spec_result.base_url}",
+                        tags=[spec_result.spec_type, 'api-spec']
+                    )
+                    endpoints.append(endpoint)
+                
+                logger.info(f"DiscoverAgent: Found {len(endpoints)} endpoints from API spec ({spec_result.spec_type})")
+                
+                for vuln in spec_result.vulnerabilities:
+                    logger.info(f"DiscoverAgent: Spec vulnerability: {vuln.get('type')} - {vuln.get('description', '')[:100]}")
+            
+        except Exception as e:
+            logger.debug(f"APISpecParser failed, falling back to old method: {e}")
+            
+            swagger_urls = APIRouter.find_swagger_endpoints(target)
+            
+            for swagger_url in swagger_urls:
+                try:
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(swagger_url, timeout=5) as resp:
+                            if resp.status == 200:
+                                content = await resp.text()
+                                results = APIRouter.extract_from_swagger(content)
                                 
-            except Exception:
-                continue
+                                for result in results:
+                                    endpoint = APIEndpoint(
+                                        path=result.path,
+                                        method=result.method,
+                                        source=f"swagger:{swagger_url}",
+                                        tags=['swagger', 'openapi']
+                                    )
+                                    endpoints.append(endpoint)
+                                
+                except Exception:
+                    continue
         
         return endpoints
     

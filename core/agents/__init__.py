@@ -11,6 +11,7 @@ from .orchestrator import Orchestrator, AgentInterface, ScanContext, Task, TaskS
 from .discover_agent import DiscoverAgent
 from .test_agent import TestAgent
 from .reflect_agent import ReflectAgent
+from .graphql_tester_agent import GraphQLTesterAgent
 
 __all__ = [
     'BaseAgent',
@@ -27,4 +28,5 @@ __all__ = [
     'DiscoverAgent',
     'TestAgent',
     'ReflectAgent',
+    'GraphQLTesterAgent',
 ]

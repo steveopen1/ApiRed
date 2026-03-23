@@ -15,6 +15,7 @@ from ..testers.api_tester import APIRequestTester
 from ..testers.parameter_extractor import DangerousAPIFilter
 from ..testers.bypass_techniques import BypassTechniques
 from ..testers.vulnerability_tester import VulnerabilityTester
+from ..testers.fuzzer import SmartFuzzer
 from ..rules.sensitive_detector import SensitiveRuleEngine
 from ..analyzers.response_baseline import ResponseDifferentiator
 from ..analyzers.response_cluster import ResponseCluster
@@ -82,6 +83,12 @@ class TestAgent(AgentInterface):
         if self._api_scorer is None:
             self._api_scorer = APIScorer()
         return self._api_scorer
+    
+    def _get_smart_fuzzer(self) -> SmartFuzzer:
+        """获取智能模糊测试器"""
+        if not hasattr(self, '_smart_fuzzer') or self._smart_fuzzer is None:
+            self._smart_fuzzer = SmartFuzzer(safe_mode=True)
+        return self._smart_fuzzer
 
     async def execute(self, context: ScanContext) -> Dict[str, Any]:
         """
@@ -229,6 +236,59 @@ class TestAgent(AgentInterface):
                                 'evidence': f"Status: {bypass_resp.status_code}",
                                 'payload': bypass_resp.bypass_technique,
                             })
+                    
+                    smart_fuzzer = self._get_smart_fuzzer()
+                    
+                    if endpoint.method in ('POST', 'PUT', 'PATCH'):
+                        endpoint_params = {}
+                        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+                            for param in endpoint.parameters:
+                                param_name = param if isinstance(param, str) else getattr(param, 'name', None)
+                                if param_name:
+                                    endpoint_params[param_name] = smart_fuzzer.generate_param_value(param_name)
+                        
+                        multi_format_requests = smart_fuzzer.generate_multi_format_requests(
+                            endpoint.method, full_url, endpoint_params
+                        )
+                        
+                        for mfr in multi_format_requests:
+                            try:
+                                fuzzer_response = await self._http_client.request(
+                                    mfr['url'],
+                                    mfr['method'],
+                                    data=mfr.get('body'),
+                                    headers={**(context.headers or {}), **mfr.get('headers', {})}
+                                )
+                                if fuzzer_response and fuzzer_response.status_code in [200, 201, 204]:
+                                    fuzz_result = smart_fuzzer.guess_param_type('test')
+                                    result['vulnerabilities'].append({
+                                        'type': 'MultiFormatTest',
+                                        'severity': 'info',
+                                        'url': f"{full_url} ({mfr['format']})",
+                                        'evidence': f"Format: {mfr['format']}, Status: {fuzzer_response.status_code if fuzzer_response else 0}",
+                                    })
+                            except Exception as e:
+                                logger.debug(f"SmartFuzzer multi-format test failed: {e}")
+                    
+                    if smart_fuzzer.is_upload_endpoint(full_url, endpoint_params):
+                        upload_tests = smart_fuzzer.generate_upload_test(full_url)
+                        for upload_test in upload_tests:
+                            try:
+                                upload_response = await self._http_client.request(
+                                    upload_test['url'],
+                                    upload_test['method'],
+                                    data=upload_test.get('files'),
+                                    headers={**(context.headers or {}), **upload_test.get('headers', {})}
+                                )
+                                if upload_response and upload_response.status_code in [200, 201, 204, 400]:
+                                    result['vulnerabilities'].append({
+                                        'type': 'UploadTest',
+                                        'severity': 'medium',
+                                        'url': full_url,
+                                        'evidence': f"Format: {upload_test['format']}, Status: {upload_response.status_code}",
+                                    })
+                            except Exception as e:
+                                logger.debug(f"SmartFuzzer upload test failed: {e}")
 
         except Exception as e:
             logger.debug(f"Analysis error: {e}")
