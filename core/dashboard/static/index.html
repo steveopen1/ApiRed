@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApiRed - Professional API Security Scanner</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1f2937;
+            --border-color: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #6366f1;
+            --accent-gradient: linear-gradient(135deg, #3b82f6, #6366f1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-gradient);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .logo-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-tertiary);
+            padding: 4px;
+            border-radius: 8px;
+        }
+        
+        .nav-tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+        
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+        
+        .nav-tab.active {
+            color: var(--text-primary);
+            background: var(--accent-gradient);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .mode-card {
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .mode-card:hover {
+            border-color: var(--accent-primary);
+        }
+        
+        .mode-card.selected {
+            border-color: var(--accent-primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .mode-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .mode-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .mode-icon.rule { background: rgba(16, 185, 129, 0.2); }
+        .mode-icon.agent { background: rgba(99, 102, 241, 0.2); }
+        
+        .mode-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .mode-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .api-key-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .api-key-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .api-key-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .api-provider {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .api-status {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        
+        .api-status.configured {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+        
+        .api-status.not-configured {
+            background: rgba(107, 114, 128, 0.2);
+            color: var(--text-muted);
+        }
+        
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .task-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        
+        .task-info {
+            flex: 1;
+        }
+        
+        .task-target {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--accent-primary);
+            word-break: break-all;
+        }
+        
+        .task-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 4px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .task-badge {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .task-badge.rule { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .task-badge.agent { background: rgba(99, 102, 241, 0.2); color: var(--accent-secondary); }
+        .task-badge.pending { background: rgba(107, 114, 128, 0.2); color: var(--text-muted); }
+        .task-badge.running { background: rgba(59, 130, 246, 0.2); color: var(--accent-primary); }
+        .task-badge.completed { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .task-badge.failed { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        
+        .task-progress {
+            margin-top: 12px;
+        }
+        
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-primary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            transition: width 0.3s;
+        }
+        
+        .progress-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-align: right;
+        }
+        
+        .task-error {
+            font-size: 0.8rem;
+            color: var(--danger);
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        
+        .task-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+            pointer-events: none;
+        }
+        
+        .toast {
+            padding: 12px 24px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            z-index: 1000;
+            animation: toastSlideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-width: 90vw;
+            text-align: center;
+        }
+        
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.error { border-left: 4px solid var(--danger); }
+        
+        @keyframes toastSlideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @media (max-width: 768px) {
+            .toast-container { top: auto; bottom: 60px; }
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .results-table th,
+        .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .results-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        
+        .results-table tr:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .vuln-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .vuln-badge.critical { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .vuln-badge.high { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .vuln-badge.medium { background: rgba(59, 130, 246, 0.2); color: var(--accent-primary); }
+        .vuln-badge.low { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            .header { flex-direction: column; gap: 12px; text-align: center; padding: 12px 16px; }
+            .nav-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 8px; }
+            .nav-tab { white-space: nowrap; padding: 8px 12px; font-size: 0.85rem; }
+            .form-grid { grid-template-columns: 1fr !important; gap: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px; }
+            .task-card { padding: 16px; }
+            .task-header { flex-direction: column; gap: 12px; }
+            .task-actions { flex-direction: column; gap: 8px; }
+            .task-actions .btn { width: 100%; justify-content: center; }
+            .api-key-item { padding: 12px; }
+            .results-table { font-size: 0.85rem; }
+            .results-table th, .results-table td { padding: 8px; }
+            .modal-content { margin: 12px; max-width: calc(100% - 24px); }
+            .form-input { font-size: 14px; padding: 8px 12px; }
+            .btn { padding: 8px 16px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">AR</div>
+            <div>
+                <div class="logo-text">ApiRed</div>
+                <div class="logo-subtitle">Professional API Security Scanner</div>
+            </div>
+        </div>
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-page="scan">Scan</button>
+            <button class="nav-tab" data-page="tasks">Tasks</button>
+            <button class="nav-tab" data-page="settings">Settings</button>
+        </nav>
+    </header>
+    
+    <div class="container">
+        <!-- Scan Page -->
+        <div id="page-scan" class="page active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-scans">0</div>
+                    <div class="stat-label">Total Scans</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-running">0</div>
+                    <div class="stat-label">Running</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-apis">0</div>
+                    <div class="stat-label">APIs Found</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-vulns">0</div>
+                    <div class="stat-label">Vulnerabilities</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">New Scan</h2>
+                </div>
+                
+                <div class="mode-selector">
+                    <div class="mode-card selected" data-mode="rule" onclick="selectMode('rule')">
+                        <div class="mode-card-header">
+                            <div class="mode-icon rule">⚡</div>
+                            <div>
+                                <div class="mode-name">Rule-based Mode</div>
+                                <div class="mode-desc">Fast scanning using predefined rules</div>
+                            </div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            Best for: Quick reconnaissance, known vulnerability detection
+                        </div>
+                    </div>
+                    <div class="mode-card" data-mode="agent" onclick="selectMode('agent')">
+                        <div class="mode-card-header">
+                            <div class="mode-icon agent">🤖</div>
+                            <div>
+                                <div class="mode-name">AI Agent Mode</div>
+                                <div class="mode-desc">Intelligent scanning powered by LLM</div>
+                            </div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            Best for: Deep analysis, unknown vulnerability discovery
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Target URL *</label>
+                        <input type="text" id="input-target" class="form-input" placeholder="https://api.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Cookies (optional)</label>
+                        <input type="text" id="input-cookies" class="form-input" placeholder="session=xxx; token=yyy">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Concurrency</label>
+                        <input type="number" id="input-concurrency" class="form-input" value="50" min="1" max="500">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Attack Mode</label>
+                        <select id="input-attack-mode" class="form-select">
+                            <option value="all">All Tests</option>
+                            <option value="collect">Collection Only</option>
+                            <option value="scan">Vulnerability Scan</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">JS Depth</label>
+                        <input type="number" id="input-js-depth" class="form-input" value="3" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Output Format</label>
+                        <select id="input-format" class="form-select">
+                            <option value="json">JSON</option>
+                            <option value="html">HTML</option>
+                            <option value="all">All Formats</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="startScan()">
+                        <span>▶</span> Start Scan
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearCompletedTasks()">
+                        Clear Completed
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Quick Tasks</h2>
+                </div>
+                <div id="quick-tasks" class="task-list">
+                    <div class="empty-state">No active tasks</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tasks Page -->
+        <div id="page-tasks" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">All Tasks</h2>
+                    <button class="btn btn-secondary" onclick="loadTasks()">Refresh</button>
+                </div>
+                <div id="all-tasks" class="task-list">
+                    <div class="empty-state">No tasks yet</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Scan Results</h2>
+                </div>
+                <div id="results-container">
+                    <div class="empty-state">No results yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Page -->
+        <div id="page-settings" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">AI Provider Configuration</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.875rem;">
+                    Configure your AI provider API keys. Keys are stored locally and never transmitted.
+                </p>
+                
+                <div class="api-key-grid" id="api-key-list">
+                    <!-- Dynamically populated -->
+                </div>
+                
+                <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                    <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Scan Defaults</h2>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Default Concurrency</label>
+                        <input type="number" id="default-concurrency" class="form-input" value="50" min="1" max="500">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Default JS Depth</label>
+                        <input type="number" id="default-js-depth" class="form-input" value="3" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Verify SSL</label>
+                        <select id="default-verify-ssl" class="form-select">
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast-container"></div>
+    
+    <script>
+        let currentMode = 'rule';
+        let config = {};
+        
+        const API_PROVIDERS = {
+            'anthropic': { name: 'Anthropic Claude', models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022'] },
+            'openai': { name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
+            'gemini': { name: 'Google Gemini', models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'] },
+            'deepseek': { name: 'DeepSeek', models: ['deepseek-chat', 'deepseek-coder'] },
+            'mistral': { name: 'Mistral AI', models: ['mistral-large-latest', 'mistral-small-latest', 'mistral-7b'] },
+            'ollama': { name: 'Ollama (Local)', models: ['llama3.2', 'qwen2.5', 'codellama'] }
+        };
+        
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('page-' + tab.dataset.page).classList.add('active');
+            });
+        });
+        
+        function selectMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-card').forEach(card => {
+                card.classList.toggle('selected', card.dataset.mode === mode);
+            });
+        }
+        
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        async function loadConfig() {
+            try {
+                const resp = await fetch('/api/config');
+                config = await resp.json();
+                renderApiKeys();
+                document.getElementById('default-concurrency').value = config.scan_defaults?.concurrency || 50;
+                document.getElementById('default-js-depth').value = config.scan_defaults?.js_depth || 3;
+                document.getElementById('default-verify-ssl').value = config.scan_defaults?.verify_ssl ? 'true' : 'false';
+            } catch (e) {
+                console.error('Failed to load config:', e);
+            }
+        }
+        
+        function renderApiKeys() {
+            const container = document.getElementById('api-key-list');
+            let html = '';
+            for (const [provider, info] of Object.entries(API_PROVIDERS)) {
+                const key = config.api_keys?.[provider] || '';
+                const isConfigured = key && !key.startsWith('***');
+                html += `
+                    <div class="api-key-item">
+                        <div class="api-key-header">
+                            <span class="api-provider">${info.name}</span>
+                            <span class="api-status ${isConfigured ? 'configured' : 'not-configured'}">
+                                ${isConfigured ? 'Configured' : 'Not Set'}
+                            </span>
+                        </div>
+                        <input type="password" class="form-input api-key-input" 
+                               data-provider="${provider}" 
+                               placeholder="${isConfigured ? '••••••••' : 'Enter API key...'}"
+                               value="">
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+        
+        async function saveSettings() {
+            const apiKeys = {};
+            document.querySelectorAll('.api-key-input').forEach(input => {
+                const value = input.value.trim();
+                if (value && !value.startsWith('***')) {
+                    apiKeys[input.dataset.provider] = value;
+                }
+            });
+            
+            const updates = {
+                api_keys: apiKeys,
+                scan_defaults: {
+                    concurrency: parseInt(document.getElementById('default-concurrency').value) || 50,
+                    js_depth: parseInt(document.getElementById('default-js-depth').value) || 3,
+                    verify_ssl: document.getElementById('default-verify-ssl').value === 'true'
+                }
+            };
+            
+            try {
+                const resp = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                if (resp.ok) {
+                    showToast('Settings saved successfully', 'success');
+                    loadConfig();
+                } else {
+                    showToast('Failed to save settings', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to save settings: ' + e.message, 'error');
+            }
+        }
+        
+        async function startScan() {
+            const target = document.getElementById('input-target').value.trim();
+            if (!target) {
+                showToast('Please enter target URL', 'error');
+                return;
+            }
+            
+            const config_data = {
+                cookies: document.getElementById('input-cookies').value.trim(),
+                concurrency: parseInt(document.getElementById('input-concurrency').value) || 50,
+                attack_mode: document.getElementById('input-attack-mode').value,
+                js_depth: parseInt(document.getElementById('input-js-depth').value) || 3,
+                format: document.getElementById('input-format').value
+            };
+            
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        target: target,
+                        scan_mode: currentMode,
+                        config: config_data
+                    })
+                });
+                
+                const result = await resp.json();
+                
+                if (result.error) {
+                    showToast(result.error, 'error');
+                } else {
+                    showToast(`Scan started: ${result.task_id}`, 'success');
+                    document.getElementById('input-target').value = '';
+                    loadStats();
+                    loadTasks();
+                }
+            } catch (e) {
+                showToast('Failed to start scan: ' + e.message, 'error');
+            }
+        }
+        
+        async function stopTask(taskId) {
+            try {
+                await fetch('/api/task/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+                loadTasks();
+            } catch (e) {
+                showToast('Failed to stop task', 'error');
+            }
+        }
+        
+        async function deleteTask(taskId) {
+            try {
+                await fetch('/api/task/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+                loadTasks();
+                loadStats();
+            } catch (e) {
+                showToast('Failed to delete task', 'error');
+            }
+        }
+        
+        async function clearCompletedTasks() {
+            try {
+                await fetch('/api/tasks/clear', { method: 'POST' });
+                loadTasks();
+            } catch (e) {
+                showToast('Failed to clear tasks', 'error');
+            }
+        }
+        
+        async function loadStats() {
+            try {
+                const resp = await fetch('/api/stats');
+                const data = await resp.json();
+                document.getElementById('stat-total-scans').textContent = data.total_scans || 0;
+                document.getElementById('stat-running').textContent = data.running_tasks || 0;
+                document.getElementById('stat-apis').textContent = data.total_apis || 0;
+                document.getElementById('stat-vulns').textContent = data.total_vulns || 0;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+        
+        async function loadTasks() {
+            try {
+                const resp = await fetch('/api/tasks');
+                const data = await resp.json();
+                const tasks = data.tasks || [];
+                
+                const quickHtml = tasks.length ? tasks.slice(0, 3).map(renderTask).join('') : '<div class="empty-state">No active tasks</div>';
+                document.getElementById('quick-tasks').innerHTML = quickHtml;
+                
+                const allHtml = tasks.length ? tasks.map(renderTask).join('') : '<div class="empty-state">No tasks yet</div>';
+                document.getElementById('all-tasks').innerHTML = allHtml;
+            } catch (e) {
+                console.error('Failed to load tasks:', e);
+            }
+        }
+        
+        function renderTask(task) {
+            const mode = escapeHtml(task.scan_mode || 'rule');
+            const status = escapeHtml(task.status || 'pending');
+            const progress = task.progress || 0;
+            const error = task.error ? '<div class="task-error">' + escapeHtml(task.error.substring(0, 100)) + '</div>' : '';
+            return `
+                <div class="task-card">
+                    <div class="task-header">
+                        <div class="task-info">
+                            <div class="task-target">${escapeHtml(task.target)}</div>
+                            <div class="task-meta">
+                                <span>Mode: ${mode}</span>
+                                <span>${task.start_time ? new Date(task.start_time).toLocaleString() : ''}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="task-badge ${mode}">${mode}</span>
+                            <span class="task-badge ${status}">${status}</span>
+                        </div>
+                    </div>
+                    <div class="task-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="progress-text">${progress}%</div>
+                    </div>
+                    ${error}
+                    <div class="task-actions">
+                        ${task.status === 'running' ? '<button class="btn btn-danger" onclick="stopTask(\'' + task.task_id + '\')">Stop</button>' : ''}
+                        <button class="btn btn-secondary" onclick="deleteTask(\'' + task.task_id + '\')">Delete</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function loadResults() {
+            try {
+                const resp = await fetch('/api/results');
+                const data = await resp.json();
+                const results = data.results || [];
+                
+                if (!results.length) {
+                    document.getElementById('results-container').innerHTML = '<div class="empty-state">No results yet</div>';
+                    return;
+                }
+                
+                let html = '<table class="results-table"><thead><tr><th>Target</th><th>APIs</th><th>Vulns</th><th>Time</th></tr></thead><tbody>';
+                for (const r of results.slice(-20).reverse()) {
+                    const vulns = r.vulnerabilities || [];
+                    const critical = vulns.filter(v => v.severity === 'critical').length;
+                    const high = vulns.filter(v => v.severity === 'high').length;
+                    const medium = vulns.filter(v => v.severity === 'medium').length;
+                    
+                    html += `<tr>
+                        <td>${escapeHtml(r.target_url || r.target || 'Unknown')}</td>
+                        <td>${r.total_apis || 0}</td>
+                        <td>
+                            ${critical ? `<span class="vuln-badge critical">${critical}C</span>` : ''}
+                            ${high ? `<span class="vuln-badge high">${high}H</span>` : ''}
+                            ${medium ? `<span class="vuln-badge medium">${medium}M</span>` : ''}
+                        </td>
+                        <td>${r.start_time || '-'}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                document.getElementById('results-container').innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load results:', e);
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        loadConfig();
+        loadStats();
+        loadTasks();
+        loadResults();
+        
+        setInterval(() => {
+            loadStats();
+            loadTasks();
+        }, 5000);
+        
+        document.querySelector('[data-page="tasks"]').addEventListener('click', loadResults);
+    </script>
+</body>
+</html>

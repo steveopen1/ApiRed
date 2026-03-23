@@ -454,6 +454,8 @@ class AIEngine:
     整合所有AI分析能力，提供简单的调用接口
     """
     
+    MAX_CACHE_SIZE = 100
+    
     def __init__(self, config: Optional[AIConfig] = None):
         self.config = config or self._load_default_config()
         self.client = AIFactory.create_client(self.config)
@@ -463,30 +465,47 @@ class AIEngine:
         self.param_inferrer = ParameterInferrer(self.client)
         self.sensitive_analyzer = SensitiveInfoAnalyzer(self.client)
         self._cache: Dict[str, AIResponse] = {}
+        self._cache_order: List[str] = []
+    
+    def _add_to_cache(self, key: str, value: AIResponse):
+        """添加缓存，带容量限制"""
+        if len(self._cache) >= self.MAX_CACHE_SIZE:
+            oldest_key = self._cache_order.pop(0)
+            self._cache.pop(oldest_key, None)
+        self._cache[key] = value
+        self._cache_order.append(key)
     
     def _load_default_config(self) -> AIConfig:
-        """从环境变量或配置加载默认配置"""
-        import os
-        api_format = os.environ.get('AI_API_FORMAT', 'openai')
-        model = os.environ.get('AI_MODEL', 'deepseek-chat')
+        """从统一配置加载默认配置"""
+        from ..utils.config import Config
+        
+        config = Config()
+        ai_config = config.get_ai_config()
         
         llm_model_id = ""
-        if api_format == "anthropic":
-            llm_model_id = f"anthropic/{model}" if not model.startswith("anthropic/") else model
-        elif "deepseek" in model.lower():
-            llm_model_id = f"deepseek/{model}" if not model.startswith("deepseek/") else model
+        model = ai_config.get('model', 'deepseek-chat')
+        api_format = ai_config.get('api_format', 'openai')
+        
+        if model in LLM_MODEL_MAPPING:
+            llm_model_id = LLM_MODEL_MAPPING[model]
+        elif api_format in PROVIDER_MODEL_PREFIX:
+            prefix = PROVIDER_MODEL_PREFIX[api_format]
+            if prefix and not model.startswith(prefix.rstrip('/') + '/'):
+                llm_model_id = f"{prefix.rstrip('/')}/{model}"
+            else:
+                llm_model_id = model
         else:
             llm_model_id = model
         
         return AIConfig(
-            provider=os.environ.get('AI_PROVIDER', 'deepseek'),
-            api_key=os.environ.get('DEEPSEEK_API_KEY', ''),
-            base_url=os.environ.get('AI_BASE_URL', 'https://api.deepseek.com/v1'),
+            provider=ai_config.get('provider', 'deepseek'),
+            api_key=ai_config.get('api_key', ''),
+            base_url=ai_config.get('base_url', 'https://api.deepseek.com/v1'),
             model=model,
             api_format=api_format,
             llm_model_id=llm_model_id,
-            max_tokens=int(os.environ.get('AI_MAX_TOKENS', '2000')),
-            temperature=float(os.environ.get('AI_TEMPERATURE', '0.7'))
+            max_tokens=ai_config.get('max_tokens', 2000),
+            temperature=ai_config.get('temperature', 0.7)
         )
     
     def chat(self, messages: List[Dict], system: str = "") -> AIResponse:
@@ -525,7 +544,7 @@ List only the most likely endpoints, one per line, format: /path or /v1/path"""
             system="You are an API security researcher. Predict likely API endpoints based on patterns."
         )
         
-        self._cache[cache_key] = response
+        self._add_to_cache(cache_key, response)
         return self._parse_endpoints_from_response(response)
     
     def _parse_endpoints_from_response(self, response: AIResponse) -> List[str]:
@@ -548,7 +567,7 @@ List only the most likely endpoints, one per line, format: /path or /v1/path"""
             return {'patterns': [], 'thinking': getattr(cached, 'thinking', ''), 'judgment': getattr(cached, 'judgment', '')}
         
         response = self.dynamic_analyzer.analyze(js_content)
-        self._cache[cache_key] = response
+        self._add_to_cache(cache_key, response)
         
         patterns = []
         if response.success and response.result:

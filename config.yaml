@@ -55,9 +55,30 @@ ai:
   enabled: false
   provider: "deepseek"
   base_url: "https://api.deepseek.com/v1"
+  api_format: "openai"
   model: "deepseek-chat"
+  api_key: ""
   max_tokens: 2000
   temperature: 0.7
+  timeout: 60
+  
+  api_keys:
+    anthropic: ""
+    openai: ""
+    gemini: ""
+    deepseek: ""
+    mistral: ""
+    ollama: ""
+    custom: ""
+  
+  model_preferences:
+    anthropic: "claude-sonnet-4-20250514"
+    openai: "gpt-4o"
+    gemini: "gemini-2.0-flash"
+    deepseek: "deepseek-chat"
+    mistral: "mistral-large-latest"
+    ollama: "llama3.2"
+    custom: "gpt-4o"
   
   thresholds:
     high_value_api_score: 5

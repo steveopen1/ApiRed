@@ -64,19 +64,18 @@ PROVIDER_MODEL_PREFIX = {
 
 def get_ai_config() -> Dict[str, str]:
     """
-    获取 AI 配置（优先环境变量，其次配置文件）
+    获取 AI 配置（统一使用 Config 类）
     
     Returns:
         Dict of AI configuration
     """
     from ..utils.config import Config
-    from ..ai.ai_engine import LLM_MODEL_MAPPING
     
-    yaml_config = Config()._config.get('ai', {})
+    config = Config()
+    ai_config = config.get_ai_config()
     
-    api_format = os.environ.get('AI_API_FORMAT') or yaml_config.get('api_format', 'openai')
-    model = os.environ.get('AI_MODEL') or yaml_config.get('model', 'deepseek-chat')
-    provider = os.environ.get('AI_PROVIDER') or yaml_config.get('provider', 'deepseek')
+    model = ai_config.get('model', 'deepseek-chat')
+    api_format = ai_config.get('api_format', 'openai')
     
     llm_model_id = ""
     if model in LLM_MODEL_MAPPING:
@@ -90,22 +89,10 @@ def get_ai_config() -> Dict[str, str]:
     else:
         llm_model_id = model
     
-    api_key_env_vars = [
-        'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY',
-        'MISTRAL_API_KEY', 'OPENAI_API_KEY', 'CUSTOM_API_KEY'
-    ]
-    api_key = ""
-    for key in api_key_env_vars:
-        api_key = os.environ.get(key, "")
-        if api_key:
-            break
-    if not api_key:
-        api_key = yaml_config.get('api_key', '')
-    
     return {
-        'provider': provider,
-        'api_key': api_key,
-        'base_url': os.environ.get('AI_BASE_URL') or yaml_config.get('base_url', 'https://api.deepseek.com/v1'),
+        'provider': ai_config.get('provider', 'deepseek'),
+        'api_key': ai_config.get('api_key', ''),
+        'base_url': ai_config.get('base_url', 'https://api.deepseek.com/v1'),
         'model': model,
         'api_format': api_format,
         'llm_model_id': llm_model_id,
