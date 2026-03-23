@@ -291,6 +291,15 @@ class JSParser:
                        'profile', 'account', 'user', 'role', 'permission', 'menu',
                        'log', 'monitor', 'statistics', 'report', 'analytics']
     
+    _UUID_PATTERN = re.compile(r'^[a-f0-9-]{8,}$')
+    _ALPHANUM_DASH_UNDERSCORE_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+    _LOWERCASE_ALPHANUM_PATTERN = re.compile(r'^[a-z0-9]+$')
+    _DYNAMIC_PARAM_PATTERNS = [
+        re.compile(r'\{[^}]+\}'),
+        re.compile(r':[a-zA-Z_][a-zA-Z0-9_]*'),
+        re.compile(r'<[^>]+>'),
+    ]
+    
     def __init__(self, cache: Optional[JSFingerprintCache] = None):
         self.cache = cache
         self._ast_parser = None
@@ -339,12 +348,12 @@ class JSParser:
         if len(parts) <= 2:
             return []
         
-        import re
-        is_likely_id = lambda s: (
+        def is_likely_id(s: str) -> bool:
+            return (
             s.isdigit() or 
-            bool(re.match(r'^[a-f0-9-]{8,}$', s)) or
+            bool(self._UUID_PATTERN.match(s)) or
             (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            (len(s) > 8 and bool(self._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(s)) and ('-' in s or '_' in s))
         )
         
         valid_parts_count = len(parts)
@@ -382,9 +391,8 @@ class JSParser:
         
         template = path
         
-        for pattern in self.DYNAMIC_PARAM_PATTERNS:
-            import re
-            template = re.sub(pattern, '{param}', template)
+        for pattern in self._DYNAMIC_PARAM_PATTERNS:
+            template = pattern.sub('{param}', template)
         
         return template
     
@@ -433,12 +441,10 @@ class JSParser:
         if last_part.isdigit():
             return True
         
-        import re
-        
-        if re.match(r'^[a-f0-9-]{8,}$', last_part):
+        if self._UUID_PATTERN.match(last_part):
             return True
         
-        if re.match(r'^[a-zA-Z0-9_-]+$', last_part):
+        if self._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(last_part):
             if len(last_part) > 5:
                 if last_part[:2].isalpha() and last_part[2:].isdigit():
                     return True
@@ -448,7 +454,7 @@ class JSParser:
         if '@' in last_part or '%' in last_part or '#' in last_part:
             return True
         
-        if len(last_part) > 10 and re.match(r'^[a-z0-9]+$', last_part):
+        if len(last_part) > 10 and self._LOWERCASE_ALPHANUM_PATTERN.match(last_part):
             return True
         
         return False

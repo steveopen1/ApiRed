@@ -7,7 +7,7 @@ import asyncio
 import time
 import os
 import logging
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from urllib.parse import urlparse
@@ -524,6 +524,25 @@ class ScanEngine:
         
         logger.info(f"Probing {len(parent_paths_to_probe)} parent paths...")
         
+        if self.config.concurrency_probe:
+            probed_results = await self._probe_parent_paths_concurrent(
+                base_url, parent_paths_to_probe
+            )
+        else:
+            probed_results = await self._probe_parent_paths_serial(
+                base_url, parent_paths_to_probe
+            )
+        
+        return probed_results
+    
+    async def _probe_parent_paths_serial(
+        self, 
+        base_url: str, 
+        parent_paths_to_probe: Set[str]
+    ) -> Dict[str, Set[str]]:
+        """串行探测父路径"""
+        probed_results = {}
+        
         for parent_path in parent_paths_to_probe:
             full_url = base_url + parent_path
             
@@ -561,6 +580,73 @@ class ScanEngine:
             
             except Exception as e:
                 logger.debug(f"Parent path probe failed: {parent_path} - {e}")
+        
+        return probed_results
+    
+    async def _probe_parent_paths_concurrent(
+        self, 
+        base_url: str, 
+        parent_paths_to_probe: Set[str]
+    ) -> Dict[str, Set[str]]:
+        """并发探测父路径"""
+        probed_results = {}
+        
+        async def probe_single_path(parent_path: str) -> Tuple[str, Set[str], int]:
+            full_url = base_url + parent_path
+            sub_endpoints = set()
+            status_code = 0
+            
+            try:
+                response = await self._http_client.request(
+                    full_url,
+                    method='HEAD',
+                    timeout=5
+                )
+                status_code = response.status_code
+                
+                if 200 <= response.status_code < 400:
+                    logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
+                    
+                    async def probe_sub_path(suffix: str) -> Optional[str]:
+                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
+                        sub_url = base_url + sub_path
+                        
+                        try:
+                            sub_response = await self._http_client.request(
+                                sub_url,
+                                method='HEAD',
+                                timeout=3
+                            )
+                            
+                            if 200 <= sub_response.status_code < 400:
+                                return sub_path
+                        except Exception:
+                            pass
+                        return None
+                    
+                    sub_tasks = [probe_sub_path(s) for s in self.COMMON_RESTFUL_SUFFIXES]
+                    sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
+                    
+                    for result in sub_results:
+                        if result and isinstance(result, str):
+                            sub_endpoints.add(result)
+                
+                elif response.status_code == 401 or response.status_code == 403:
+                    logger.info(f"Parent path exists (auth required): {parent_path} (status: {response.status_code})")
+            
+            except Exception as e:
+                logger.debug(f"Parent path probe failed: {parent_path} - {e}")
+            
+            return (parent_path, sub_endpoints, status_code)
+        
+        tasks = [probe_single_path(p) for p in parent_paths_to_probe]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, tuple) and len(result) == 3:
+                parent_path, sub_endpoints, status_code = result
+                if status_code in (200, 401, 403):
+                    probed_results[parent_path] = sub_endpoints
         
         return probed_results
     
