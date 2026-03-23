@@ -85,6 +85,17 @@ class APISpecParser:
         '/services/soap/wsdl',
     ]
     
+    ASPNET_HELP_PATHS = [
+        '/Help',
+        '/Help/Index',
+        '/api/Help',
+        '/api/Help/Index',
+        '/Help/Api',
+        '/api/Help/Api',
+        '/Swagger',
+        '/api/Swagger',
+    ]
+    
     SENSITIVE_ENDPOINTS = [
         'admin', 'user', 'login', 'auth', 'password', 'token',
         'api', 'key', 'secret', 'credential', 'config', 'settings',
@@ -186,6 +197,10 @@ class APISpecParser:
             spec = await self._discover_and_parse_spec(spec_url, base_url)
             if spec:
                 return spec
+        
+        spec = await self._discover_aspnet_help(base_url)
+        if spec:
+            return spec
         
         self._mark_base_discovered(base_url)
         return None
@@ -465,6 +480,110 @@ class APISpecParser:
                 logger.debug(f"Failed to fetch WSDL from {spec_url}: {e}")
         
         return None
+    
+    async def _discover_aspnet_help(self, base_url: str) -> Optional[APISpecResult]:
+        """
+        发现并解析 ASP.NET Web API Help Page
+        
+        ASP.NET Help Page 是 .NET 框架自动生成的 API 文档
+        参考 ApiHunter 的 ASP.NET Help Page 解析功能
+        """
+        for path in self.ASPNET_HELP_PATHS:
+            help_url = urljoin(base_url, path)
+            try:
+                response = await self.http_client.request(help_url, 'GET')
+                if response.status_code == 200:
+                    content = response.content
+                    if self._is_aspnet_help_page(content):
+                        return self._parse_aspnet_help(content, help_url, base_url)
+            except Exception as e:
+                logger.debug(f"Failed to fetch ASP.NET Help from {help_url}: {e}")
+        
+        return None
+    
+    def _is_aspnet_help_page(self, content: str) -> bool:
+        """检查是否为 ASP.NET Help Page"""
+        aspnet_patterns = [
+            'Microsoft.AspNet.WebApi',
+            'api-help-page',
+            'help_page',
+            'ASP.NET Web API',
+            'WebAPI',
+            'ms-help://',
+            '<div class="help-page">',
+        ]
+        return any(pattern in content for pattern in aspnet_patterns)
+    
+    def _parse_aspnet_help(self, content: str, help_url: str, base_url: str) -> APISpecResult:
+        """
+        解析 ASP.NET Web API Help Page
+        
+        从 HTML 中提取:
+        1. API 端点
+        2. HTTP 方法
+        3. 参数信息
+        4. 示例请求/响应
+        """
+        endpoints = []
+        vulnerabilities = []
+        paths = set()
+        parameters = set()
+        
+        api_links = re.findall(r'href=["\']([^"\']*(?:/api/[^"\']+)[^"\']*)["\']', content, re.IGNORECASE)
+        
+        method_map = {
+            'GET': 'GET',
+            'POST': 'POST',
+            'PUT': 'PUT',
+            'DELETE': 'DELETE',
+            'PATCH': 'PATCH',
+        }
+        
+        for link in api_links:
+            if not link or link.startswith('http'):
+                continue
+            
+            full_path = urljoin(help_url, link)
+            parsed = urlparse(full_path)
+            path = parsed.path
+            
+            paths.add(path)
+            
+            method = 'GET'
+            for m_name, m_value in method_map.items():
+                if m_name in content:
+                    method = m_value
+                    break
+            
+            endpoint = APIEndpoint(
+                path=path,
+                method=method,
+                summary=f'ASP.NET API: {path}',
+                parameters=[],
+                request_body=None,
+                responses={},
+                security=[],
+                tags=['ASP.NET']
+            )
+            endpoints.append(endpoint)
+            
+            param_pattern = rf'<td[^>]*>\s*{re.escape(path)}\s*</td>[^<]*(?:<td[^>]*>([^<]*)</td>[^<]*)*'
+            param_matches = re.findall(param_pattern, content, re.IGNORECASE)
+            for param in param_matches:
+                if param and param.strip():
+                    parameters.add(param.strip())
+        
+        return APISpecResult(
+            spec_type='aspnet_help',
+            version='1.0',
+            base_url=base_url,
+            api_base_path='/',
+            endpoints=endpoints,
+            security_schemes={},
+            paths=list(paths),
+            parameters=list(parameters),
+            vulnerabilities=vulnerabilities
+        )
     
     def _is_openapi_spec(self, spec: Any) -> bool:
         """检查是否为 OpenAPI 规范"""
