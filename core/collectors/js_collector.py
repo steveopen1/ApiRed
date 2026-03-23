@@ -575,8 +575,9 @@ class JSParser:
             dynamic_imports = DynamicImportAnalyzer.extract_imports(js_content)
             
             regex_apis = APIRouter.extract_routes(js_content)
-            if regex_apis:
-                apis = list(set(apis) | set(regex_apis))
+            all_apis = list(set(apis) | set(regex_apis))
+            if all_apis:
+                apis = all_apis
         else:
             urls, dynamic_imports, apis = self._fallback_parse(js_content)
         
