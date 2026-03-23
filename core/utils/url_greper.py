@@ -7,6 +7,8 @@ URL Greper Module
 import re
 import os
 import yaml
+import logging
+logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -156,7 +158,7 @@ class PatternLoader:
             self._path_weights = priority_rules.get('path_weights', {})
             
         except Exception as e:
-            print(f"Failed to load YAML rules: {e}")
+            logger.exception(f"Failed to load YAML rules: {e}")
             self._load_builtin_patterns()
     
     def _load_custom_rules(self, rules_dir: str):
@@ -266,8 +268,8 @@ class URLGreper:
                     reason="; ".join(reasons) if reasons else f"匹配到: {', '.join(set(matched_patterns))}"
                 )
                 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception(f"URL matching error: {e}")
         
         return None
     

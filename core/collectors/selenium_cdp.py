@@ -7,9 +7,12 @@ Selenium CDP Collector
 import json
 import time
 import warnings
+import logging
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 warnings.filterwarnings("ignore")
@@ -97,7 +100,8 @@ class SeleniumCDPCollector:
         try:
             logs = self.driver.get_log('performance')
             return [json.loads(log['message']) for log in logs]
-        except Exception:
+        except Exception as e:
+            logger.warning(f"获取性能日志异常: {e}")
             return []
     
     def process_network_events(self, logs: List[Dict]) -> List[CDPResource]:
@@ -130,7 +134,8 @@ class SeleniumCDPCollector:
                             self.api_endpoints.add(resource.url)
                 
                 self.cdp_resources = resources
-            except Exception:
+            except Exception as e:
+                logger.warning(f"处理网络事件异常: {e}")
                 pass
         
         return resources
@@ -179,7 +184,8 @@ class SeleniumCDPCollector:
         if self.driver:
             try:
                 self.driver.quit()
-            except Exception:
+            except Exception as e:
+                logger.warning(f"关闭driver异常: {e}")
                 pass
 
 

@@ -15,6 +15,9 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 import secrets
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -569,8 +572,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         with open(result_file, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                             results.append(data)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to load scan result: {e}")
         
         return results
     

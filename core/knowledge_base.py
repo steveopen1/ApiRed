@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from collections import defaultdict
 import threading
+import logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -204,8 +206,8 @@ class KnowledgeBase:
         for callback in self._event_callbacks.get(event, []):
             try:
                 callback(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Knowledge base operation error: {e}")
     
     def get_summary(self) -> Dict[str, Any]:
         """获取知识库摘要"""

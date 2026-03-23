@@ -7,6 +7,9 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AuthStatus(Enum):
@@ -175,7 +178,8 @@ class UnauthorizedDetector:
                 
                 bypass_results.append(bypass_result)
             
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Bypass technique {technique['name']} failed: {e}")
                 continue
         
         return bypass_results
@@ -352,7 +356,8 @@ class IDORDetector:
                     if any(priv_marker in content1.lower() for priv_marker in ['admin', 'delete', 'update', 'role']):
                         is_vuln = True
         
-        except Exception:
+        except Exception as e:
+            logger.warning(f"IDOR detection failed: {e}")
             pass
         
         return is_vuln
@@ -394,7 +399,8 @@ class IDORDetector:
                     'content': getattr(resp, 'content', '')[:500],
                     'length': len(getattr(resp, 'content', ''))
                 }
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Horizontal IDOR test failed for {resource_id}: {e}")
                 continue
         
         if len(responses) < 2:
@@ -453,7 +459,8 @@ class IDORDetector:
                         self.results.append(result)
                         return result
         
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Vertical IDOR detection failed: {e}")
             pass
         
         return None

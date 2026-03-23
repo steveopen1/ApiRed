@@ -6,10 +6,13 @@ ScanEngine - 统一扫描引擎
 import asyncio
 import time
 import os
+import logging
 from typing import Dict, List, Optional, Any, Set
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 from .utils.config import Config
 from .storage import DBStorage, FileStorage
@@ -131,8 +134,8 @@ class ScanEngine:
         for callback in self._callbacks.get(event, []):
             try:
                 callback(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Callback error for event '{event}': {e}")
     
     @property
     def current_stage_name(self) -> str:
@@ -407,10 +410,10 @@ class ScanEngine:
                         alive_js.append({'url': js_url, 'content': js_content})
                         try:
                             js_parser.parse(js_content, js_url)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+                        except Exception as e:
+                            logger.debug(f"JS parse error for {js_url}: {e}")
+                except Exception as e:
+                    logger.debug(f"JS request error for {js_url}: {e}")
         
         target_info = {
             'js_files': ','.join(js_urls),
@@ -454,8 +457,8 @@ class ScanEngine:
                             'url': js_url,
                             'content': js_response.content
                         })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Browser JS request error: {e}")
             
             return {
                 'js_urls': js_urls,
@@ -488,8 +491,8 @@ class ScanEngine:
                         api_find_result,
                         source_info={'source': 'js_fingerprint_cache'}
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"API extraction from JS cache error: {e}")
         
         if self._detected_framework and self._framework_detector:
             framework_endpoints = self._framework_detector.generate_endpoints(self._detected_framework)
@@ -580,8 +583,8 @@ class ScanEngine:
                             'http_test',
                             {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"API scoring error: {e}")
         
         high_value_apis = self._api_scorer.get_high_value() if self._api_scorer else []
         
@@ -612,8 +615,8 @@ class ScanEngine:
                     'url': endpoint.full_url,
                     'api_id': endpoint.api_id
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Sensitive detection request error: {e}")
         
         sensitive_findings = self._sensitive_detector.detect(
             responses_collected,
@@ -672,8 +675,8 @@ class ScanEngine:
                 )
                 fuzz_count += len(results)
                 fuzz_results.extend(results)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Fuzz test error: {e}")
         
         return {
             'fuzz_count': fuzz_count,
@@ -865,11 +868,11 @@ class ScanEngine:
                                 if self.result:
                                     self.result.vulnerabilities.append(vuln)
                                 vuln_count += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"IDOR test error for {endpoint.full_url}: {e}")
                         
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Vulnerability test error for endpoint {endpoint.api_id}: {e}")
         
         return {
             'vuln_count': vuln_count,

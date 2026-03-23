@@ -7,9 +7,12 @@ import re
 import os
 import yaml
 import hashlib
+import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -121,7 +124,7 @@ class FrameworkDetector:
                     name = rule_data.get('framework', {}).get('name', rule_file.stem)
                     self.rules[name] = FrameworkRule(name, rule_data)
                 except Exception as e:
-                    print(f"Failed to load rule {rule_file}: {e}")
+                    logger.debug(f"Failed to load rule {rule_file}: {e}")
     
     def load_custom_rule(self, rule_data: Dict) -> bool:
         """加载自定义规则"""
@@ -129,7 +132,8 @@ class FrameworkDetector:
             name = rule_data.get('framework', {}).get('name', 'custom')
             self.rules[name] = FrameworkRule(name, rule_data)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to load custom rule: {e}")
             return False
     
     def load_rule_file(self, file_path: str) -> bool:
@@ -138,7 +142,8 @@ class FrameworkDetector:
             with open(file_path, 'r', encoding='utf-8') as f:
                 rule_data = yaml.safe_load(f)
             return self.load_custom_rule(rule_data)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to load rule file {file_path}: {e}")
             return False
     
     def detect(self, target_info: Dict) -> List[FrameworkMatch]:
@@ -290,7 +295,7 @@ Only output JSON."""
                     matched_indicators=result.get('key_indicators', [])
                 )
         except Exception as e:
-            print(f"LLM assisted detection failed: {e}")
+            logger.debug(f"LLM assisted detection failed: {e}")
         
         return self.detect_best(target_info)
 

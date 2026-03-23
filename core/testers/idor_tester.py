@@ -8,9 +8,12 @@ IDOR 专项测试器 - 实现参数替换/值替换测试
 import json
 import hashlib
 import re
+import logging
 from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass
 from urllib.parse import urlparse, parse_qs, urlencode
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -226,7 +229,8 @@ class IDORTester:
                         results.append(result)
                         self._test_results.append(result)
                         
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"IDOR bypass technique failed for {technique.name}: {e}")
                     continue
         
         return results
@@ -328,7 +332,8 @@ class IDORTester:
                 'headers': dict(response.headers) if hasattr(response, 'headers') else {},
                 'url': full_url
             }
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Request failed for {url}: {e}")
             return None
     
     def _analyze_idor(

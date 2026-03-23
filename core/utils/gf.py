@@ -18,6 +18,8 @@ import json
 import csv
 import yaml
 import argparse
+import logging
+logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional, Callable, Set, Iterator, TextIO
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -139,7 +141,7 @@ class PatternLoader:
             
             self._patterns[category] = patterns
         except Exception as e:
-            print(f"Failed to load {filepath}: {e}")
+            logger.exception(f"Failed to load {filepath}: {e}")
     
     def _load_builtin_patterns(self):
         """加载内置模式"""
@@ -289,6 +291,7 @@ class GFLibrary:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
         except Exception:
+            logger.exception(f"Failed to read file: {filepath}")
             return None
         
         return self._scan_lines(

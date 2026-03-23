@@ -297,8 +297,8 @@ class DiscoverAgent(AgentInterface):
                 async with session.get(js_url, headers=headers, timeout=10) as resp:
                     if resp.status == 200:
                         return await resp.text()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"JS fetch error for {js_url}: {e}")
         return None
     
     def _deduplicate_endpoints(

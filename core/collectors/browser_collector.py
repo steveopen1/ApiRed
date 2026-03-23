@@ -6,9 +6,12 @@ Headless Browser Collector
 
 import asyncio
 import re
+import logging
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -267,7 +270,8 @@ class HeadlessBrowserCollector:
             await self.page.click(selector, timeout=5000)
             await self.page.wait_for_load_state("networkidle", timeout=10000)
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"点击元素异常: {e}")
             return False
     
     async def scroll_page(self) -> bool:
@@ -298,7 +302,8 @@ class HeadlessBrowserCollector:
                 }
             """)
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"页面滚动异常: {e}")
             return False
     
     async def collect_page_content(self) -> Dict[str, Any]:
@@ -330,7 +335,8 @@ class HeadlessBrowserCollector:
                 await self.browser.close()
             if self.playwright:
                 await self.playwright.stop()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"关闭浏览器异常: {e}")
             pass
 
 

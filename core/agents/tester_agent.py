@@ -3,9 +3,12 @@ Tester Agent
 测试Agent - 负责执行安全测试
 """
 
+import logging
 import time
 from typing import Dict, List, Any
 from .base import BaseAgent, AgentConfig, AgentResult, Action
+
+logger = logging.getLogger(__name__)
 
 
 class TesterAgent(BaseAgent):
@@ -60,6 +63,7 @@ class TesterAgent(BaseAgent):
             return result
             
         except Exception as e:
+            logger.error(f"{self.name} execute failed: {e}")
             return AgentResult(
                 agent_name=self.name,
                 action_type=action.action_type,
@@ -185,7 +189,8 @@ Respond with one payload per line, format: PAYLOAD"""
                             'source': 'llm'
                         })
                 return payloads
-        except Exception:
+        except Exception as e:
+            logger.warning(f"{self.name} generate_payloads failed: {e}")
             pass
         
         return self._get_default_payloads(vuln_type)
@@ -271,7 +276,8 @@ If confirmed, provide brief evidence in parentheses."""
                     confidence = 0.8 if 'HIGH' in response.upper() else 0.6
                     evidence = response.split('(')[1].split(')')[0] if '(' in response else 'LLM analysis'
                     return {'confirmed': True, 'confidence': confidence, 'evidence': evidence}
-        except Exception:
+        except Exception as e:
+            logger.warning(f"{self.name} validate_vulnerability failed: {e}")
             pass
         
         return self._rule_based_validation(endpoint, payload, vuln_type)

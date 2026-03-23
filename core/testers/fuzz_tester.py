@@ -7,9 +7,12 @@ import random
 import string
 import time
 import re
+import logging
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse, urljoin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -248,6 +251,7 @@ class FuzzTester:
                     callback(result)
             
             except Exception:
+                logger.debug(f"Header fuzz failed for {headers}")
                 continue
         
         return results
@@ -342,6 +346,7 @@ class FuzzTester:
             baseline_response = await self.http_client.request(url, method)
             baseline_time = time.time() - baseline_start
         except Exception:
+            logger.debug("Failed to get baseline response for time-based SQLi")
             baseline_time = 0.5
         
         for payload in time_payloads:
@@ -371,6 +376,7 @@ class FuzzTester:
                     callback(result)
             
             except Exception:
+                logger.debug(f"Time-based SQLi test failed for payload: {payload}")
                 continue
         
         return results
@@ -420,6 +426,7 @@ class FuzzTester:
                     callback(result)
             
             except Exception:
+                logger.debug(f"SSRF test failed for payload: {payload}")
                 continue
         
         return results
@@ -466,6 +473,7 @@ class FuzzTester:
                     callback(result)
             
             except Exception:
+                logger.debug(f"Path traversal test failed for payload: {payload}")
                 continue
         
         return results
@@ -526,7 +534,8 @@ class FuzzTester:
                 if callback:
                     callback(result)
             
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Auth bypass test failed for bypass: {bypass}: {e}")
                 continue
         
         return results

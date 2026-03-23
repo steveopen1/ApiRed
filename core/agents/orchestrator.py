@@ -419,8 +419,8 @@ class Orchestrator:
             for agent in self.agents.values():
                 try:
                     await agent.cleanup()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Agent cleanup error for {agent.name}: {e}")
     
     async def run_simple(self, agent_name: str, params: Dict[str, Any]) -> Any:
         """运行单个 Agent（简化接口）"""

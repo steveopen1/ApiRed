@@ -6,9 +6,12 @@ API采集模块
 
 import re
 import json
+import logging
 from typing import Dict, List, Set, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, urljoin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -289,7 +292,8 @@ class APIRouter:
                         source_type="js_fuzz",
                         url_type="api_path"
                     ))
-            except Exception:
+            except Exception as e:
+                logger.warning(f"API路径处理异常: {e}")
                 continue
         
         return results

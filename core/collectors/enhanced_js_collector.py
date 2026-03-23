@@ -7,11 +7,14 @@ import re
 import json
 import hashlib
 import os
+import logging
 from typing import Dict, List, Set, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, urljoin
 from concurrent.futures import ThreadPoolExecutor
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -110,7 +113,8 @@ class JSExtractor:
             for pair in pairs:
                 try:
                     key, value = pair.split(':', 1)
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"JSON键值对解析异常: {e}")
                     continue
                 if not key.strip().startswith('"'):
                     continue
@@ -121,7 +125,8 @@ class JSExtractor:
                 chunk_mapping = json.loads('{' + ','.join(formatted_pairs) + '}')
                 for key, value in chunk_mapping.items():
                     paths.add('/' + base_path + key + '.' + value + '.js')
-            except Exception:
+            except Exception as e:
+                logger.warning(f"JSON解析异常: {e}")
                 pass
         
         for m in re.finditer(
@@ -236,7 +241,8 @@ class JSExtractor:
                 path = pu.path or '/'
                 query = ('?' + pu.query) if pu.query else ''
                 return f"{scheme}://{netloc}{path}{query}"
-        except Exception:
+        except Exception as e:
+            logger.warning(f"URL构建异常: {e}")
             pass
         return url
 

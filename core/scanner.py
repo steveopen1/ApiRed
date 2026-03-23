@@ -6,11 +6,14 @@ Scanner Module
 import asyncio
 import json
 import time
+import logging
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from urllib.parse import urlparse
 import os
+
+logger = logging.getLogger(__name__)
 
 from .utils.config import Config
 from .utils.http_client import AsyncHttpClient, AsyncTask
@@ -124,8 +127,8 @@ class ChkApiScanner:
         for callback in self._callbacks.get(event, []):
             try:
                 callback(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Callback error for event '{event}': {e}")
     
     async def initialize(self):
         """初始化扫描器"""
@@ -249,8 +252,8 @@ class ChkApiScanner:
                 })
                 try:
                     js_parser.parse(js_content, js_url)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"JS parse error for {js_url}: {e}")
         
         duration = time.time() - start_time
         
@@ -295,8 +298,8 @@ class ChkApiScanner:
                         api_find_result,
                         source_info={'source': 'js_fingerprint_cache'}
                     )
-            except Exception:
-                error_count += 1
+            except Exception as e:
+                logger.debug(f"API extraction error: {e}")
         
         raw_endpoints = self.api_aggregator.get_all()
         
@@ -378,8 +381,8 @@ class ChkApiScanner:
                             {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
                         )
                         break
-                except Exception:
-                    error_count += 1
+                except Exception as e:
+                    logger.debug(f"API testing error for {endpoint.full_url}: {e}")
         
         high_value_apis = self.api_scorer.get_high_value() if self.api_scorer else []
         
@@ -513,8 +516,8 @@ class ChkApiScanner:
                         'severity': vuln.severity.value
                     })
             
-            except Exception:
-                error_count += 1
+            except Exception as e:
+                logger.debug(f"API extraction error: {e}")
         
         sensitive_findings = await self.sensitive_detector.detect(
             responses_collected,
@@ -691,7 +694,8 @@ class ChkApiScanner:
                 timestamp=data.get('timestamp', 0.0)
             )
             return checkpoint
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to load checkpoint: {e}")
             return None
     
     def _restore_from_checkpoint(self, checkpoint: ScanCheckpoint):

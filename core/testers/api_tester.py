@@ -6,10 +6,13 @@ API Request Tester
 
 import json
 import time
+import logging
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 from urllib.parse import urlencode, urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger(__name__)
 
 from .parameter_extractor import APIParameterExtractor
 from .bypass_techniques import BypassTechniques
@@ -114,7 +117,7 @@ class APIRequestTester:
                 response_time=response_time
             )
         except Exception as e:
-            print(f"Request failed: {e}")
+            logger.debug(f"Request failed: {e}")
             return None
     
     async def test_with_bypass(self, url: str, params: Dict = None, headers: Dict = None) -> List[APIRequestResult]:
@@ -175,7 +178,8 @@ class APIRequestTester:
                 bypass_performed=True,
                 bypass_technique=technique.name
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Bypass technique {technique.name} failed: {e}")
             return None
     
     def test_responses_different(self, responses: List[APIRequestResult]) -> bool:

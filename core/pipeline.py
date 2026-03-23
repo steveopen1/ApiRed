@@ -3,11 +3,14 @@ Pipeline Module
 处理流水线模块
 """
 
+import logging
 import time
 from typing import Dict, List, Any, Optional, Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 import threading
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineStage(Enum):
@@ -316,8 +319,8 @@ class ScanPipeline:
         for listener in self._listeners.get(event, []):
             try:
                 listener(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Pipeline error: {e}")
     
     async def run(self, target: str, **kwargs) -> PipelineContext:
         """运行流水线"""

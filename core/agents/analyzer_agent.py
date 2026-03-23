@@ -3,9 +3,12 @@ Analyzer Agent
 分析Agent - 负责漏洞分析和推理
 """
 
+import logging
 import time
 from typing import Dict, List, Any
 from .base import BaseAgent, AgentConfig, AgentResult, Action
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyzerAgent(BaseAgent):
@@ -68,6 +71,7 @@ class AnalyzerAgent(BaseAgent):
             return result
             
         except Exception as e:
+            logger.error(f"{self.name} execute failed: {e}")
             return AgentResult(
                 agent_name=self.name,
                 action_type=action.action_type,
@@ -169,7 +173,8 @@ Respond with only one word: low, medium, high, or critical"""
                 response_lower = response.lower().strip()
                 if response_lower in ['low', 'medium', 'high', 'critical']:
                     return response_lower
-        except Exception:
+        except Exception as e:
+            logger.warning(f"{self.name} assess_risk failed: {e}")
             pass
         
         return self._rule_based_risk_assessment(api_endpoint, response_data)
@@ -235,7 +240,8 @@ Respond with one test per line, format: TEST_NAME - brief description"""
                     if line and '-' in line:
                         tests.append({'name': line.split('-')[0].strip(), 'description': line.split('-')[1].strip()})
                 return tests[:5]
-        except Exception:
+        except Exception as e:
+            logger.warning(f"{self.name} suggest_tests failed: {e}")
             pass
         
         return self._rule_based_test_suggestions(api_endpoint)

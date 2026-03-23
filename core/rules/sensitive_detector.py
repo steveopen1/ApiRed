@@ -10,6 +10,9 @@ from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SensitiveRule:
@@ -24,7 +27,8 @@ class SensitiveRule:
     def __post_init__(self):
         try:
             self._compiled = re.compile(self.f_regex, re.VERBOSE | re.IGNORECASE)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Sensitive detection error: {e}")
             self._compiled = None
     
     def match(self, text: str) -> List[str]:
@@ -33,7 +37,8 @@ class SensitiveRule:
             return []
         try:
             return self._compiled.findall(text)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Sensitive detection error: {e}")
             return []
 
 

@@ -5,9 +5,12 @@ Sensitive Detector Module
 
 import re
 import yaml
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class Severity(Enum):
@@ -126,8 +129,8 @@ class TwoTierSensitiveDetector:
                     if isinstance(rule_info, dict) and 'pattern' in rule_info:
                         self.tier1_rules[rule_name] = rule_info
                         
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to load custom rules: {e}")
         
         env_rules = os.environ.get('SENSITIVE_RULES')
         if env_rules:
@@ -136,8 +139,8 @@ class TwoTierSensitiveDetector:
                 for rule_name, rule_info in env_custom_rules.items():
                     if isinstance(rule_info, dict) and 'pattern' in rule_info:
                         self.tier1_rules[rule_name] = rule_info
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to load custom rules: {e}")
     
     def tier1_scan(self, content: str, url: str = "") -> List[SensitiveFinding]:
         """第一层：正则扫描"""

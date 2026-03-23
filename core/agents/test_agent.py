@@ -216,8 +216,8 @@ class TestAgent(AgentInterface):
                                 'url': full_url,
                                 'context': str(sr.get('match', ''))[:100],
                             })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"URL scan error: {e}")
 
                     bypass_results = tester.test_with_bypass(full_url, params=None, headers=context.headers)
                     for bypass_resp in bypass_results:
