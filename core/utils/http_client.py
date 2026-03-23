@@ -61,6 +61,7 @@ class AsyncHttpClient:
         self.session: Optional[aiohttp.ClientSession] = None
         self._request_count = 0
         self._lock = asyncio.Lock()
+        self._ssl_verified: Optional[bool] = None
     
     async def __aenter__(self):
         await self._ensure_session()
@@ -70,9 +71,17 @@ class AsyncHttpClient:
         if self.session:
             await self.session.close()
     
-    async def _ensure_session(self, verify_ssl: bool = True):
+    async def _ensure_session(self, verify_ssl: Optional[bool] = None):
         """确保Session存在"""
+        if verify_ssl is None:
+            verify_ssl = self.verify_ssl
+        
+        if self._ssl_verified != verify_ssl and self.session is not None and not self.session.closed:
+            await self.session.close()
+            self.session = None
+        
         if self.session is None or self.session.closed:
+            self._ssl_verified = verify_ssl
             if verify_ssl:
                 ssl_context = ssl.create_default_context()
             else:
@@ -98,9 +107,11 @@ class AsyncHttpClient:
         data: Any = None,
         retry: Optional[int] = None,
         timeout: Optional[int] = None,
-        verify_ssl: bool = True
+        verify_ssl: Optional[bool] = None
     ) -> TaskResult:
         """发起异步请求"""
+        if verify_ssl is not None:
+            self.verify_ssl = verify_ssl
         await self._ensure_session(verify_ssl)
         
         retry = retry if retry is not None else self.max_retries

@@ -411,11 +411,17 @@ class ScanEngine:
         http_js_urls = self._extract_js_urls(response.content)
         js_parser = JSParser(self._js_cache)
         
+        from urllib.parse import urljoin
         for js_url in http_js_urls:
-            if js_url not in js_urls:
-                js_urls.append(js_url)
+            if js_url.startswith('http://') or js_url.startswith('https://'):
+                absolute_js_url = js_url
+            else:
+                absolute_js_url = urljoin(self.config.target, js_url)
+            
+            if absolute_js_url not in js_urls:
+                js_urls.append(absolute_js_url)
                 try:
-                    js_response = await self._http_client.request(js_url)
+                    js_response = await self._http_client.request(absolute_js_url)
                     if js_response.status_code == 200:
                         js_content = js_response.content
                         js_content_all += js_content + "\n"
@@ -570,6 +576,20 @@ class ScanEngine:
                 service_key=ServiceAnalyzer.extract_service_key(full_url, endpoint.path)
             )
             final_endpoints.append(api_endpoint)
+            
+            if self.db_storage:
+                self.db_storage.insert_api({
+                    'api_id': api_endpoint.api_id,
+                    'path': api_endpoint.path,
+                    'method': api_endpoint.method,
+                    'base_url': api_endpoint.base_url,
+                    'full_url': api_endpoint.full_url,
+                    'status': 'discovered',
+                    'score': 0,
+                    'is_high_value': 0,
+                    'service_key': api_endpoint.service_key,
+                    'created_at': api_endpoint.created_at
+                })
         
         if self.result:
             self.result.api_endpoints = final_endpoints

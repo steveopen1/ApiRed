@@ -383,6 +383,20 @@ class ChkApiScanner:
                 service_key=ServiceAnalyzer.extract_service_key(full_url, endpoint.path)
             )
             final_endpoints.append(api_endpoint)
+            
+            if self.db_storage:
+                self.db_storage.insert_api({
+                    'api_id': api_endpoint.api_id,
+                    'path': api_endpoint.path,
+                    'method': api_endpoint.method,
+                    'base_url': api_endpoint.base_url,
+                    'full_url': api_endpoint.full_url,
+                    'status': 'discovered',
+                    'score': 0,
+                    'is_high_value': 0,
+                    'service_key': api_endpoint.service_key,
+                    'created_at': api_endpoint.created_at
+                })
         
         if self.result:
             self.result.api_endpoints = final_endpoints
