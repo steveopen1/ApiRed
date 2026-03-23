@@ -8,7 +8,9 @@ from .profiler import (
     StageTracker,
     ConversionTracker,
     RunProfiler,
-    MetricsCollector
+    MetricsCollector,
+    StructuredLogger,
+    get_structured_logger
 )
 
 __all__ = [
@@ -16,5 +18,7 @@ __all__ = [
     'StageTracker',
     'ConversionTracker',
     'RunProfiler',
-    'MetricsCollector'
+    'MetricsCollector',
+    'StructuredLogger',
+    'get_structured_logger'
 ]

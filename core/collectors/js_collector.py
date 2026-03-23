@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field
 
+from .api_collector import APIRouter
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,48 +112,6 @@ class JSFingerprintCache:
                 results.append(result)
         
         return results
-
-
-class APIRouter:
-    """API路由分析器"""
-    
-    ROUTE_PATTERN = re.compile(r'''
-        (?:router|route|path)\s*[.(]?\s*
-        (?:get|post|put|delete|patch|options|head)\s*\(?
-        ['"`]([^'"`]+)['"`]
-    ''', re.VERBOSE | re.IGNORECASE)
-    
-    FETCH_PATTERN = re.compile(r'''
-        fetch\s*\(\s*['"`]([^'"`]+)['"`]
-    ''', re.VERBOSE)
-    
-    AXIOS_PATTERN = re.compile(r'''
-        (?:axios|request)\s*[.(]?\s*(?:get|post|put|delete)\s*\(?
-        ['"`]([^'"`]+)['"`]
-    ''', re.VERBOSE | re.IGNORECASE)
-    
-    URL_PATTERN = re.compile(r'''
-        (?:api|baseUrl|baseURL)\s*[:=]\s*['"`]([^'"`]+)['"`]
-    ''', re.VERBOSE | re.IGNORECASE)
-    
-    API_DIRECT_PATTERN = re.compile(r'''['"](/api/[a-zA-Z0-9/{}?=&_-]+)['"']''')
-
-    @classmethod
-    def extract_routes(cls, js_content: str) -> List[str]:
-        """提取路由"""
-        routes = []
-        
-        for pattern in [cls.ROUTE_PATTERN, cls.FETCH_PATTERN, cls.AXIOS_PATTERN, cls.API_DIRECT_PATTERN]:
-            matches = pattern.findall(js_content)
-            routes.extend(matches)
-        
-        return list(set(routes))
-    
-    @classmethod
-    def extract_base_urls(cls, js_content: str) -> List[str]:
-        """提取Base URLs"""
-        matches = cls.URL_PATTERN.findall(js_content)
-        return list(set(matches))
 
 
 class WebpackAnalyzer:

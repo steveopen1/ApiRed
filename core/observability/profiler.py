@@ -500,3 +500,74 @@ class OperationTimer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.start_time is not None:
             self.monitor.end_operation(self.operation)
+
+
+class StructuredLogger:
+    """
+    结构化日志记录器
+    
+    输出 JSON 格式的日志，便于日志收集和分析系统处理。
+    
+    Usage:
+        logger = StructuredLogger('scanner')
+        logger.info('scan_started', target='https://example.com', duration=1.5)
+        logger.error('request_failed', url='/api/users', error='timeout')
+    """
+    
+    def __init__(self, name: str, level: str = 'INFO'):
+        self.name = name
+        self.level = getattr(__import__('logging'), level, None) or logging.INFO
+        self._logger = logging.getLogger(name)
+        self._logger.setLevel(self.level)
+    
+    def _format_message(self, level: str, event: str, **kwargs) -> Dict[str, Any]:
+        """格式化日志消息"""
+        from datetime import datetime
+        return {
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'logger': self.name,
+            'level': level,
+            'event': event,
+            **kwargs
+        }
+    
+    def _log(self, level: int, event: str, **kwargs):
+        """记录日志"""
+        if not self._logger.isEnabledFor(level):
+            return
+        
+        record = self._logger.makeRecord(
+            self._logger.name,
+            level,
+            '(unknown)',
+            0,
+            self._format_message(logging.getLevelName(level), event, **kwargs),
+            None,
+            None
+        )
+        self._logger.handle(record)
+    
+    def debug(self, event: str, **kwargs):
+        """调试级别"""
+        self._log(logging.DEBUG, event, **kwargs)
+    
+    def info(self, event: str, **kwargs):
+        """信息级别"""
+        self._log(logging.INFO, event, **kwargs)
+    
+    def warning(self, event: str, **kwargs):
+        """警告级别"""
+        self._log(logging.WARNING, event, **kwargs)
+    
+    def error(self, event: str, **kwargs):
+        """错误级别"""
+        self._log(logging.ERROR, event, **kwargs)
+    
+    def critical(self, event: str, **kwargs):
+        """严重级别"""
+        self._log(logging.CRITICAL, event, **kwargs)
+
+
+def get_structured_logger(name: str, level: str = 'INFO') -> StructuredLogger:
+    """获取结构化日志记录器"""
+    return StructuredLogger(name, level)

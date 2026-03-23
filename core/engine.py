@@ -43,6 +43,7 @@ class EngineConfig:
     checkpoint_enabled: bool = True
     cookies: str = ""
     concurrency: int = 50
+    concurrency_probe: bool = False
     proxy: Optional[str] = None
     js_depth: int = 3
     output_dir: str = "./results"

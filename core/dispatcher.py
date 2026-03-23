@@ -189,6 +189,59 @@ class AsyncTaskDispatcher:
         self._results: List[Any] = []
         self._lock = asyncio.Lock()
     
+    @staticmethod
+    async def probe_concurrency(
+        test_url: str,
+        test_requests: int = 20,
+        timeout: float = 5.0
+    ) -> int:
+        """
+        探测目标服务器的最大并发承受能力
+        
+        Args:
+            test_url: 测试用的 URL
+            test_requests: 发送的测试请求数
+            timeout: 单个请求超时时间
+            
+        Returns:
+            建议的最大并发数
+        """
+        import aiohttp
+        
+        success_count = 0
+        fail_count = 0
+        
+        async def single_request(session: aiohttp.ClientSession) -> bool:
+            try:
+                async with session.get(test_url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+                    return resp.status < 500
+            except Exception:
+                return False
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                tasks = [single_request(session) for _ in range(test_requests)]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for result in results:
+                    if isinstance(result, Exception):
+                        fail_count += 1
+                    elif result:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+        except Exception:
+            return 10
+        
+        if success_count == test_requests:
+            return min(test_requests, 200)
+        elif success_count >= test_requests * 0.8:
+            return min(test_requests // 2, 100)
+        elif success_count >= test_requests * 0.5:
+            return min(test_requests // 4, 50)
+        else:
+            return min(test_requests // 8, 25)
+    
     async def execute(self, coro: Callable, *args, **kwargs) -> Any:
         """执行异步任务"""
         async with self.semaphore:

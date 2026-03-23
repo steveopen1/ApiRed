@@ -8,6 +8,7 @@ scanner:
     max_depth: 3
     timeout: 30
     max_retries: 3
+    probe: false  # 并发探测选项（可选，开启需谨慎）
   
   filters:
     danger_api_filter: true

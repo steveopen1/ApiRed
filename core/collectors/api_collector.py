@@ -245,6 +245,48 @@ class APIRouter:
                     ))
         
         return results
+
+    @classmethod
+    def extract_routes(cls, js_content: str) -> List[str]:
+        """从JS内容提取路由（返回字符串列表，兼容js_collector）"""
+        routes = []
+        found = set()
+
+        ROUTE_PATTERN = re.compile(r'''
+            (?:router|route|path)\s*[.(]?\s*
+            (?:get|post|put|delete|patch|options|head)\s*\(?
+            ['"`]([^'"`]+)['"`]
+        ''', re.VERBOSE | re.IGNORECASE)
+
+        FETCH_PATTERN = re.compile(r'''
+            fetch\s*\(\s*['"`]([^'"`]+)['"`]
+        ''', re.VERBOSE)
+
+        AXIOS_PATTERN = re.compile(r'''
+            (?:axios|request)\s*[.(]?\s*(?:get|post|put|delete)\s*\(?
+            ['"`]([^'"`]+)['"`]
+        ''', re.VERBOSE | re.IGNORECASE)
+
+        API_DIRECT_PATTERN = re.compile(r'''['"](/api/[a-zA-Z0-9/{}?=&_-]+)['"']''')
+
+        for pattern in [ROUTE_PATTERN, FETCH_PATTERN, AXIOS_PATTERN, API_DIRECT_PATTERN]:
+            matches = pattern.findall(js_content)
+            for route in matches:
+                if route and route not in found:
+                    found.add(route)
+                    routes.append(route)
+
+        return routes
+
+    @classmethod
+    def extract_base_urls(cls, js_content: str) -> List[str]:
+        """从JS内容提取Base URLs（返回字符串列表，兼容js_collector）"""
+        URL_PATTERN = re.compile(r'''
+            (?:api|baseUrl|baseURL)\s*[:=]\s*['"`]([^'"`]+)['"`]
+        ''', re.IGNORECASE)
+
+        matches = URL_PATTERN.findall(js_content)
+        return list(set(matches))
     
     @classmethod
     def extract_apis_with_fuzz(cls, js_content: str) -> List[APIFindResult]:
