@@ -328,7 +328,7 @@ class ChkApiScanner:
                             path=api_endpoint.path,
                             method=api_endpoint.method,
                             source_type="api_spec_parser",
-                            base_url=spec_result.api_base_path or "",
+                            base_url=spec_result.base_url or "",
                             url_type="api_path"
                         )
                         self.api_aggregator.add_api(
