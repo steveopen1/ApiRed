@@ -26,4 +26,5 @@ __all__ = [
     'TaskStatus',
     'DiscoverAgent',
     'TestAgent',
+    'ReflectAgent',
 ]

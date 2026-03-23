@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 @dataclass
-class TestCase:
+class VulnTestCase:
     """测试用例"""
     id: str
     name: str
@@ -48,22 +48,25 @@ class TestCase:
         }
 
 
+TestCase = VulnTestCase
+
+
 @dataclass
-class TestCaseLibrary:
+class TestCaseSet:
     """测试用例库"""
     api_version: str
     category: str
-    test_cases: List[TestCase] = field(default_factory=list)
+    test_cases: List[VulnTestCase] = field(default_factory=list)
     
-    def get_by_vuln_type(self, vuln_type: str) -> List[TestCase]:
+    def get_by_vuln_type(self, vuln_type: str) -> List[VulnTestCase]:
         """按漏洞类型获取测试用例"""
         return [tc for tc in self.test_cases if tc.vuln_type == vuln_type]
     
-    def get_by_severity(self, severity: str) -> List[TestCase]:
+    def get_by_severity(self, severity: str) -> List[VulnTestCase]:
         """按严重程度获取测试用例"""
         return [tc for tc in self.test_cases if tc.severity == severity]
     
-    def get_by_id(self, test_id: str) -> Optional[TestCase]:
+    def get_by_id(self, test_id: str) -> Optional[VulnTestCase]:
         """按 ID 获取测试用例"""
         for tc in self.test_cases:
             if tc.id == test_id:
@@ -79,16 +82,20 @@ class TestCaseLibrary:
         return len(self.test_cases)
 
 
-class TestCaseLoader:
+TestCaseLibrary = TestCaseSet
+
+
+class TestCaseManager:
     """测试用例加载器"""
+    __test__ = False  # Exclude from pytest collection
     
     def __init__(self, base_path: Optional[str] = None):
         if base_path is None:
             base_path = Path(__file__).parent
         self.base_path = Path(base_path)
-        self._libraries: Dict[str, TestCaseLibrary] = {}
+        self._libraries: Dict[str, TestCaseSet] = {}
     
-    def load(self, category: str = "owasp_api_security") -> TestCaseLibrary:
+    def load(self, category: str = "owasp_api_security") -> TestCaseSet:
         """加载测试用例库"""
         if category in self._libraries:
             return self._libraries[category]
@@ -103,7 +110,7 @@ class TestCaseLoader:
         
         test_cases = []
         for tc_data in data.get('test_cases', []):
-            test_case = TestCase(
+            test_case = VulnTestCase(
                 id=tc_data.get('id', ''),
                 name=tc_data.get('name', ''),
                 severity=tc_data.get('severity', 'MEDIUM'),
@@ -122,7 +129,7 @@ class TestCaseLoader:
             )
             test_cases.append(test_case)
         
-        library = TestCaseLibrary(
+        library = TestCaseSet(
             api_version=data.get('api_version', '1.0'),
             category=data.get('category', category),
             test_cases=test_cases
@@ -131,7 +138,7 @@ class TestCaseLoader:
         self._libraries[category] = library
         return library
     
-    def load_all(self) -> Dict[str, TestCaseLibrary]:
+    def load_all(self) -> Dict[str, TestCaseSet]:
         """加载所有测试用例库"""
         libraries = {}
         
@@ -144,7 +151,7 @@ class TestCaseLoader:
         
         return libraries
     
-    def get_combined_library(self) -> TestCaseLibrary:
+    def get_combined_library(self) -> TestCaseSet:
         """获取所有测试用例库的组合"""
         all_libraries = self.load_all()
         
@@ -152,20 +159,23 @@ class TestCaseLoader:
         for library in all_libraries.values():
             all_cases.extend(library.test_cases)
         
-        return TestCaseLibrary(
+        return TestCaseSet(
             api_version="1.0",
             category="all",
             test_cases=all_cases
         )
 
 
-def load_default_library() -> TestCaseLibrary:
+TestCaseLoader = TestCaseManager
+
+
+def load_default_library() -> TestCaseSet:
     """加载默认测试用例库"""
-    loader = TestCaseLoader()
+    loader = TestCaseManager()
     return loader.load("owasp_api_security")
 
 
-def load_all_libraries() -> Dict[str, TestCaseLibrary]:
+def load_all_libraries() -> Dict[str, TestCaseSet]:
     """加载所有测试用例库"""
-    loader = TestCaseLoader()
+    loader = TestCaseManager()
     return loader.load_all()
