@@ -304,9 +304,13 @@ class FileStorage:
         """保存JSON文件"""
         try:
             full_path = os.path.join(self.base_dir, file_path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            normalized = os.path.normpath(full_path)
+            if not normalized.startswith(os.path.normpath(self.base_dir)):
+                print("Save JSON error: path traversal attempt detected")
+                return False
+            os.makedirs(os.path.dirname(normalized), exist_ok=True)
             
-            with open(full_path, 'w', encoding='utf-8') as f:
+            with open(normalized, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
@@ -671,9 +675,10 @@ class MySQLStorage:
             return []
         try:
             with self._conn.cursor() as cursor:
+                pattern = f"%{keywords}%"
                 cursor.execute(
-                    f"SELECT * FROM api_results WHERE api_url LIKE %s OR parameter LIKE %s",
-                    (f"%{keywords}%", f"%{keywords}%")
+                    "SELECT * FROM api_results WHERE api_url LIKE ? OR parameter LIKE ?",
+                    (pattern, pattern)
                 )
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:

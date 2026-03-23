@@ -321,9 +321,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return False
             if not parsed.netloc:
                 return False
+            if parsed.scheme in ('javascript', 'data', 'vbscript'):
+                return False
             return True
         except Exception:
             return False
+    
+    def _sanitize_error(self, error: str) -> str:
+        """对错误信息进行脱敏处理，移除敏感内容"""
+        import re
+        if not error:
+            return ""
+        patterns = [
+            (r'(api[_-]?key["\']?\s*[:=]\s*)["\']?[a-zA-Z0-9_\-]{10,}["\']?', r'\1***'),
+            (r'(token["\']?\s*[:=]\s*)["\']?[a-zA-Z0-9_\-\.]{10,}["\']?', r'\1***'),
+            (r'(password["\']?\s*[:=]\s*)["\']?[^\s"\']{4,}["\']?', r'\1***'),
+            (r'(sk[-_][a-zA-Z0-9]{20,})', r'***'),
+            (r'(ghp_[a-zA-Z0-9]{36})', r'***'),
+            (r'(xox[baprs]-[a-zA-Z0-9\-]{10,})', r'***'),
+        ]
+        sanitized = error
+        for pattern, replacement in patterns:
+            sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
+        return sanitized[:500]
     
     def _run_scan(self, task_id: str, target: str, config: Dict, scan_mode: str):
         """运行扫描"""
@@ -395,7 +415,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 status="completed" if process.returncode == 0 else "failed",
                 progress=100,
                 end_time=datetime.now().isoformat(),
-                error=stderr.decode('utf-8', errors='ignore')[:500] if stderr else ""
+                error=self._sanitize_error(stderr.decode('utf-8', errors='ignore')) if stderr else ""
             )
             
         except Exception as e:
