@@ -337,11 +337,100 @@ class JSParser:
                        'profile', 'account', 'user', 'role', 'permission', 'menu',
                        'log', 'monitor', 'statistics', 'report', 'analytics']
     
+    _CRUD_SUFFIXES_SET = None
+    _RESOURCE_VERBS_SET = None
+    _JS_KEYWORDS_SET = None
+    _RESOURCE_KEYWORDS_SET = None
+    
+    _API_SUFFIX_PATTERNS = None
+    _PATH_API_PATTERN = None
+    _URL_QUERY_PATTERN = None
+    _CONFIG_PATTERNS = None
+    _RESOURCE_KEYWORD_PATTERNS = None
+    
+    _NON_RESOURCE_WORDS = None
+    _ID_PATTERNS = None
+    
+    @classmethod
+    def _init_class_vars(cls):
+        """延迟初始化类级别变量"""
+        if cls._CRUD_SUFFIXES_SET is None:
+            cls._CRUD_SUFFIXES_SET = set(cls.CRUD_SUFFIXES)
+            cls._RESOURCE_VERBS_SET = set(cls.RESOURCE_VERBS)
+            cls._JS_KEYWORDS_SET = set(k.lower() for k in [
+                'getList', 'getListByPage', 'getAll', 'getInfo', 'getDetail', 'getData',
+                'addData', 'addInfo', 'createData', 'createInfo', 'insertData', 'insertInfo',
+                'updateData', 'updateInfo', 'editData', 'editInfo', 'modifyData', 'modifyInfo',
+                'deleteData', 'deleteInfo', 'delData', 'delInfo', 'removeData', 'removeInfo',
+                'saveData', 'saveInfo', 'submitData', 'submitInfo', 'commitData', 'commitInfo',
+                'queryData', 'queryInfo', 'searchData', 'searchInfo', 'fetchData', 'fetchInfo',
+                'exportData', 'exportExcel', 'exportFile', 'importData', 'importExcel', 'importFile',
+                'uploadFile', 'uploadImage', 'downloadFile', 'downloadExcel',
+                'enableData', 'disableData', 'getTree', 'getTreeList', 'getTable',
+                'getComboTree', 'getComboBox', 'getSelect', 'getOptions', 'getChoices',
+                'loginIn', 'loginOut', 'logout', 'register', 'signup', 'getCaptcha', 'sendCode',
+                'getMenu', 'getPerm', 'getRole', 'getUser', 'getConfig', 'getSettings',
+                'getToken', 'refreshToken', 'resetPwd', 'forgetPwd', 'getAccount', 'getProfile',
+                'getNotice', 'getMessage', 'getNotification', 'getAnnouncement',
+                'getComment', 'getFeedback', 'getSuggest', 'getReport',
+                'getLog', 'getLogs', 'getHistory', 'getOperation', 'getMonitor',
+                'getStatistics', 'getChart', 'getDashboard', 'getSummary',
+                'getDict', 'getDictData', 'getDictType', 'getRegion', 'getArea',
+                'getCategory', 'getType', 'getTag', 'getBrand', 'getModel', 'getSpec',
+                'getProduct', 'getGoods', 'getSku', 'getSpu', 'getPrice', 'getStock',
+                'getOrder', 'getOrderInfo', 'createOrder', 'getCart', 'getWishlist',
+                'getFavorites', 'getCollect', 'getCoupon', 'getWallet', 'getBalance',
+            ])
+            cls._RESOURCE_KEYWORDS_SET = set([
+                'user', 'users', 'person', 'persons', 'employee', 'employees',
+                'role', 'roles', 'permission', 'permissions', 'perm', 'perms',
+                'menu', 'menus', 'dept', 'department', 'departments', 'org', 'organization',
+                'order', 'orders', 'product', 'products', 'goods', 'item', 'items',
+                'category', 'categories', 'type', 'types', 'tag', 'tags',
+                'dict', 'dicts', 'dictionary', 'area', 'region', 'province', 'city',
+                'log', 'logs', 'operation', 'history', 'record', 'records',
+                'monitor', 'statistics', 'stat', 'stats', 'chart', 'dashboard',
+                'file', 'files', 'attachment', 'media', 'image', 'images', 'video',
+                'message', 'messages', 'notice', 'notices', 'notification', 'notifications',
+                'comment', 'comments', 'feedback', 'suggest', 'suggestions', 'report', 'reports',
+                'config', 'configs', 'setting', 'settings', 'system', 'admin',
+            ])
+            cls._NON_RESOURCE_WORDS = frozenset(('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'))
+            cls._ID_PATTERNS = [
+                re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'),
+                re.compile(r'^[a-f0-9]{32,}$'),
+                re.compile(r'^\d{1,10}$'),
+            ]
+    
+    @classmethod
+    def _init_regex_patterns(cls):
+        """延迟初始化正则表达式"""
+        if cls._API_SUFFIX_PATTERNS is None:
+            import re
+            cls._API_SUFFIX_PATTERNS = [
+                re.compile(r'["\']([^"\']*(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)[^"\']*)["\']', re.IGNORECASE),
+                re.compile(r'["\']([^"\']*(?:detail|info|page|data|json|tree|table|grid|card|form|modal|view)[^"\']*)["\']', re.IGNORECASE),
+                re.compile(r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)/?', re.IGNORECASE),
+                re.compile(r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(detail|info|page|data|json|tree|table|grid|card|form|modal|view)/?', re.IGNORECASE),
+            ]
+            cls._PATH_API_PATTERN = re.compile(r'["\']([a-zA-Z0-9_\-]*(?:/api|/v\d+)?/[a-zA-Z][a-zA-Z0-9_\-]*(?:/[a-zA-Z][a-zA-Z0-9_\-]*)*)["\']')
+            cls._URL_QUERY_PATTERN = re.compile(r'[\?&]([a-zA-Z][a-zA-Z0-9]*)=(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download)', re.IGNORECASE)
+            cls._CONFIG_PATTERNS = [
+                re.compile(r'(?:url|path|endpoint|api|route)["\']?\s*[:=]\s*["\']([^"\']+)["\']'),
+                re.compile(r'["\']([^"\']*(?:/[a-zA-Z][a-zA-Z0-9]*)+)["\']'),
+            ]
+            cls._RESOURCE_KEYWORD_PATTERNS = [
+                (word, re.compile(rf'["\']([^"\']*{re.escape(word)}[^"\']*)["\']', re.IGNORECASE))
+                for word in cls._RESOURCE_KEYWORDS_SET
+            ]
+    
     def __init__(self, cache: Optional[JSFingerprintCache] = None):
         self.cache = cache
         self._ast_parser = None
         self._use_ast = self._check_esprima_available()
         self._extracted_apis = set()
+        JSParser._init_class_vars()
+        JSParser._init_regex_patterns()
     
     def _check_esprima_available(self) -> bool:
         """检查 esprima 是否可用"""
@@ -448,116 +537,68 @@ class JSParser:
         suffixes = set()
         resources = set()
         
-        api_suffix_patterns = [
-            r'["\']([^"\']*(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)[^"\']*)["\']',
-            r'["\']([^"\']*(?:detail|info|page|data|json|tree|table|grid|card|form|modal|view)[^"\']*)["\']',
-            r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)/?',
-            r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(detail|info|page|data|json|tree|table|grid|card|form|modal|view)/?',
-        ]
+        non_resource = JSParser._NON_RESOURCE_WORDS
+        crud_set = JSParser._CRUD_SUFFIXES_SET
+        verb_set = JSParser._RESOURCE_VERBS_SET
+        keyword_set = JSParser._JS_KEYWORDS_SET
+        api_patterns = JSParser._API_SUFFIX_PATTERNS
+        path_pattern = JSParser._PATH_API_PATTERN
+        query_pattern = JSParser._URL_QUERY_PATTERN
+        config_patterns = JSParser._CONFIG_PATTERNS
+        resource_patterns = JSParser._RESOURCE_KEYWORD_PATTERNS
         
-        for pattern in api_suffix_patterns:
-            matches = re.findall(pattern, js_content, re.IGNORECASE)
-            for match in matches:
+        for pattern in api_patterns:
+            for match in pattern.findall(js_content):
                 if isinstance(match, tuple):
                     for m in match:
                         if m:
                             parts = m.strip('/').split('/')
                             for part in parts:
-                                if part.lower() in self.CRUD_SUFFIXES or part.lower() in self.RESOURCE_VERBS:
-                                    suffixes.add(part.lower())
-                                elif len(part) >= 2 and part.isalpha() and part.lower() not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
-                                    resources.add(part.lower())
+                                part_lower = part.lower()
+                                if part_lower in crud_set or part_lower in verb_set:
+                                    suffixes.add(part_lower)
+                                elif len(part) >= 2 and part.isalpha() and part_lower not in non_resource:
+                                    resources.add(part_lower)
                 elif match:
-                    if match.lower() in self.CRUD_SUFFIXES or match.lower() in self.RESOURCE_VERBS:
-                        suffixes.add(match.lower())
-                    elif len(match) >= 2 and match.isalpha() and match.lower() not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
-                        resources.add(match.lower())
+                    match_lower = match.lower()
+                    if match_lower in crud_set or match_lower in verb_set:
+                        suffixes.add(match_lower)
+                    elif len(match) >= 2 and match.isalpha() and match_lower not in non_resource:
+                        resources.add(match_lower)
         
-        path_api_pattern = r'["\']([a-zA-Z0-9_\-]*(?:/api|/v\d+)?/[a-zA-Z][a-zA-Z0-9_\-]*(?:/[a-zA-Z][a-zA-Z0-9_\-]*)*)["\']'
-        path_matches = re.findall(path_api_pattern, js_content)
-        
-        for path in path_matches:
+        for path in path_pattern.findall(js_content):
             parts = path.strip('/').split('/')
             for part in parts:
                 part_lower = part.lower()
-                if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
+                if part_lower in crud_set or part_lower in verb_set:
                     suffixes.add(part_lower)
-                elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
+                elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in non_resource:
                     resources.add(part_lower)
         
-        url_query_pattern = r'[\?&]([a-zA-Z][a-zA-Z0-9]*)=(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download)'
-        query_matches = re.findall(url_query_pattern, js_content, re.IGNORECASE)
-        for param in query_matches:
+        for param in query_pattern.findall(js_content):
             suffixes.add(param.lower())
         
-        config_patterns = [
-            r'(?:url|path|endpoint|api|route)["\']?\s*[:=]\s*["\']([^"\']+)["\']',
-            r'["\']([^"\']*(?:/[a-zA-Z][a-zA-Z0-9]*)+)["\']',
-        ]
-        
         for pattern in config_patterns:
-            matches = re.findall(pattern, js_content)
-            for match in matches:
+            for match in pattern.findall(js_content):
                 if match.startswith('http') or 'api' not in match.lower():
                     continue
                 parts = match.strip('/').split('/')
                 for part in parts:
                     part_lower = part.lower()
-                    if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
+                    if part_lower in crud_set or part_lower in verb_set:
                         suffixes.add(part_lower)
-                    elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
+                    elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in non_resource:
                         resources.add(part_lower)
         
-        js_keywords = [
-            'getList', 'getListByPage', 'getAll', 'getInfo', 'getDetail', 'getData',
-            'addData', 'addInfo', 'createData', 'createInfo', 'insertData', 'insertInfo',
-            'updateData', 'updateInfo', 'editData', 'editInfo', 'modifyData', 'modifyInfo',
-            'deleteData', 'deleteInfo', 'delData', 'delInfo', 'removeData', 'removeInfo',
-            'saveData', 'saveInfo', 'submitData', 'submitInfo', 'commitData', 'commitInfo',
-            'queryData', 'queryInfo', 'searchData', 'searchInfo', 'fetchData', 'fetchInfo',
-            'exportData', 'exportExcel', 'exportFile', 'importData', 'importExcel', 'importFile',
-            'uploadFile', 'uploadImage', 'downloadFile', 'downloadExcel',
-            'enableData', 'disableData', 'getTree', 'getTreeList', 'getTable',
-            'getComboTree', 'getComboBox', 'getSelect', 'getOptions', 'getChoices',
-            'loginIn', 'loginOut', 'logout', 'register', 'signup', 'getCaptcha', 'sendCode',
-            'getMenu', 'getPerm', 'getRole', 'getUser', 'getConfig', 'getSettings',
-            'getToken', 'refreshToken', 'resetPwd', 'forgetPwd', 'getAccount', 'getProfile',
-            'getNotice', 'getMessage', 'getNotification', 'getAnnouncement',
-            'getComment', 'getFeedback', 'getSuggest', 'getReport',
-            'getLog', 'getLogs', 'getHistory', 'getOperation', 'getMonitor',
-            'getStatistics', 'getChart', 'getDashboard', 'getSummary',
-            'getDict', 'getDictData', 'getDictType', 'getRegion', 'getArea',
-            'getCategory', 'getType', 'getTag', 'getBrand', 'getModel', 'getSpec',
-            'getProduct', 'getGoods', 'getSku', 'getSpu', 'getPrice', 'getStock',
-            'getOrder', 'getOrderInfo', 'createOrder', 'getCart', 'getWishlist',
-            'getFavorites', 'getCollect', 'getCoupon', 'getWallet', 'getBalance',
-        ]
+        js_lower = js_content.lower()
+        for keyword in keyword_set:
+            if keyword in js_lower:
+                suffixes.add(keyword)
         
-        for keyword in js_keywords:
-            if keyword.lower() in js_content.lower():
-                suffixes.add(keyword.lower())
-        
-        resource_keywords = [
-            'user', 'users', 'person', 'persons', 'employee', 'employees',
-            'role', 'roles', 'permission', 'permissions', 'perm', 'perms',
-            'menu', 'menus', 'dept', 'department', 'departments', 'org', 'organization',
-            'order', 'orders', 'product', 'products', 'goods', 'item', 'items',
-            'category', 'categories', 'type', 'types', 'tag', 'tags',
-            'dict', 'dicts', 'dictionary', 'area', 'region', 'province', 'city',
-            'log', 'logs', 'operation', 'history', 'record', 'records',
-            'monitor', 'statistics', 'stat', 'stats', 'chart', 'dashboard',
-            'file', 'files', 'attachment', 'media', 'image', 'images', 'video',
-            'message', 'messages', 'notice', 'notices', 'notification', 'notifications',
-            'comment', 'comments', 'feedback', 'suggest', 'suggestions', 'report', 'reports',
-            'config', 'configs', 'setting', 'settings', 'system', 'admin',
-        ]
-        
-        for resource in resource_keywords:
-            pattern = rf'["\']([^"\']*{resource}[^"\']*)["\']'
-            matches = re.findall(pattern, js_content, re.IGNORECASE)
-            for match in matches:
+        for word, pattern in resource_patterns:
+            for match in pattern.findall(js_content):
                 if '/' in match and len(match) < 100:
-                    resources.add(resource.lower())
+                    resources.add(word.lower())
         
         return suffixes, resources
     

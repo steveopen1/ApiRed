@@ -775,8 +775,6 @@ class ScanEngine:
                 logger.debug(f"Parent path not accessible: {parent_path} (status: {response.status_code})")
         
         return probed_results
-        
-        return probed_results
     
     async def _fuzz_api_paths(self, js_results: List) -> Set[str]:
         """基于 JS 中发现的 API 路径进行智能 fuzzing 探测"""
