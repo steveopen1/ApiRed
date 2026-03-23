@@ -86,7 +86,7 @@ class ResponseCluster:
             content_preview=self._extract_preview(response.content),
             url=endpoint_id
         )
-        self.add_response(fp)
+        self._add_to_cluster(fp)
     
     def _generate_fingerprint(self, response: TaskResult) -> str:
         """
@@ -202,8 +202,8 @@ class ResponseCluster:
         
         return ' | '.join(preview_lines)
     
-    def add_response(self, fingerprint: ResponseFingerprint):
-        """添加响应到聚类"""
+    def _add_to_cluster(self, fingerprint: ResponseFingerprint):
+        """添加响应到聚类（内部方法）"""
         key = self._get_cluster_key(fingerprint)
         self._clusters[key].append(fingerprint)
     

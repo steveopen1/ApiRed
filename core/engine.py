@@ -635,12 +635,14 @@ class ScanEngine:
         high_value_evidence = self._api_scorer.get_high_value() if self._api_scorer else []
         
         # 更新端点的 is_high_value 标志
+        # evidence.normalized_path 是 lowercased 路径（如 '/areacare/delete'）
+        # 需要匹配到 full_url 的路径部分
         for evidence in high_value_evidence:
-            if evidence.path in url_to_endpoint:
-                url_to_endpoint[evidence.path].is_high_value = True
-            # 同时尝试用 full_url 匹配
             for ep in endpoints:
-                if ep.full_url == evidence.path:
+                # 检查 full_url 的路径部分是否与 normalized_path 匹配
+                ep_path_lower = ep.path.lower() if ep.path else ''
+                if ep_path_lower == evidence.normalized_path or \
+                   ep.full_url.lower().endswith(evidence.normalized_path):
                     ep.is_high_value = True
                     break
         

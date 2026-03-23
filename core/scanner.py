@@ -455,11 +455,10 @@ class ChkApiScanner:
         
         # 更新 is_high_value 标志
         for evidence in high_value_evidence:
-            if evidence.path in url_to_endpoint:
-                url_to_endpoint[evidence.path].is_high_value = True
-            # 同时通过遍历匹配
             for ep in self.result.api_endpoints if self.result else []:
-                if ep.full_url == evidence.path:
+                ep_path_lower = ep.path.lower() if ep.path else ''
+                if ep_path_lower == evidence.normalized_path or \
+                   ep.full_url.lower().endswith(evidence.normalized_path):
                     ep.is_high_value = True
                     break
         
