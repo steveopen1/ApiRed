@@ -315,6 +315,19 @@ class JSParser:
         except ImportError:
             return False
     
+    def _is_likely_id(self, s: str) -> bool:
+        """
+        判断路径段是否可能是 ID
+        
+        用于智能前缀发现中过滤掉 ID 部分。
+        """
+        return (
+            s.isdigit() or 
+            bool(self._UUID_PATTERN.match(s)) or
+            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+            (len(s) > 8 and bool(self._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(s)) and ('-' in s or '_' in s))
+        )
+    
     def generate_parent_paths(self, path: str, max_depth: int = 3) -> List[str]:
         """
         从完整路径生成可能的父路径前缀（通用版）
@@ -372,6 +385,85 @@ class JSParser:
                 parent_paths.append(parent_path)
         
         return parent_paths
+    
+    def discover_api_prefixes(self, paths: List[str], min_frequency: int = 2) -> List[str]:
+        """
+        从多个 API 路径中发现公共前缀（智能前缀发现）
+        
+        给定一组 API 路径，自动识别公共前缀作为可能的 API 端点。
+        不依赖预定义前缀列表，基于路径结构和出现频率。
+        
+        例如:
+        - /admin/user/list, /admin/user/123, /admin/user/exists
+          -> 发现前缀: /admin/user
+        - /api/v2/users/page, /api/v2/users/add, /api/v2/users/delete
+          -> 发现前缀: /api/v2/users
+        - /sysAuth/login, /sysAuth/captcha, /sysAuth/logout
+          -> 发现前缀: /sysAuth
+        
+        Args:
+            paths: API 路径列表
+            min_frequency: 最小出现频率
+            
+        Returns:
+            发现的 API 前缀列表
+        """
+        if not paths or len(paths) < 2:
+            return []
+        
+        path_segments = []
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            
+            if path.startswith('http://') or path.startswith('https://'):
+                from urllib.parse import urlparse
+                parsed = urlparse(path)
+                path = parsed.path
+            
+            path = path.strip('/')
+            if not path:
+                continue
+            
+            parts = path.split('/')
+            filtered_parts = []
+            
+            for i, part in enumerate(parts):
+                if self._is_likely_id(part) and i > 0:
+                    break
+                filtered_parts.append(part)
+            
+            if len(filtered_parts) >= 1:
+                path_segments.append(filtered_parts)
+        
+        if not path_segments:
+            return []
+        
+        prefix_map: Dict[str, int] = {}
+        
+        for segments in path_segments:
+            for depth in range(1, len(segments) + 1):
+                prefix = '/' + '/'.join(segments[:depth])
+                prefix_map[prefix] = prefix_map.get(prefix, 0) + 1
+        
+        candidates = []
+        for prefix, count in prefix_map.items():
+            if count >= min_frequency:
+                candidates.append((prefix, count))
+        
+        candidates.sort(key=lambda x: (-x[1], -len(x[0])))
+        
+        prefixes = []
+        for prefix, count in candidates:
+            is_subpath = False
+            for existing in prefixes:
+                if existing.startswith(prefix + '/'):
+                    is_subpath = True
+                    break
+            if not is_subpath:
+                prefixes.append(prefix)
+        
+        return prefixes
     
     def extract_path_template(self, path: str) -> str:
         """
@@ -606,6 +698,11 @@ class JSParser:
                 path_templates.add(template)
         
         all_apis = list(original_apis | parent_apis)
+        
+        discovered_prefixes = self.discover_api_prefixes(list(original_apis), min_frequency=2)
+        for prefix in discovered_prefixes:
+            if prefix not in parent_apis:
+                parent_apis.add(prefix)
         
         chunks = WebpackAnalyzer.extract_chunks(js_content)
         modules = WebpackAnalyzer.extract_modules(js_content)
