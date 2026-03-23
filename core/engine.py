@@ -456,6 +456,11 @@ class ScanEngine:
         if not self._browser_collector:
             return None
         
+        js_urls = []
+        api_endpoints = []
+        spa_routes = []
+        alive_js = []
+        
         try:
             await self._browser_collector.navigate(self.config.target)
             await self._browser_collector.scroll_page()
@@ -466,7 +471,6 @@ class ScanEngine:
             api_endpoints = page_content.get('api_endpoints', [])
             spa_routes = page_content.get('routes', [])
             
-            alive_js = []
             for js_url in js_urls:
                 try:
                     js_response = await self._http_client.request(js_url)
@@ -477,16 +481,87 @@ class ScanEngine:
                         })
                 except Exception as e:
                     logger.debug(f"Browser JS request error: {e}")
-            
-            return {
-                'js_urls': js_urls,
-                'alive_js': alive_js,
-                'spa_routes': spa_routes,
-                'browser_apis': api_endpoints
-            }
         except Exception as e:
-            print(f"Browser collection error: {e}")
-            return None
+            logger.warning(f"Browser collection error: {e}")
+        
+        return {
+            'js_urls': js_urls,
+            'alive_js': alive_js,
+            'spa_routes': spa_routes,
+            'browser_apis': api_endpoints,
+            'detected_framework': self._detected_framework
+        }
+    
+    COMMON_RESTFUL_SUFFIXES = [
+        '', '/', '/list', '/page', '/all', '/count', '/detail', '/info',
+        '/add', '/create', '/edit', '/update', '/delete', '/remove',
+        '/enable', '/disable', '/status', '/config', '/settings',
+        '/export', '/import', '/upload', '/download',
+        '/search', '/query', '/filter', '/sort',
+    ]
+    
+    async def _probe_parent_paths(self, js_results: List) -> Dict[str, Set[str]]:
+        """
+        探测父路径是否可访问，并进一步探测常见 RESTful 端点
+        
+        Returns:
+            {探测到的有效父路径: 该路径下探测到的额外端点}
+        """
+        probed_results = {}
+        base_url = self.config.target.rstrip('/')
+        
+        parent_paths_to_probe = set()
+        for js_result in js_results:
+            if hasattr(js_result, 'parent_paths') and js_result.parent_paths:
+                for original_path, parents in js_result.parent_paths.items():
+                    for parent in parents:
+                        if parent not in parent_paths_to_probe:
+                            parent_paths_to_probe.add(parent)
+        
+        if not parent_paths_to_probe:
+            return probed_results
+        
+        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths...")
+        
+        for parent_path in parent_paths_to_probe:
+            full_url = base_url + parent_path
+            
+            try:
+                response = await self._http_client.request(
+                    full_url,
+                    method='HEAD',
+                    timeout=5
+                )
+                
+                if 200 <= response.status_code < 400:
+                    logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
+                    probed_results[parent_path] = set()
+                    
+                    for suffix in self.COMMON_RESTFUL_SUFFIXES:
+                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
+                        sub_url = base_url + sub_path
+                        
+                        try:
+                            sub_response = await self._http_client.request(
+                                sub_url,
+                                method='HEAD',
+                                timeout=3
+                            )
+                            
+                            if 200 <= sub_response.status_code < 400:
+                                probed_results[parent_path].add(sub_path)
+                                logger.debug(f"  Found: {sub_path} (status: {sub_response.status_code})")
+                        except Exception:
+                            pass
+                
+                elif response.status_code == 401 or response.status_code == 403:
+                    probed_results[parent_path] = set()
+                    logger.info(f"Parent path exists (auth required): {parent_path} (status: {response.status_code})")
+            
+            except Exception as e:
+                logger.debug(f"Parent path probe failed: {parent_path} - {e}")
+        
+        return probed_results
     
     async def _extract_apis(self) -> Dict[str, Any]:
         """提取API端点 + 基于框架生成更多端点"""
@@ -557,6 +632,25 @@ class ScanEngine:
                     self._api_aggregator.add_api(
                         api_find_result,
                         source_info={'source': f'framework_{self._detected_framework}'}
+                    )
+        
+        probed_parent_paths = await self._probe_parent_paths(js_results)
+        
+        for parent_path, sub_endpoints in probed_parent_paths.items():
+            for sub_path in sub_endpoints:
+                if sub_path not in existing_paths:
+                    existing_paths.add(sub_path)
+                    from .collectors.api_collector import APIFindResult
+                    api_find_result = APIFindResult(
+                        path=sub_path,
+                        method="GET",
+                        source_type="parent_path_probe",
+                        base_url="",
+                        url_type="probed"
+                    )
+                    self._api_aggregator.add_api(
+                        api_find_result,
+                        source_info={'source': f'probed_parent:{parent_path}'}
                     )
         
         raw_endpoints = self._api_aggregator.get_all()

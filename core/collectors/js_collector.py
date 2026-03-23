@@ -47,13 +47,16 @@ class JSFingerprintCache:
         
         cached = self.storage.get_js_cache(cache_key)
         if cached:
+            ast_cache = cached.get('ast', {})
             result = ParsedJSResult(
-                apis=cached.get('ast', {}).get('apis', []),
-                urls=cached.get('ast', {}).get('urls', []),
-                dynamic_imports=cached.get('ast', {}).get('dynamic_imports', []),
+                apis=ast_cache.get('apis', []),
+                urls=ast_cache.get('urls', []),
+                dynamic_imports=ast_cache.get('dynamic_imports', []),
                 base_urls=cached.get('regex', {}).get('base_urls', []),
                 content_hash=cache_key,
-                file_size=len(content)
+                file_size=len(content),
+                parent_paths=cached.get('parent_paths', {}),
+                path_templates=cached.get('path_templates', [])
             )
             
             self._add_to_memory(cache_key, result)
@@ -72,7 +75,9 @@ class JSFingerprintCache:
         ast_data = {
             'apis': result.apis,
             'urls': result.urls,
-            'dynamic_imports': result.dynamic_imports
+            'dynamic_imports': result.dynamic_imports,
+            'parent_paths': result.parent_paths,
+            'path_templates': result.path_templates
         }
         regex_data = {
             'base_urls': result.base_urls
@@ -592,10 +597,11 @@ class JSParser:
         """
         content_bytes = js_content.encode('utf-8', errors='ignore')
         
+        cached_result = None
         if self.cache:
-            cached = self.cache.get(content_bytes)
-            if cached:
-                return cached
+            cached_result = self.cache.get(content_bytes)
+            if cached_result:
+                return cached_result
         
         if self._use_ast:
             apis = self._extract_with_ast(js_content)
