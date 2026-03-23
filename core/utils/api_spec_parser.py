@@ -166,49 +166,169 @@ class APISpecParser:
     
     async def _discover_api_base_path(self, target_url: str) -> Optional[str]:
         """
-        从目标网站发现 API base path
+        从多个渠道发现 API base path
         
-        通过分析 HTML/JavaScript 中的 API 配置来发现正确的 base path
+        渠道优先级:
+        1. 响应头 (X-Forwarded-Host, Server, Location)
+        2. robots.txt
+        3. HTML/JS 中的 API 配置
+        4. JavaScript 文件
         """
+        parsed = urlparse(target_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        
         try:
             response = await self.http_client.request(target_url, 'GET')
             if response.status_code != 200:
                 return None
             
             content = response.content
+            headers = response.headers if hasattr(response, 'headers') else {}
             
-            patterns = [
-                r'"(api[^"]*)"[^"]*baseURL[^"]*"([^"]*)"',
-                r'"(baseURL|base_url|apiUrl)[^"]*"([^"]*)"',
-                r'"(api|apiUrl)[^"]*"[^"]*"([^"]*)"',
-                r'window\.API_URL\s*=\s*["\']([^"\']+)["\']',
-                r'window\.BASE_URL\s*=\s*["\']([^"\']+)["\']',
-                r'axios\.defaults\.baseURL\s*=\s*["\']([^"\']+)["\']',
-            ]
+            base_path = self._extract_from_headers(headers, base_url)
+            if base_path:
+                return base_path
             
-            for pattern in patterns:
-                matches = re.findall(pattern, content, re.IGNORECASE)
-                for match in matches:
-                    if isinstance(match, tuple) and len(match) >= 2:
-                        api_path = match[1] if match[1] else match[0]
-                    else:
-                        api_path = match
-                    if api_path and self._looks_like_api_path(api_path):
-                        return self._normalize_api_path(api_path)
-                    if isinstance(match, tuple):
-                        for m in match:
-                            if m and self._looks_like_api_path(m):
-                                return self._normalize_api_path(m)
+            base_path = await self._extract_from_robots_txt(base_url)
+            if base_path:
+                return base_path
             
-            if '/api/' in content or '/v1/' in content or '/v2/' in content:
-                api_matches = re.findall(r'["\'](/(?:api|v[0-9]+)[^"\']*)["\']', content)
-                for api_match in api_matches[:5]:
-                    if self._looks_like_api_path(api_match):
-                        return self._normalize_api_path(api_match)
+            base_path = self._extract_from_html_js(content, base_url)
+            if base_path:
+                return base_path
+            
+            js_urls = self._extract_js_urls(content, base_url)
+            for js_url in js_urls[:5]:
+                js_content = await self._fetch_js_content(js_url)
+                if js_content:
+                    base_path = self._extract_from_html_js(js_content, base_url)
+                    if base_path:
+                        return base_path
             
         except Exception as e:
             logger.debug(f"Failed to discover API base path from {target_url}: {e}")
         
+        return None
+    
+    def _extract_from_headers(self, headers: Dict, base_url: str) -> Optional[str]:
+        """从响应头提取 base path"""
+        header_patterns = {
+            'X-Forwarded-Host': r'(https?://[^/]+)',
+            'X-Forwarded-Server': r'(https?://[^/]+)',
+            'Server': r'(https?://[^/]+)',
+            'Location': r'(https?://[^/]+[^"\']*)',
+            'Content-Location': r'(https?://[^/]+[^"\']*)',
+        }
+        
+        for header_name, pattern in header_patterns.items():
+            header_value = headers.get(header_name, '')
+            if header_value:
+                matches = re.findall(pattern, header_value, re.IGNORECASE)
+                for match in matches:
+                    if match and match != base_url:
+                        parsed = urlparse(match if match.startswith('http') else f'http://{match}')
+                        if parsed.path and parsed.path != '/':
+                            return parsed.path
+        
+        return None
+    
+    async def _extract_from_robots_txt(self, base_url: str) -> Optional[str]:
+        """从 robots.txt 提取 API 路径"""
+        robots_url = urljoin(base_url, '/robots.txt')
+        try:
+            response = await self.http_client.request(robots_url, 'GET')
+            if response.status_code == 200:
+                content = response.content
+                api_patterns = [
+                    r'Allow:\s*(/api[^"\s]*)',
+                    r'Disallow:\s*(/api[^"\s]*)',
+                    r'Sitemap:\s*(/api[^"\s]*)',
+                ]
+                for pattern in api_patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    for match in matches:
+                        path = self._normalize_api_path(match)
+                        if path and self._looks_like_api_path(path):
+                            return path
+        except Exception as e:
+            logger.debug(f"Failed to fetch robots.txt: {e}")
+        return None
+    
+    def _extract_from_html_js(self, content: str, base_url: str) -> Optional[str]:
+        """从 HTML/JS 内容提取 API 配置"""
+        patterns = [
+            r'"(api[^"]*)"[^"]*baseURL[^"]*"([^"]*)"',
+            r'"(baseURL|base_url|apiUrl)[^"]*"([^"]*)"',
+            r'"(api|apiUrl)[^"]*"[^"]*"([^"]*)"',
+            r'window\.API_URL\s*=\s*["\']([^"\']+)["\']',
+            r'window\.BASE_URL\s*=\s*["\']([^"\']+)["\']',
+            r'axios\.defaults\.baseURL\s*=\s*["\']([^"\']+)["\']',
+            r'fetch\([^)]*baseURL[^)]*["\']([^"\']+)["\']',
+            r'jQuery\.ajaxSettings\.baseURL\s*=\s*["\']([^"\']+)["\']',
+            r'Vue\.http\.defaults\.baseURL\s*=\s*["\']([^"\']+)["\']',
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for m in match:
+                        if m and self._looks_like_api_path(m):
+                            normalized = self._normalize_api_path(m)
+                            if normalized:
+                                return normalized
+                else:
+                    if match and self._looks_like_api_path(match):
+                        normalized = self._normalize_api_path(match)
+                        if normalized:
+                            return normalized
+        
+        api_matches = re.findall(r'["\'](/(?:api|v[0-9]+)[^"\']*)["\']', content)
+        for api_match in api_matches[:10]:
+            if self._looks_like_api_path(api_match):
+                normalized = self._normalize_api_path(api_match)
+                if normalized:
+                    return normalized
+        
+        swagger_embed = re.findall(r'<iframe[^>]*src=["\']([^"\']*swagger[^"\']*)["\']', content, re.IGNORECASE)
+        for embed_url in swagger_embed:
+            parsed = urlparse(embed_url)
+            path_parts = parsed.path.rsplit('/', 1)
+            if len(path_parts) > 1:
+                api_dir = path_parts[0]
+                if self._looks_like_api_path(api_dir):
+                    return self._normalize_api_path(api_dir)
+        
+        return None
+    
+    def _extract_js_urls(self, html_content: str, base_url: str) -> List[str]:
+        """从 HTML 中提取 JavaScript 文件 URL"""
+        js_urls = []
+        
+        script_patterns = [
+            r'<script[^>]+src=["\']([^"\']+\.js[^"\']*)["\']',
+            r'window\.\w+URL\s*=\s*["\']([^"\']+\.js[^"\']*)["\']',
+            r'import\s+["\']([^"\']+\.js[^"\']*)["\']',
+        ]
+        
+        for pattern in script_patterns:
+            matches = re.findall(pattern, html_content, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, str):
+                    js_url = match if match.startswith('http') else urljoin(base_url, match)
+                    if js_url not in js_urls:
+                        js_urls.append(js_url)
+        
+        return js_urls
+    
+    async def _fetch_js_content(self, js_url: str) -> Optional[str]:
+        """获取 JavaScript 文件内容"""
+        try:
+            response = await self.http_client.request(js_url, 'GET')
+            if response.status_code == 200:
+                return response.content
+        except Exception as e:
+            logger.debug(f"Failed to fetch JS {js_url}: {e}")
         return None
     
     def _looks_like_api_path(self, path: str) -> bool:
@@ -391,15 +511,33 @@ class APISpecParser:
         )
     
     def _parse_wsdl(self, content: str, base_url: str) -> APISpecResult:
-        """解析 WSDL 规范"""
+        """解析 WSDL 规范，提取 soap:address 中的真实地址"""
         endpoints = []
         vulnerabilities = []
         
         service_names = re.findall(r'<service[^>]*name=["\']([^"\']+)["\']', content, re.IGNORECASE)
         soap_actions = re.findall(r'<soap:operation[^>]*soapAction=["\']([^"\']+)["\']', content, re.IGNORECASE)
         
+        soap_addresses = re.findall(r'<soap:address[^>]*location=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        if not soap_addresses:
+            soap_addresses = re.findall(r'<address[^>]*location=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        
+        soap_base_path = None
+        for addr in soap_addresses:
+            if addr and addr.startswith('http'):
+                parsed = urlparse(addr)
+                if parsed.path:
+                    soap_base_path = parsed.path
+                    base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    break
+        
+        if soap_base_path:
+            wsdl_base = urljoin(base_url, soap_base_path)
+        else:
+            wsdl_base = base_url
+        
         endpoints.append(APIEndpoint(
-            path=base_url,
+            path=wsdl_base,
             method='SOAP',
             summary=f'SOAP Service: {", ".join(service_names) or "Unknown"}',
             parameters=[],
