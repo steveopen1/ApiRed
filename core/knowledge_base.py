@@ -50,23 +50,50 @@ class KnowledgeBase:
     """
     共享知识库
     为 Agent 系统提供统一的 API 端点、参数、发现结果存储
+    支持按目标隔离实例
     """
     
-    _instance = None
+    _instances: Dict[str, 'KnowledgeBase'] = {}
     _lock = threading.Lock()
     
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
+    @classmethod
+    def get_instance(cls, target: str = None) -> 'KnowledgeBase':
+        """
+        获取知识库实例
         
+        Args:
+            target: 目标URL，用于隔离多目标扫描数据
+            
+        Returns:
+            KnowledgeBase 实例
+        """
+        key = target or '_default_'
+        
+        with cls._lock:
+            if key not in cls._instances:
+                instance = super().__new__(cls)
+                instance._initialized = False
+                instance._target = target
+                instance._init_data()
+                cls._instances[key] = instance
+            return cls._instances[key]
+    
+    @classmethod
+    def clear_instance(cls, target: str = None) -> None:
+        """清除知识库实例"""
+        key = target or '_default_'
+        with cls._lock:
+            if key in cls._instances:
+                del cls._instances[key]
+    
+    @classmethod
+    def clear_all_instances(cls) -> None:
+        """清除所有知识库实例"""
+        with cls._lock:
+            cls._instances.clear()
+    
+    def _init_data(self) -> None:
+        """初始化数据"""
         self._initialized = True
         self._endpoints: Dict[str, APIEndpoint] = {}
         self._findings: List[Finding] = []
@@ -83,6 +110,9 @@ class KnowledgeBase:
             'parameter_added': [],
             'vulnerability_added': [],
         }
+    
+    def __init__(self):
+        pass  # Use get_instance() instead
     
     def add_endpoint(self, endpoint: APIEndpoint) -> bool:
         """添加 API 端点"""
@@ -237,6 +267,23 @@ class KnowledgeBase:
     def export(self) -> Dict[str, Any]:
         """导出知识库"""
         with self._lock:
+            findings_list = []
+            for f in self._findings:
+                if hasattr(f, 'to_dict'):
+                    findings_list.append(f.to_dict())
+                else:
+                    findings_list.append({
+                        'finding_type': f.finding_type,
+                        'severity': f.severity,
+                        'title': f.title,
+                        'description': f.description,
+                        'url': f.url,
+                        'evidence': f.evidence,
+                        'payload': f.payload,
+                        'remediation': f.remediation,
+                        'timestamp': f.timestamp,
+                    })
+            
             return {
                 'endpoints': [
                     {
@@ -252,7 +299,7 @@ class KnowledgeBase:
                     }
                     for ep in self._endpoints.values()
                 ],
-                'findings': [f.to_dict() for f in self._findings],
+                'findings': findings_list,
                 'vulnerabilities': self._vulnerabilities,
                 'sensitive_data': self._sensitive_data,
                 'summary': self.get_summary(),

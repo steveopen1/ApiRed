@@ -190,6 +190,18 @@ class ScanEngine:
         self._idor_tester = IDORTester(self._http_client)
         self._url_greper = URLGreper()
         
+        self._plugins_initialized = False
+        self._plugin_registry = None
+        try:
+            from .plugins import PluginRegistry
+            self._plugin_registry = PluginRegistry
+            PluginRegistry.discover_plugins('core.plugins')
+            self._plugins_initialized = True
+            logger.info(f"Plugins loaded: collectors={PluginRegistry.list_collectors()}, testers={PluginRegistry.list_testers()}, exporters={PluginRegistry.list_exporters()}")
+        except Exception as e:
+            logger.debug(f"Plugin system initialization skipped: {e}")
+            self._plugins_initialized = False
+        
         self._browser_collector: Optional[HeadlessBrowserCollector] = None
         self._browser_enabled = getattr(self.config, 'chrome', False)
         
@@ -305,7 +317,7 @@ class ScanEngine:
             )
             return self.result
         
-        self._knowledge_base = KnowledgeBase()
+        self._knowledge_base = KnowledgeBase.get_instance(self.config.target)
         
         context = ScanContext(
             target=self.config.target,
