@@ -1000,13 +1000,15 @@ class JSParser:
             '/api/', '/v1/', '/v2/', '/v3/', '/v4/',
             '/rest/', '/restapi/', '/service/', '/services/',
             '/sys/', '/sysauth/', '/sysconst/', '/sysmenu/', '/sysorg/', '/sysdict/',
-            '/sysdicttype/', '/sysuser/', '/sysrole/', '/syspermission/',
+            '/sysdicttype/', '/sysuser/', '/sysrole/', '/syspermission/', '/sysconfig/',
             '/admin/', '/manage/', '/system/',
             '/resource/', '/resources/', '/endpoint/', '/endpoints/',
             '/user/', '/users/', '/order/', '/orders/',
             '/product/', '/products/', '/data/', '/info/',
             '/auth/', '/login/', '/logout/', '/token/',
             '/menu/', '/role/', '/permission/', '/dict/',
+            '/monitor/', '/logs/', '/log/', '/file/', '/files/',
+            '/config/', '/setting/', '/settings/',
         ]
         
         path_lower = value.lower()
@@ -1017,7 +1019,7 @@ class JSParser:
         parts = value.strip('/').split('/')
         if len(parts) >= 2:
             first_part = parts[0].lower()
-            if first_part in ('api', 'v1', 'v2', 'v3', 'rest', 'service', 'sys', 'sysauth', 'sysconst', 'admin', 'manage'):
+            if first_part in ('api', 'v1', 'v2', 'v3', 'rest', 'service', 'sys', 'sysauth', 'sysconst', 'sysconfig', 'admin', 'manage', 'monitor', 'logs', 'file', 'files', 'config', 'auth'):
                 return True
         
         return False
