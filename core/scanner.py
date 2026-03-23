@@ -27,6 +27,40 @@ from .analyzers.sensitive_detector import TwoTierSensitiveDetector
 from .testers.fuzz_tester import FuzzTester
 from .testers.vulnerability_tester import VulnerabilityTester
 from .models import ScanResult, APIEndpoint, Vulnerability, SensitiveData, APIStatus
+from .utils.api_spec_parser import APISpecParser
+
+
+# API Spec URL patterns that indicate the target is an API specification
+API_SPEC_PATTERNS = [
+    r'/swagger\.json$',
+    r'/swagger\.yaml$',
+    r'/swagger\.yml$',
+    r'/openapi\.json$',
+    r'/openapi\.yaml$',
+    r'/openapi\.yml$',
+    r'/api-docs\.json$',
+    r'/api-docs\.yaml$',
+    r'/api-docs\.yml$',
+    r'/v1/api-docs$',
+    r'/v2/api-docs$',
+    r'/v3/api-docs$',
+    r'/docs\.json$',
+    r'/swagger-ui',
+    r'/swagger-ui\.html$',
+    r'/swagger-resources',
+    r'/swagger-resources/v1',
+    r'/grub/swagger',
+]
+
+
+def is_api_spec_url(url: str) -> bool:
+    """检查 URL 是否可能是 API 规范"""
+    import re
+    url_lower = url.lower()
+    for pattern in API_SPEC_PATTERNS:
+        if re.search(pattern, url_lower):
+            return True
+    return False
 
 
 @dataclass
@@ -278,6 +312,34 @@ class ChkApiScanner:
         self._emit('stage_start', {'stage': 'api_extraction', 'status': 'running'})
         
         start_time = time.time()
+        
+        # Check if target URL is an API spec and parse it
+        spec_endpoints_count = 0
+        if is_api_spec_url(self.config.target):
+            try:
+                logger.info(f"Detected API spec URL: {self.config.target}, using APISpecParser")
+                parser = APISpecParser(self.http_client)
+                spec_result = await parser.discover_and_parse(self.config.target)
+                if spec_result:
+                    logger.info(f"Parsed {len(spec_result.endpoints)} endpoints from API spec")
+                    for api_endpoint in spec_result.endpoints:
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=api_endpoint.path,
+                            method=api_endpoint.method,
+                            source_type="api_spec_parser",
+                            base_url=spec_result.api_base_path or "",
+                            url_type="api_path"
+                        )
+                        self.api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': f'api_spec:{spec_result.spec_type}'}
+                        )
+                        spec_endpoints_count += 1
+                else:
+                    logger.warning(f"Failed to parse API spec from {self.config.target}")
+            except Exception as e:
+                logger.error(f"Error parsing API spec: {e}")
         
         js_results = self.js_cache.get_all()
         input_count = len(js_results)
