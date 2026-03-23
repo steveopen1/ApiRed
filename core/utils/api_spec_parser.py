@@ -150,10 +150,12 @@ class APISpecParser:
         
         流程:
         1. 检查缓存，已发现则跳过
-        2. 从 URL 路径中提取可能的 base_path
-        3. 使用发现的 base_path 发现 swagger
-        4. 从多个渠道发现 API base path
-        5. 解析规范，获取最终 base_url
+        2. 直接验证目标 URL 是否为 API 规范
+        3. 从 URL 路径中提取可能的 base_path
+        4. 使用发现的 base_path 发现 swagger
+        5. 从多个渠道发现 API base path
+        6. 尝试标准 Swagger 路径
+        7. 尝试 ASP.NET Help Page
         
         Args:
             target_url: 目标 URL (如 https://api.example.com)
@@ -165,8 +167,14 @@ class APISpecParser:
             logger.debug(f"Base URL already discovered: {target_url}")
             return None
         
+        # 直接验证目标 URL 是否为 API 规范
         parsed = urlparse(target_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
+        
+        if self._mark_spec_scanned(target_url):
+            spec = await self._discover_and_parse_spec(target_url, base_url)
+            if spec:
+                return spec
         
         url_base_paths = self._extract_base_paths_from_url(target_url)
         

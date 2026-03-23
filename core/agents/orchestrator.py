@@ -61,6 +61,15 @@ PROVIDER_MODEL_PREFIX = {
     "openai": "",
 }
 
+LLM_MODEL_MAPPING = {
+    "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4-20250514",
+    "claude-opus-4-20250514": "anthropic/claude-opus-4-20250514",
+    "claude-3-5-sonnet-20241022": "anthropic/claude-3-5-sonnet-20241022",
+    "gpt-4o": "openai/gpt-4o",
+    "gpt-4o-mini": "openai/gpt-4o-mini",
+    "deepseek-chat": "deepseek/deepseek-chat",
+    "deepseek-coder": "deepseek/deepseek-coder",
+}
 
 def get_ai_config() -> Dict[str, str]:
     """
