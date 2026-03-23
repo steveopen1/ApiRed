@@ -18,6 +18,39 @@ from core.utils.config import Config
 from core.dashboard.web_dashboard import WebDashboard
 
 
+def load_dashboard_config_to_env():
+    """从 Dashboard 配置加载 API Keys 到环境变量"""
+    config_file = os.path.expanduser("~/.apired/dashboard_config.json")
+    if not os.path.exists(config_file):
+        return
+    
+    try:
+        import json
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        api_keys = config.get('api_keys', {})
+        provider_env_map = {
+            'anthropic': 'ANTHROPIC_API_KEY',
+            'openai': 'OPENAI_API_KEY',
+            'gemini': 'GEMINI_API_KEY',
+            'deepseek': 'DEEPSEEK_API_KEY',
+            'mistral': 'MISTRAL_API_KEY',
+            'ollama': 'OLLAMA_API_KEY',
+        }
+        
+        for provider, env_var in provider_env_map.items():
+            api_key = api_keys.get(provider, '')
+            if api_key and not api_key.startswith('***'):
+                os.environ[env_var] = api_key
+    except Exception:
+        pass
+
+
+# 在启动时加载配置
+load_dashboard_config_to_env()
+
+
 class CLI:
     """命令行界面"""
 
