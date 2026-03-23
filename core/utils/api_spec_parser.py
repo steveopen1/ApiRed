@@ -74,6 +74,7 @@ class APISpecParser:
         '/docs.json',
         '/api/swagger.yaml',
         '/api/openapi.yaml',
+        '/',  # 根路径也可能直接返回 Swagger/OpenAPI JSON
     ]
     
     WSDL_PATHS = [
@@ -450,7 +451,7 @@ class APISpecParser:
                 return None
             
             try:
-                if spec_url.endswith('.json') or content.strip().startswith('{'):
+                if spec_url.endswith('.json') or spec_url.endswith('.yaml') or spec_url.endswith('.yml') or content.strip().startswith('{') or content.strip().startswith('['):
                     spec = json.loads(content)
                 else:
                     spec = yaml.safe_load(content)
