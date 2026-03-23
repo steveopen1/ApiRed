@@ -857,6 +857,9 @@ async def run_multi_target(targets: List[str], config: MultiTargetConfig) -> Lis
     """
     并行扫描多个目标
     
+    .. deprecated::
+        此函数已废弃，请使用 engine.run_multi_target 代替。
+    
     Args:
         targets: 目标 URL 列表
         config: 多目标配置
@@ -864,6 +867,13 @@ async def run_multi_target(targets: List[str], config: MultiTargetConfig) -> Lis
     Returns:
         所有扫描结果的列表
     """
+    import warnings
+    warnings.warn(
+        "scanner.run_multi_target 已废弃，请使用 engine.run_multi_target 代替",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     scanner_config = ScannerConfig(
         target=targets[0] if targets else "",
         cookies="",
@@ -877,6 +887,18 @@ async def run_multi_target(targets: List[str], config: MultiTargetConfig) -> Lis
 
 
 async def run_scan(config: ScannerConfig) -> ScanResult:
-    """运行扫描的便捷函数"""
+    """
+    运行扫描的便捷函数
+    
+    .. deprecated::
+        此函数已废弃，请使用 ScanEngine 代替。
+    """
+    import warnings
+    warnings.warn(
+        "scanner.run_scan 已废弃，请使用 ScanEngine 代替",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     scanner = ChkApiScanner(config)
     return await scanner.run()

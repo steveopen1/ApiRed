@@ -7,7 +7,6 @@ __version__ = "3.1"
 __author__ = "ApiRed Team"
 
 from .engine import ScanEngine, EngineConfig, run_engine, run_multi_target, ScanResultAggregator
-from .scanner import ChkApiScanner
 
 __all__ = [
     'ScanEngine',
@@ -15,5 +14,4 @@ __all__ = [
     'run_engine',
     'run_multi_target',
     'ScanResultAggregator',
-    'ChkApiScanner',
 ]

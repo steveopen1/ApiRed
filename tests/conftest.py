@@ -2,6 +2,14 @@ import pytest
 import asyncio
 
 
+def pytest_configure(config):
+    """Configure pytest to ignore dataclass warnings"""
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore::pytest.PytestCollectionWarning"
+    )
+
+
 @pytest.fixture
 def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
