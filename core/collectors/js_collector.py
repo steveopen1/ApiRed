@@ -706,14 +706,14 @@ class JSParser:
             
             elif node.type == 'Literal' and hasattr(node, 'value') and isinstance(node.value, str):
                 val = node.value
-                if self._is_api_path(val):
+                if self._is_api_path(val) or self._is_likely_api_string(val):
                     urls.append(val)
             
             elif node.type == 'TemplateLiteral':
                 if hasattr(node, 'quasis') and node.quasis:
                     for quasi in node.quasis:
                         val = getattr(quasi, 'value', {}).get('raw', '') or ''
-                        if val and self._is_api_path(val):
+                        if val and (self._is_api_path(val) or self._is_likely_api_string(val)):
                             urls.append(val)
             
             elif node.type == 'BinaryExpression' and hasattr(node, 'left') and hasattr(node, 'right'):
@@ -855,7 +855,7 @@ class JSParser:
             return ""
         
         val = self._extract_string_value(arg)
-        if val and self._is_api_path(val):
+        if val and (self._is_api_path(val) or self._is_likely_api_string(val)):
             return val
         
         return ""
@@ -945,7 +945,7 @@ class JSParser:
         """
         判断是否为 API 路径（通用版）
         
-        只要路径以 / 开头且层级 >= 2，就认为是可能的 API 路径。
+        只要路径以 / 开头且层级 >= 2，或者是常见 API 路径模式，就认为是可能的 API 路径。
         """
         if not value or not isinstance(value, str):
             return False
@@ -967,6 +967,58 @@ class JSParser:
         
         if len(parts) >= 2:
             return True
+        
+        return False
+    
+    def _is_likely_api_string(self, value: str) -> bool:
+        """
+        判断字符串是否可能是 API 路径（宽松模式）
+        
+        用于 AST 解析中，当普通 _is_api_path 失败时的二次判断。
+        匹配常见的 API 路径模式：
+        - /api/xxx
+        - /v1/xxx, /v2/xxx
+        - /rest/xxx
+        - /service/xxx
+        - /sys/xxx (系统接口)
+        - 等等
+        """
+        if not value or not isinstance(value, str):
+            return False
+        
+        value = value.strip()
+        if len(value) < 4:
+            return False
+        
+        if value.startswith(('http://', 'https://')):
+            return True
+        
+        if not value.startswith('/'):
+            return False
+        
+        api_indicators = [
+            '/api/', '/v1/', '/v2/', '/v3/', '/v4/',
+            '/rest/', '/restapi/', '/service/', '/services/',
+            '/sys/', '/sysauth/', '/sysconst/', '/sysmenu/', '/sysorg/', '/sysdict/',
+            '/sysdicttype/', '/sysuser/', '/sysrole/', '/syspermission/',
+            '/admin/', '/manage/', '/system/',
+            '/resource/', '/resources/', '/endpoint/', '/endpoints/',
+            '/user/', '/users/', '/order/', '/orders/',
+            '/product/', '/products/', '/data/', '/info/',
+            '/auth/', '/login/', '/logout/', '/token/',
+            '/menu/', '/role/', '/permission/', '/dict/',
+        ]
+        
+        path_lower = value.lower()
+        for indicator in api_indicators:
+            if path_lower.startswith(indicator) or indicator in path_lower:
+                return True
+        
+        parts = value.strip('/').split('/')
+        if len(parts) >= 2:
+            first_part = parts[0].lower()
+            if first_part in ('api', 'v1', 'v2', 'v3', 'rest', 'service', 'sys', 'sysauth', 'sysconst', 'admin', 'manage'):
+                return True
         
         return False
     
