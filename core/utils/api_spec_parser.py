@@ -101,8 +101,9 @@ class APISpecParser:
         
         流程:
         1. 先访问目标首页，提取 API base path
-        2. 使用发现的 base path 发现 swagger
-        3. 解析规范，获取最终 base_url
+        2. 从 URL 路径中提取可能的 base_path
+        3. 使用发现的 base_path 发现 swagger
+        4. 解析规范，获取最终 base_url
         
         Args:
             target_url: 目标 URL (如 https://api.example.com)
@@ -113,18 +114,23 @@ class APISpecParser:
         parsed = urlparse(target_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         
+        url_base_paths = self._extract_base_paths_from_url(target_url)
+        
+        for bp in url_base_paths:
+            full_base = urljoin(base_url, bp)
+            spec = await self._discover_openapi(full_base)
+            if spec:
+                return spec
+        
         api_base_path = await self._discover_api_base_path(target_url)
         
         if api_base_path:
             full_base = urljoin(base_url, api_base_path)
-        else:
-            full_base = base_url
+            spec = await self._discover_openapi(full_base)
+            if spec:
+                return spec
         
-        spec = await self._discover_openapi(full_base)
-        if spec:
-            return spec
-        
-        spec = await self._discover_wsdl(full_base)
+        spec = await self._discover_wsdl(base_url)
         if spec:
             return spec
         
@@ -135,6 +141,28 @@ class APISpecParser:
                 return spec
         
         return None
+    
+    def _extract_base_paths_from_url(self, url: str) -> List[str]:
+        """
+        从 URL 中提取可能的 base_path 列表
+        
+        例如: http://xxx.com/admin/jiankon-action/xxx.asp
+        返回: ['/admin/jiankon-action/', '/admin/']
+        """
+        parsed = urlparse(url)
+        path = parsed.path
+        
+        if not path or path == '/':
+            return []
+        
+        base_paths = []
+        parts = path.strip('/').split('/')
+        
+        for i in range(len(parts) - 1, 0, -1):
+            bp = '/' + '/'.join(parts[:i]) + '/'
+            base_paths.append(bp)
+        
+        return base_paths
     
     async def _discover_api_base_path(self, target_url: str) -> Optional[str]:
         """
