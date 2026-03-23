@@ -640,12 +640,11 @@ class ScanEngine:
             combined_suffixes.append(suffix)
         
         for js_suffix in js_suffix_list:
-            if js_suffix not in ('', '/'):
-                combined_suffixes.append('/' + js_suffix)
-                if not js_suffix.endswith('s'):
-                    combined_suffixes.append('/' + js_suffix + 's')
-                plural = js_suffix + 's' if not js_suffix.endswith('s') else js_suffix
-                combined_suffixes.append('/' + plural)
+            clean_suffix = js_suffix.strip('/')
+            if clean_suffix and clean_suffix != '/':
+                combined_suffixes.append('/' + clean_suffix)
+                if not clean_suffix.endswith('s') and len(clean_suffix) > 1:
+                    combined_suffixes.append('/' + clean_suffix + 's')
         
         for fuzz_suffix in self.FUZZ_SUFFIXES[:20]:
             combined_suffixes.append('/' + fuzz_suffix.lower())
@@ -788,18 +787,22 @@ class ScanEngine:
         
         for parent_path in parent_paths_list:
             for js_suffix in js_suffix_list[:15]:
-                fuzz_path = parent_path.rstrip('/') + '/' + js_suffix.lower()
-                if fuzz_path not in all_apis and fuzz_path not in probed_set:
-                    paths_to_probe.append(fuzz_path)
-                    probed_set.add(fuzz_path)
-                
-                fuzz_path = parent_path.rstrip('/') + '/' + js_suffix.lower() + 's'
-                if fuzz_path not in all_apis and fuzz_path not in probed_set:
-                    paths_to_probe.append(fuzz_path)
-                    probed_set.add(fuzz_path)
+                clean_suffix = js_suffix.lstrip('/').lower()
+                if clean_suffix:
+                    fuzz_path = parent_path.rstrip('/') + '/' + clean_suffix
+                    if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                        paths_to_probe.append(fuzz_path)
+                        probed_set.add(fuzz_path)
+                    
+                    if not clean_suffix.endswith('s'):
+                        fuzz_path_plural = parent_path.rstrip('/') + '/' + clean_suffix + 's'
+                        if fuzz_path_plural not in all_apis and fuzz_path_plural not in probed_set:
+                            paths_to_probe.append(fuzz_path_plural)
+                            probed_set.add(fuzz_path_plural)
             
             for fuzz_suffix in self.FUZZ_SUFFIXES[:10]:
-                fuzz_path = parent_path.rstrip('/') + '/' + fuzz_suffix.lower()
+                clean_suffix = fuzz_suffix.lstrip('/').lower()
+                fuzz_path = parent_path.rstrip('/') + '/' + clean_suffix
                 if fuzz_path not in all_apis and fuzz_path not in probed_set:
                     paths_to_probe.append(fuzz_path)
                     probed_set.add(fuzz_path)

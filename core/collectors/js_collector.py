@@ -58,7 +58,9 @@ class JSFingerprintCache:
                 content_hash=cache_key,
                 file_size=len(content),
                 parent_paths=cached.get('parent_paths', {}),
-                path_templates=cached.get('path_templates', [])
+                path_templates=cached.get('path_templates', []),
+                extracted_suffixes=set(ast_cache.get('extracted_suffixes', [])),
+                resource_fragments=set(ast_cache.get('resource_fragments', []))
             )
             
             self._add_to_memory(cache_key, result)
@@ -79,7 +81,9 @@ class JSFingerprintCache:
             'urls': result.urls,
             'dynamic_imports': result.dynamic_imports,
             'parent_paths': result.parent_paths,
-            'path_templates': result.path_templates
+            'path_templates': result.path_templates,
+            'extracted_suffixes': list(result.extracted_suffixes),
+            'resource_fragments': list(result.resource_fragments)
         }
         regex_data = {
             'base_urls': result.base_urls
@@ -464,12 +468,12 @@ class JSParser:
                             for part in parts:
                                 if part.lower() in self.CRUD_SUFFIXES or part.lower() in self.RESOURCE_VERBS:
                                     suffixes.add(part.lower())
-                                elif len(part) >= 2 and part.isalpha():
+                                elif len(part) >= 2 and part.isalpha() and part.lower() not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
                                     resources.add(part.lower())
                 elif match:
                     if match.lower() in self.CRUD_SUFFIXES or match.lower() in self.RESOURCE_VERBS:
                         suffixes.add(match.lower())
-                    elif len(match) >= 2 and match.isalpha():
+                    elif len(match) >= 2 and match.isalpha() and match.lower() not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
                         resources.add(match.lower())
         
         path_api_pattern = r'["\']([a-zA-Z0-9_\-]*(?:/api|/v\d+)?/[a-zA-Z][a-zA-Z0-9_\-]*(?:/[a-zA-Z][a-zA-Z0-9_\-]*)*)["\']'
@@ -481,7 +485,7 @@ class JSParser:
                 part_lower = part.lower()
                 if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
                     suffixes.add(part_lower)
-                elif len(part) >= 2 and part.isalpha() and len(part) < 30:
+                elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
                     resources.add(part_lower)
         
         url_query_pattern = r'[\?&]([a-zA-Z][a-zA-Z0-9]*)=(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download)'
@@ -504,7 +508,7 @@ class JSParser:
                     part_lower = part.lower()
                     if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
                         suffixes.add(part_lower)
-                    elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part not in ('api', 'v1', 'v2', 'v3', 'rest'):
+                    elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part_lower not in ('api', 'v1', 'v2', 'v3', 'rest', 'http', 'https', 'www'):
                         resources.add(part_lower)
         
         js_keywords = [
