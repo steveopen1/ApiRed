@@ -24,6 +24,8 @@ class ParsedJSResult:
     file_size: int
     parent_paths: Dict[str, List[str]] = field(default_factory=dict)
     path_templates: List[str] = field(default_factory=list)
+    extracted_suffixes: Set[str] = field(default_factory=set)
+    resource_fragments: Set[str] = field(default_factory=set)
 
 
 class JSFingerprintCache:
@@ -428,6 +430,136 @@ class JSParser:
         
         return template
     
+    def extract_suffixes_from_js(self, js_content: str) -> Tuple[Set[str], Set[str]]:
+        """
+        从 JS 内容中提取常见后缀和资源片段
+        
+        从 JS 代码的字符串字面量、API 路径中智能识别：
+        - 常见后缀: list, add, create, delete, edit, query, get, set, save, update, remove, submit, cancel 等
+        - 资源片段: user, order, product, department, role, menu 等
+        
+        Args:
+            js_content: JS 内容
+            
+        Returns:
+            (提取的后缀集合, 提取的资源片段集合)
+        """
+        suffixes = set()
+        resources = set()
+        
+        api_suffix_patterns = [
+            r'["\']([^"\']*(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)[^"\']*)["\']',
+            r'["\']([^"\']*(?:detail|info|page|data|json|tree|table|grid|card|form|modal|view)[^"\']*)["\']',
+            r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download|enable|disable|login|logout|register)/?',
+            r'/(?:api|v1|v2|v3)?/([a-zA-Z][a-zA-Z0-9]*(?:/[a-zA-Z][a-zA-Z0-9]*)*)/(detail|info|page|data|json|tree|table|grid|card|form|modal|view)/?',
+        ]
+        
+        for pattern in api_suffix_patterns:
+            matches = re.findall(pattern, js_content, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for m in match:
+                        if m:
+                            parts = m.strip('/').split('/')
+                            for part in parts:
+                                if part.lower() in self.CRUD_SUFFIXES or part.lower() in self.RESOURCE_VERBS:
+                                    suffixes.add(part.lower())
+                                elif len(part) >= 2 and part.isalpha():
+                                    resources.add(part.lower())
+                elif match:
+                    if match.lower() in self.CRUD_SUFFIXES or match.lower() in self.RESOURCE_VERBS:
+                        suffixes.add(match.lower())
+                    elif len(match) >= 2 and match.isalpha():
+                        resources.add(match.lower())
+        
+        path_api_pattern = r'["\']([a-zA-Z0-9_\-]*(?:/api|/v\d+)?/[a-zA-Z][a-zA-Z0-9_\-]*(?:/[a-zA-Z][a-zA-Z0-9_\-]*)*)["\']'
+        path_matches = re.findall(path_api_pattern, js_content)
+        
+        for path in path_matches:
+            parts = path.strip('/').split('/')
+            for part in parts:
+                part_lower = part.lower()
+                if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
+                    suffixes.add(part_lower)
+                elif len(part) >= 2 and part.isalpha() and len(part) < 30:
+                    resources.add(part_lower)
+        
+        url_query_pattern = r'[\?&]([a-zA-Z][a-zA-Z0-9]*)=(?:list|add|create|delete|edit|update|remove|query|get|set|save|submit|cancel|reset|export|import|upload|download)'
+        query_matches = re.findall(url_query_pattern, js_content, re.IGNORECASE)
+        for param in query_matches:
+            suffixes.add(param.lower())
+        
+        config_patterns = [
+            r'(?:url|path|endpoint|api|route)["\']?\s*[:=]\s*["\']([^"\']+)["\']',
+            r'["\']([^"\']*(?:/[a-zA-Z][a-zA-Z0-9]*)+)["\']',
+        ]
+        
+        for pattern in config_patterns:
+            matches = re.findall(pattern, js_content)
+            for match in matches:
+                if match.startswith('http') or 'api' not in match.lower():
+                    continue
+                parts = match.strip('/').split('/')
+                for part in parts:
+                    part_lower = part.lower()
+                    if part_lower in self.CRUD_SUFFIXES or part_lower in self.RESOURCE_VERBS:
+                        suffixes.add(part_lower)
+                    elif len(part) >= 2 and part.isalpha() and len(part) < 30 and part not in ('api', 'v1', 'v2', 'v3', 'rest'):
+                        resources.add(part_lower)
+        
+        js_keywords = [
+            'getList', 'getListByPage', 'getAll', 'getInfo', 'getDetail', 'getData',
+            'addData', 'addInfo', 'createData', 'createInfo', 'insertData', 'insertInfo',
+            'updateData', 'updateInfo', 'editData', 'editInfo', 'modifyData', 'modifyInfo',
+            'deleteData', 'deleteInfo', 'delData', 'delInfo', 'removeData', 'removeInfo',
+            'saveData', 'saveInfo', 'submitData', 'submitInfo', 'commitData', 'commitInfo',
+            'queryData', 'queryInfo', 'searchData', 'searchInfo', 'fetchData', 'fetchInfo',
+            'exportData', 'exportExcel', 'exportFile', 'importData', 'importExcel', 'importFile',
+            'uploadFile', 'uploadImage', 'downloadFile', 'downloadExcel',
+            'enableData', 'disableData', 'getTree', 'getTreeList', 'getTable',
+            'getComboTree', 'getComboBox', 'getSelect', 'getOptions', 'getChoices',
+            'loginIn', 'loginOut', 'logout', 'register', 'signup', 'getCaptcha', 'sendCode',
+            'getMenu', 'getPerm', 'getRole', 'getUser', 'getConfig', 'getSettings',
+            'getToken', 'refreshToken', 'resetPwd', 'forgetPwd', 'getAccount', 'getProfile',
+            'getNotice', 'getMessage', 'getNotification', 'getAnnouncement',
+            'getComment', 'getFeedback', 'getSuggest', 'getReport',
+            'getLog', 'getLogs', 'getHistory', 'getOperation', 'getMonitor',
+            'getStatistics', 'getChart', 'getDashboard', 'getSummary',
+            'getDict', 'getDictData', 'getDictType', 'getRegion', 'getArea',
+            'getCategory', 'getType', 'getTag', 'getBrand', 'getModel', 'getSpec',
+            'getProduct', 'getGoods', 'getSku', 'getSpu', 'getPrice', 'getStock',
+            'getOrder', 'getOrderInfo', 'createOrder', 'getCart', 'getWishlist',
+            'getFavorites', 'getCollect', 'getCoupon', 'getWallet', 'getBalance',
+        ]
+        
+        for keyword in js_keywords:
+            if keyword.lower() in js_content.lower():
+                suffixes.add(keyword.lower())
+        
+        resource_keywords = [
+            'user', 'users', 'person', 'persons', 'employee', 'employees',
+            'role', 'roles', 'permission', 'permissions', 'perm', 'perms',
+            'menu', 'menus', 'dept', 'department', 'departments', 'org', 'organization',
+            'order', 'orders', 'product', 'products', 'goods', 'item', 'items',
+            'category', 'categories', 'type', 'types', 'tag', 'tags',
+            'dict', 'dicts', 'dictionary', 'area', 'region', 'province', 'city',
+            'log', 'logs', 'operation', 'history', 'record', 'records',
+            'monitor', 'statistics', 'stat', 'stats', 'chart', 'dashboard',
+            'file', 'files', 'attachment', 'media', 'image', 'images', 'video',
+            'message', 'messages', 'notice', 'notices', 'notification', 'notifications',
+            'comment', 'comments', 'feedback', 'suggest', 'suggestions', 'report', 'reports',
+            'config', 'configs', 'setting', 'settings', 'system', 'admin',
+        ]
+        
+        for resource in resource_keywords:
+            pattern = rf'["\']([^"\']*{resource}[^"\']*)["\']'
+            matches = re.findall(pattern, js_content, re.IGNORECASE)
+            for match in matches:
+                if '/' in match and len(match) < 100:
+                    resources.add(resource.lower())
+        
+        return suffixes, resources
+    
     def _to_singular(self, word: str) -> str:
         """复数转单数"""
         if not word:
@@ -644,6 +776,8 @@ class JSParser:
         
         all_urls = list(set(urls + modules + list(chunks.keys())))
         
+        suffixes, resources = self.extract_suffixes_from_js(js_content)
+        
         result = ParsedJSResult(
             apis=all_apis,
             urls=all_urls,
@@ -652,7 +786,9 @@ class JSParser:
             content_hash="",
             file_size=len(content_bytes),
             parent_paths=parent_paths_map,
-            path_templates=list(path_templates)
+            path_templates=list(path_templates),
+            extracted_suffixes=suffixes,
+            resource_fragments=resources
         )
         
         if self.cache:

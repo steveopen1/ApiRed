@@ -492,17 +492,113 @@ class ScanEngine:
             'detected_framework': self._detected_framework
         }
     
-    COMMON_RESTFUL_SUFFIXES = [
-        '', '/', '/list', '/page', '/all', '/count', '/detail', '/info',
-        '/add', '/create', '/edit', '/update', '/delete', '/remove',
-        '/enable', '/disable', '/status', '/config', '/settings',
-        '/export', '/import', '/upload', '/download',
-        '/search', '/query', '/filter', '/sort',
+    RESTFUL_SUFFIXES = [
+        '', '/list', '/listJson', '/listJsonData', '/listData', '/listPage', '/listAll',
+        '/page', '/pageList', '/pageData', '/pager', '/pagination',
+        '/all', '/allList', '/allData', '/count', '/total', '/sum',
+        '/detail', '/detail/{id}', '/detailJson', '/detailInfo', '/info', '/info/{id}',
+        '/add', '/addPage', '/addForm', '/create', '/create/{id}', '/new', '/insert',
+        '/edit', '/edit/{id}', '/editForm', '/update', '/update/{id}', '/modify', '/modify/{id}',
+        '/delete', '/delete/{id}', '/del/{id}', '/del', '/remove', '/remove/{id}', '/batch/delete',
+        '/enable', '/enable/{id}', '/disable', '/disable/{id}', '/status', '/status/{id}', '/state', '/state/{id}',
+        '/config', '/config/{id}', '/settings', '/settings/{id}', '/options', '/option',
+        '/export', '/exportAll', '/exportExcel', '/exportFile', '/import', '/importExcel', '/importFile', '/importTemplate', '/importData',
+        '/download', '/download/{id}', '/upload', '/uploadFile', '/uploadImage',
+        '/search', '/search/{keyword}', '/query', '/query/{id}', '/filter', '/filter/{condition}',
+        '/sort', '/sort/{field}', '/tree', '/treeList', '/treeData', '/treeJson',
+        '/select', '/select/{id}', '/selects', '/choices', '/options', '/cascader', '/region',
+        '/submit', '/submit/{id}', '/cancel', '/cancel/{id}', '/reset', '/reset/{id}',
+        '/refresh', '/refresh/{id}', '/init', '/init/{id}', '/default', '/load', '/load/{id}',
+        '/permission', '/permission/{id}', '/permissions', '/perm', '/perm/{id}', '/perms',
+        '/role', '/role/{id}', '/roles', '/menu', '/menu/{id}', '/menus',
+        '/user', '/user/{id}', '/users', '/account', '/account/{id}', '/profile', '/profile/{id}',
+        '/login', '/loginIn', '/loginOut', '/logout', '/register', '/signup', '/signup/{id}',
+        '/forget', '/forgetPwd', '/resetPwd', '/reset/{id}/pwd',
+        '/captcha', '/captcha/{id}', '/verify', '/verifyCode', '/sendCode', '/send/{type}/code',
+        '/token', '/token/{id}', '/refreshToken', '/refresh/{id}/token',
+        '/dict', '/dict/{type}', '/dictData', '/dictType', '/dict/{type}/data',
+        '/log', '/logs', '/log/{id}', '/history', '/history/{id}', '/operation', '/operation/{id}', '/record', '/records',
+        '/monitor', '/monitor/{id}', '/statistics', '/statistics/{id}', '/stat', '/stats', '/stat/{id}',
+        '/chart', '/chart/{type}', '/dashboard', '/dashboard/{id}', '/summary', '/summary/{id}',
+        '/report', '/report/{id}', '/reports', '/analytics', '/analytics/{type}',
+        '/area', '/area/{id}', '/areas', '/city', '/city/{id}', '/province', '/province/{id}',
+        '/region', '/region/{id}', '/location', '/location/{id}', '/address', '/address/{id}',
+        '/category', '/category/{id}', '/categories', '/type', '/type/{id}', '/types',
+        '/tag', '/tag/{id}', '/tags', '/brand', '/brand/{id}', '/brands',
+        '/model', '/model/{id}', '/models', '/spec', '/spec/{id}', '/specs',
+        '/product', '/product/{id}', '/products', '/goods', '/goods/{id}', '/item', '/item/{id}', '/items',
+        '/sku', '/sku/{id}', '/spu', '/spu/{id}', '/price', '/price/{id}', '/stock', '/stock/{id}', '/inventory', '/inventory/{id}',
+        '/order', '/order/{id}', '/orders', '/orderInfo', '/orderInfo/{id}', '/orderList', '/orderList/{id}',
+        '/createOrder', '/create/order', '/pay', '/pay/{id}', '/payment', '/payment/{id}',
+        '/cart', '/cart/{id}', '/wishlist', '/wishlist/{id}', '/favorites', '/favorites/{id}',
+        '/collect', '/collect/{id}', '/coupon', '/coupon/{id}', '/coupons',
+        '/wallet', '/wallet/{id}', '/balance', '/balance/{id}',
+        '/message', '/message/{id}', '/messages', '/notification', '/notification/{id}', '/notifications',
+        '/notice', '/notice/{id}', '/notices', '/announcement', '/announcement/{id}', '/announcements',
+        '/inbox', '/inbox/{id}', '/outbox', '/outbox/{id}',
+        '/comment', '/comment/{id}', '/comments', '/review', '/review/{id}', '/reviews',
+        '/rating', '/rating/{id}', '/feedback', '/feedback/{id}', '/suggest', '/suggest/{id}',
+        '/suggestion', '/suggestion/{id}', '/report', '/report/{id}', '/complaint', '/complaint/{id}',
+        '/attachment', '/attachment/{id}', '/attachments', '/file', '/file/{id}', '/files',
+        '/image', '/image/{id}', '/images', '/video', '/video/{id}', '/videos', '/media', '/media/{id}',
+        '/company', '/company/{id}', '/organization', '/organization/{id}', '/org', '/org/{id}',
+        '/department', '/department/{id}', '/dept', '/dept/{id}', '/departments',
+    ]
+    
+    PATH_FRAGMENTS = [
+        'admin', 'manage', 'manager', 'system', 'config', 'setting', 'settings',
+        'user', 'users', 'account', 'accounts', 'profile', 'profiles', 'person', 'persons', 'employee', 'employees',
+        'role', 'roles', 'permission', 'permissions', 'perm', 'perms', 'menu', 'menus',
+        'dict', 'dicts', 'dictionary', 'type', 'types', 'category', 'categories', 'tag', 'tags',
+        'order', 'orders', 'product', 'products', 'goods', 'item', 'items', 'sku', 'spu',
+        'dept', 'department', 'departments', 'org', 'organization', 'organizations', 'company', 'companies',
+        'area', 'areas', 'region', 'regions', 'province', 'provinces', 'city', 'cities', 'district', 'districts',
+        'log', 'logs', 'operation', 'operations', 'history', 'record', 'records',
+        'monitor', 'monitors', 'statistics', 'stats', 'stat', 'charts', 'chart', 'dashboard', 'dashboards',
+        'file', 'files', 'upload', 'uploads', 'download', 'downloads', 'attachment', 'attachments', 'media',
+        'message', 'messages', 'notice', 'notices', 'notification', 'notifications', 'announcement', 'announcements',
+        'comment', 'comments', 'feedback', 'suggest', 'suggestions', 'report', 'reports', 'complaint', 'complaints',
+        'brand', 'brands', 'model', 'models', 'spec', 'specs', 'category', 'categories',
+        'price', 'prices', 'stock', 'stocks', 'inventory', 'inventories',
+        'coupon', 'coupons', 'wallet', 'wallets', 'balance', 'balances',
+        'captcha', 'captchas', 'token', 'tokens',
+    ]
+    
+    FUZZ_SUFFIXES = [
+        'Json', 'JsonData', 'JsonList', 'JsonResult', 'JsonResponse',
+        'List', 'ListView', 'ListData', 'ListAll', 'ListJson', 'ListJsonData',
+        'Tree', 'TreeList', 'TreeData', 'TreeJson', 'TreeTable',
+        'Page', 'PageList', 'PageData', 'PageInfo', 'PageResult', 'Pager',
+        'Data', 'DataList', 'DataGrid', 'DataTable', 'DataSource',
+        'Info', 'InfoList', 'InfoData', 'Detail', 'Details', 'DetailInfo', 'DetailData',
+        'Query', 'QueryList', 'QueryData', 'QueryById', 'QueryInfo',
+        'Search', 'SearchList', 'SearchData', 'SearchByKeyword',
+        'Select', 'SelectList', 'SelectData', 'SelectOptions', 'SelectAll',
+        'Options', 'Choices', 'Cascade', 'Cascader', 'Region',
+        'Init', 'InitList', 'InitData', 'Initialize', 'Load', 'LoadList', 'LoadData', 'LoadAll',
+        'Refresh', 'RefreshList', 'RefreshData', 'Reload', 'ReloadData',
+        'Submit', 'SubmitForm', 'Save', 'SaveData', 'SaveInfo', 'Commit', 'CommitData',
+        'Update', 'UpdateData', 'UpdateInfo', 'Edit', 'EditData', 'EditInfo', 'EditForm',
+        'Modify', 'ModifyData', 'Remove', 'RemoveData', 'Delete', 'DeleteData', 'Del', 'DelData',
+        'Export', 'ExportExcel', 'ExportData', 'ExportFile', 'Import', 'ImportExcel', 'ImportData', 'ImportTemplate',
+        'Upload', 'UploadFile', 'UploadImage', 'Download', 'DownloadFile', 'DownloadExcel',
+        'Config', 'Configs', 'Settings', 'Setting', 'Options', 'Option',
+        'Index', 'Home', 'Main', 'Default', 'Base', 'Common',
+        'Grid', 'GridData', 'Table', 'TableData', 'TableList',
+        'Card', 'CardList', 'CardData', 'Modal', 'ModalData',
+        'Form', 'FormData', 'FormInfo', 'EditForm', 'AddForm', 'SearchForm',
+        'Result', 'ResultData', 'Response', 'ResponseData', 'Ajax', 'AjaxData',
+        'All', 'AllList', 'AllData', 'AllJson', 'Count', 'Total', 'Sum',
+        'Status', 'State', 'Enable', 'Disable', 'Active', 'Inactive',
+        'Login', 'Logout', 'Register', 'Signup', 'Captcha', 'Verify', 'SendCode',
+        'Menu', 'Perm', 'Permission', 'Role', 'User', 'Account', 'Token', 'Profile',
     ]
     
     async def _probe_parent_paths(self, js_results: List) -> Dict[str, Set[str]]:
         """
         探测父路径是否可访问，并进一步探测常见 RESTful 端点
+        
+        使用从JS中提取的后缀和常见后缀进行智能fuzzing组合探测
         
         Returns:
             {探测到的有效父路径: 该路径下探测到的额外端点}
@@ -511,17 +607,56 @@ class ScanEngine:
         base_url = self.config.target.rstrip('/')
         
         parent_paths_to_probe = set()
+        all_js_suffixes = set()
+        all_js_resources = set()
+        existing_apis = set()
+        
         for js_result in js_results:
             if hasattr(js_result, 'parent_paths') and js_result.parent_paths:
                 for original_path, parents in js_result.parent_paths.items():
+                    existing_apis.add(original_path)
                     for parent in parents:
                         if parent not in parent_paths_to_probe:
                             parent_paths_to_probe.add(parent)
+            
+            if hasattr(js_result, 'extracted_suffixes') and js_result.extracted_suffixes:
+                all_js_suffixes.update(js_result.extracted_suffixes)
+            
+            if hasattr(js_result, 'resource_fragments') and js_result.resource_fragments:
+                all_js_resources.update(js_result.resource_fragments)
+            
+            if hasattr(js_result, 'apis'):
+                existing_apis.update(js_result.apis)
+        
+        js_suffix_list = list(all_js_suffixes)[:30]
+        js_resource_list = list(all_js_resources)[:30]
+        
+        combined_suffixes = []
+        
+        for suffix in self.RESTFUL_SUFFIXES:
+            clean_suffix = suffix.strip('/')
+            if clean_suffix:
+                combined_suffixes.append('/' + clean_suffix)
+            combined_suffixes.append(suffix)
+        
+        for js_suffix in js_suffix_list:
+            if js_suffix not in ('', '/'):
+                combined_suffixes.append('/' + js_suffix)
+                if not js_suffix.endswith('s'):
+                    combined_suffixes.append('/' + js_suffix + 's')
+                plural = js_suffix + 's' if not js_suffix.endswith('s') else js_suffix
+                combined_suffixes.append('/' + plural)
+        
+        for fuzz_suffix in self.FUZZ_SUFFIXES[:20]:
+            combined_suffixes.append('/' + fuzz_suffix.lower())
+            combined_suffixes.append('/' + fuzz_suffix)
+        
+        combined_suffixes = list(set(combined_suffixes))
         
         if not parent_paths_to_probe:
             return probed_results
         
-        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths...")
+        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths with {len(combined_suffixes)} suffixes...")
         
         for parent_path in parent_paths_to_probe:
             full_url = base_url + parent_path
@@ -537,8 +672,20 @@ class ScanEngine:
                     logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
                     probed_results[parent_path] = set()
                     
-                    for suffix in self.COMMON_RESTFUL_SUFFIXES:
-                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
+                    probed_suffixes = set()
+                    
+                    for suffix in combined_suffixes:
+                        if suffix.startswith('//'):
+                            continue
+                        
+                        if suffix.startswith('/'):
+                            sub_path = parent_path.rstrip('/') + suffix
+                        else:
+                            sub_path = parent_path.rstrip('/') + '/' + suffix
+                        
+                        if sub_path in existing_apis or sub_path in probed_suffixes:
+                            continue
+                        
                         sub_url = base_url + sub_path
                         
                         try:
@@ -550,9 +697,35 @@ class ScanEngine:
                             
                             if 200 <= sub_response.status_code < 400:
                                 probed_results[parent_path].add(sub_path)
+                                probed_suffixes.add(sub_path)
+                                existing_apis.add(sub_path)
                                 logger.debug(f"  Found: {sub_path} (status: {sub_response.status_code})")
                         except Exception:
                             pass
+                    
+                    for js_resource in js_resource_list[:10]:
+                        for js_suffix in js_suffix_list[:5]:
+                            combo_path = parent_path.rstrip('/') + '/' + js_resource + '/' + js_suffix
+                            
+                            if combo_path in existing_apis or combo_path in probed_suffixes:
+                                continue
+                            
+                            combo_url = base_url + combo_path
+                            
+                            try:
+                                combo_response = await self._http_client.request(
+                                    combo_url,
+                                    method='HEAD',
+                                    timeout=3
+                                )
+                                
+                                if 200 <= combo_response.status_code < 400:
+                                    probed_results[parent_path].add(combo_path)
+                                    probed_suffixes.add(combo_path)
+                                    existing_apis.add(combo_path)
+                                    logger.debug(f"  Found (combo): {combo_path} (status: {combo_response.status_code})")
+                            except Exception:
+                                pass
                 
                 elif response.status_code == 401 or response.status_code == 403:
                     probed_results[parent_path] = set()
@@ -562,6 +735,116 @@ class ScanEngine:
                 logger.debug(f"Parent path probe failed: {parent_path} - {e}")
         
         return probed_results
+    
+    async def _fuzz_api_paths(self, js_results: List) -> Set[str]:
+        """基于 JS 中发现的 API 路径进行智能 fuzzing 探测"""
+        discovered_paths = set()
+        base_url = self.config.target.rstrip('/')
+        
+        all_apis = set()
+        all_fragments = set()
+        all_suffixes = set()
+        all_resources = set()
+        all_parent_paths = set()
+        
+        for js_result in js_results:
+            for api in js_result.apis:
+                all_apis.add(api)
+                parts = api.strip('/').split('/')
+                for part in parts:
+                    if len(part) >= 2:
+                        all_fragments.add(part.lower())
+                
+                if hasattr(js_result, 'parent_paths') and api in js_result.parent_paths:
+                    for parent in js_result.parent_paths[api]:
+                        all_parent_paths.add(parent)
+            
+            if hasattr(js_result, 'extracted_suffixes'):
+                all_suffixes.update(js_result.extracted_suffixes)
+            
+            if hasattr(js_result, 'resource_fragments'):
+                all_resources.update(js_result.resource_fragments)
+        
+        api_fragments = list(all_fragments)[:50]
+        js_suffix_list = list(all_suffixes)[:30]
+        js_resource_list = list(all_resources)[:30]
+        parent_paths_list = list(all_parent_paths)[:30]
+        
+        paths_to_probe = []
+        probed_set = set()
+        
+        for fragment in api_fragments:
+            for suffix in self.FUZZ_SUFFIXES[:15]:
+                fuzz_path = '/' + fragment.lower() + suffix.lower()
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+            
+            for js_suffix in js_suffix_list[:10]:
+                fuzz_path = '/' + fragment.lower() + '/' + js_suffix.lower()
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+        
+        for parent_path in parent_paths_list:
+            for js_suffix in js_suffix_list[:15]:
+                fuzz_path = parent_path.rstrip('/') + '/' + js_suffix.lower()
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+                
+                fuzz_path = parent_path.rstrip('/') + '/' + js_suffix.lower() + 's'
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+            
+            for fuzz_suffix in self.FUZZ_SUFFIXES[:10]:
+                fuzz_path = parent_path.rstrip('/') + '/' + fuzz_suffix.lower()
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+            
+            for js_resource in js_resource_list[:5]:
+                for js_suffix in js_suffix_list[:5]:
+                    combo_path = parent_path.rstrip('/') + '/' + js_resource.lower() + '/' + js_suffix.lower()
+                    if combo_path not in all_apis and combo_path not in probed_set:
+                        paths_to_probe.append(combo_path)
+                        probed_set.add(combo_path)
+        
+        for js_resource in js_resource_list[:10]:
+            for js_suffix in js_suffix_list[:10]:
+                fuzz_path = '/' + js_resource.lower() + '/' + js_suffix.lower()
+                if fuzz_path not in all_apis and fuzz_path not in probed_set:
+                    paths_to_probe.append(fuzz_path)
+                    probed_set.add(fuzz_path)
+        
+        frag_count = min(len(api_fragments), 20)
+        for i in range(frag_count):
+            for j in range(i + 1, frag_count):
+                frag1 = api_fragments[i]
+                frag2 = api_fragments[j] if j < len(api_fragments) else None
+                if frag2:
+                    new_path = '/' + frag1.lower() + '/' + frag2.lower()
+                    if new_path not in all_apis and new_path not in probed_set:
+                        paths_to_probe.append(new_path)
+                        probed_set.add(new_path)
+        
+        paths_to_probe = list(set(paths_to_probe))[:200]
+        
+        for path in paths_to_probe:
+            full_url = base_url + path
+            try:
+                response = await self._http_client.request(full_url, method='GET', timeout=3)
+                if 200 <= response.status_code < 400:
+                    discovered_paths.add(path)
+                    logger.info(f"Fuzz found: {path} (status: {response.status_code})")
+                elif response.status_code in (401, 403):
+                    discovered_paths.add(path)
+                    logger.info(f"Fuzz found (auth): {path} (status: {response.status_code})")
+            except Exception:
+                pass
+        
+        return discovered_paths
     
     async def _extract_apis(self) -> Dict[str, Any]:
         """提取API端点 + 基于框架生成更多端点"""
@@ -652,6 +935,24 @@ class ScanEngine:
                         api_find_result,
                         source_info={'source': f'probed_parent:{parent_path}'}
                     )
+        
+        fuzzed_paths = await self._fuzz_api_paths(js_results)
+        
+        for fuzz_path in fuzzed_paths:
+            if fuzz_path not in existing_paths:
+                existing_paths.add(fuzz_path)
+                from .collectors.api_collector import APIFindResult
+                api_find_result = APIFindResult(
+                    path=fuzz_path,
+                    method="GET",
+                    source_type="fuzz_probe",
+                    base_url="",
+                    url_type="fuzzed"
+                )
+                self._api_aggregator.add_api(
+                    api_find_result,
+                    source_info={'source': 'api_fuzzing'}
+                )
         
         raw_endpoints = self._api_aggregator.get_all()
         final_endpoints = []
