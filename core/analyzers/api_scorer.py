@@ -70,7 +70,7 @@ class APIScorer:
             evidence.js_occurrences += 1
         elif source_type == 'js_ast':
             evidence.js_occurrences += 1
-        elif source_type == 'http_log' and http_info:
+        elif source_type in ('http_log', 'http_test') and http_info:
             evidence.http_access = http_info
         
         self._check_sensitive_keywords(evidence, api_path)

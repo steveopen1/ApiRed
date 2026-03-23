@@ -600,6 +600,9 @@ class ScanEngine:
         """API评分"""
         endpoints = self.result.api_endpoints if self.result else []
         
+        # 建立 URL -> endpoint 映射，用于后续更新 is_high_value
+        url_to_endpoint: Dict[str, Any] = {e.full_url: e for e in endpoints}
+        
         for endpoint in endpoints:
             try:
                 response = await self._http_client.request(
@@ -622,20 +625,35 @@ class ScanEngine:
                         self._api_scorer.add_evidence(
                             endpoint.full_url,
                             'http_test',
-                            {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                            {},
+                            http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
                         )
             except Exception as e:
                 logger.debug(f"API scoring error: {e}")
         
-        high_value_apis = self._api_scorer.get_high_value() if self._api_scorer else []
+        # 从评分器获取高价值 API 证据
+        high_value_evidence = self._api_scorer.get_high_value() if self._api_scorer else []
+        
+        # 更新端点的 is_high_value 标志
+        for evidence in high_value_evidence:
+            if evidence.path in url_to_endpoint:
+                url_to_endpoint[evidence.path].is_high_value = True
+            # 同时尝试用 full_url 匹配
+            for ep in endpoints:
+                if ep.full_url == evidence.path:
+                    ep.is_high_value = True
+                    break
+        
+        # 统计高价值端点数量
+        high_value_count = sum(1 for e in endpoints if e.is_high_value)
         
         if self.result:
-            self.result.alive_apis = len(high_value_apis)
-            self.result.high_value_apis = len(high_value_apis)
+            self.result.alive_apis = high_value_count
+            self.result.high_value_apis = high_value_count
         
         return {
-            'alive_apis': len(high_value_apis),
-            'high_value_apis': len(high_value_apis)
+            'alive_apis': high_value_count,
+            'high_value_apis': high_value_count
         }
     
     async def _detect_sensitive(self) -> Dict[str, Any]:

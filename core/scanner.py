@@ -440,13 +440,30 @@ class ChkApiScanner:
                         self.api_scorer.add_evidence(
                             endpoint.full_url,
                             'http_test',
-                            {'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                            {},
+                            http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
                         )
                         break
                 except Exception as e:
                     logger.debug(f"API testing error for {endpoint.full_url}: {e}")
         
-        high_value_apis = self.api_scorer.get_high_value() if self.api_scorer else []
+        # 从评分器获取高价值 API 证据并更新端点的 is_high_value 标志
+        high_value_evidence = self.api_scorer.get_high_value() if self.api_scorer else []
+        
+        # 建立 URL -> endpoint 映射
+        url_to_endpoint = {e.full_url: e for e in self.result.api_endpoints if self.result}
+        
+        # 更新 is_high_value 标志
+        for evidence in high_value_evidence:
+            if evidence.path in url_to_endpoint:
+                url_to_endpoint[evidence.path].is_high_value = True
+            # 同时通过遍历匹配
+            for ep in self.result.api_endpoints if self.result else []:
+                if ep.full_url == evidence.path:
+                    ep.is_high_value = True
+                    break
+        
+        high_value_apis = [e for e in self.result.api_endpoints if e.is_high_value] if self.result else []
         
         end_time = time.time()
         self._record_stage_stats(
