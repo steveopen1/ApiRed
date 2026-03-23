@@ -986,18 +986,21 @@ class JSParser:
         
         self._extracted_apis.update(apis)
         
-        original_apis = set(apis)
+        original_apis = set()
+        for api in apis:
+            if not isinstance(api, str) or not api.startswith('/'):
+                continue
+            if '/' not in api:
+                continue
+            if self._is_file_path(api):
+                continue
+            original_apis.add(api)
+        
         parent_apis = set()
         path_templates = set()
         parent_paths_map = {}
         
-        for api in apis:
-            if not isinstance(api, str) or not api.startswith('/'):
-                continue
-            
-            if '/' not in api:
-                continue
-            
+        for api in original_apis:
             parents = self.generate_parent_paths(api, max_depth=3)
             for parent in parents:
                 parent_apis.add(parent)
@@ -1357,7 +1360,8 @@ class JSParser:
         """
         判断是否为 API 路径（通用版）
         
-        只要路径以 / 开头且层级 >= 2，或者是常见 API 路径模式，就认为是可能的 API 路径。
+        只要路径以 / 开头且层级 >= 2，就认为是可能的 API 路径。
+        排除文件路径。
         """
         if not value or not isinstance(value, str):
             return False
@@ -1375,10 +1379,15 @@ class JSParser:
         if not path:
             return False
         
+        if self._is_file_path(path):
+            return False
+        
         parts = path.split('/')
         
         if len(parts) >= 2:
             return True
+        
+            return False
         
         return False
     
@@ -1406,6 +1415,13 @@ class JSParser:
             return True
         
         if not value.startswith('/'):
+            return False
+        
+        path = value.strip('/')
+        if not path:
+            return False
+        
+        if self._is_file_path(path):
             return False
         
         api_indicators = [
