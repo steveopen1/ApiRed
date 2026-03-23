@@ -832,7 +832,13 @@ class ScanEngine:
                         paths_to_probe.append(new_path)
                         probed_set.add(new_path)
         
-        paths_to_probe = list(set(paths_to_probe))[:200]
+        all_paths_count = len(paths_to_probe)
+        js_result_count = len(js_results)
+        max_fuzz = min(500, max(200, js_result_count * 50))
+        
+        paths_to_probe = list(set(paths_to_probe))[:max_fuzz]
+        
+        logger.info(f"Fuzzing准备了 {all_paths_count} 条路径，限制探测 {len(paths_to_probe)} 条")
         
         for path in paths_to_probe:
             full_url = base_url + path

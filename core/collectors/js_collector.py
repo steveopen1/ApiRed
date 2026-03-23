@@ -357,19 +357,17 @@ class JSParser:
         从完整路径生成可能的父路径前缀（通用版）
         
         例如: /admin/user/list -> [/admin/user, /admin]
-        例如: /api/v2/orders/123 -> [/api/v2/orders] (ID级别不作为资源)
+        例如: /api/v2/orders/123 -> [/api/v2/orders, /api/v2, /api] (跳过ID，继续向上)
         
         Args:
             path: 完整路径
-            max_depth: 最大父路径深度
+            max_depth: 最大父路径深度（生成数量限制）
             
         Returns:
             父路径列表（从长到短）
         """
         if not path or not isinstance(path, str):
             return []
-        
-        original_path = path
         
         if path.startswith('http://') or path.startswith('https://'):
             from urllib.parse import urlparse
@@ -393,17 +391,15 @@ class JSParser:
             (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
         )
         
-        valid_parts_count = len(parts)
+        parent_paths = []
+        
+        last_idx = len(parts)
         for i, part in enumerate(parts):
-            if is_likely_id(part) and i > 0:
-                valid_parts_count = i
+            if i > 0 and is_likely_id(part):
+                last_idx = i
                 break
         
-        if valid_parts_count < 2:
-            return []
-        
-        parent_paths = []
-        for i in range(1, min(valid_parts_count, max_depth + 1)):
+        for i in range(1, min(max_depth + 1, last_idx)):
             parent_path = '/' + '/'.join(parts[:-i])
             if parent_path and len(parent_path) > 1:
                 parent_paths.append(parent_path)
@@ -893,41 +889,6 @@ class JSParser:
                 right = self._extract_from_node(node.right)
                 if left: urls.extend(left)
                 if right: urls.extend(right)
-            
-            elif hasattr(node, 'body'):
-                if isinstance(node.body, list):
-                    urls.extend(self._traverse_ast(node.body))
-                elif node.body:
-                    urls.extend(self._extract_from_node(node.body))
-                
-                if hasattr(node, 'consequent') and node.consequent:
-                    urls.extend(self._extract_from_node(node.consequent))
-                if hasattr(node, 'alternate') and node.alternate:
-                    urls.extend(self._extract_from_node(node.alternate))
-        
-        return urls
-        
-        if hasattr(node, 'type'):
-            if node.type == 'ExpressionStatement' and hasattr(node, 'expression'):
-                urls.extend(self._extract_from_node(node.expression))
-            
-            elif node.type in ('CallExpression', 'OptionalCallExpression'):
-                urls.extend(self._extract_call_expr(node))
-            
-            elif node.type == 'VariableDeclaration' and hasattr(node, 'declarations'):
-                for decl in node.declarations:
-                    if hasattr(decl, 'init') and decl.init:
-                        urls.extend(self._extract_from_node(decl.init))
-            
-            elif node.type == 'AssignmentExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
-            
-            elif node.type == 'SequenceExpression' and hasattr(node, 'expressions'):
-                for expr in node.expressions:
-                    urls.extend(self._extract_from_node(expr))
-            
-            elif node.type == 'LogicalExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
             
             elif hasattr(node, 'body'):
                 if isinstance(node.body, list):
