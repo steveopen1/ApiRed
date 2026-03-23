@@ -11,7 +11,9 @@ import re
 import logging
 from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass
-from urllib.parse import urlparse, parse_qs, urlencode
+from urllib.parse import urlparse, parse_qs
+
+from .bypass_techniques import encode_params_with_arrays
 
 logger = logging.getLogger(__name__)
 
@@ -302,18 +304,19 @@ class IDORTester:
         params: Optional[Dict[str, Any]],
         headers: Optional[Dict[str, str]],
         cookies: Optional[str],
-        auth_token: Optional[str]
+        auth_token: Optional[str],
+        bypass_headers: Optional[Dict[str, str]] = None
     ) -> Optional[Dict[str, Any]]:
         """发送请求并返回响应"""
         try:
             if params and method == 'GET':
-                query_string = urlencode(params)
+                query_string = encode_params_with_arrays(params)
                 separator = '&' if '?' in url else '?'
                 full_url = f"{url}{separator}{query_string}"
             else:
                 full_url = url
             
-            request_headers = {**(headers or {})}
+            request_headers = {**(headers or {}), **(bypass_headers or {})}
             if auth_token:
                 request_headers['Authorization'] = f'Bearer {auth_token}'
             if cookies:

