@@ -472,14 +472,15 @@ class JSParser:
         if len(parts) <= 2:
             return []
         
-        import re
-        is_likely_id = lambda s: (
-            s.isdigit() or 
-            bool(re.match(r'^[a-f0-9]{8,}-[a-f0-9]{4,}-[a-f0-9]{4,}-[a-f0-9]{4,}-[a-f0-9]{12,}$', s)) or
-            bool(re.match(r'^[a-f0-9]{32,}$', s)) or
-            (len(s) > 3 and len(s) <= 36 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 10 and len(s) <= 40 and re.match(r'^[a-f0-9]+$', s))
-        )
+        id_patterns = JSParser._ID_PATTERNS
+        
+        def is_likely_id(s):
+            if s.isdigit():
+                return True
+            for pattern in id_patterns:
+                if pattern.match(s):
+                    return True
+            return False
         
         parent_paths = []
         
