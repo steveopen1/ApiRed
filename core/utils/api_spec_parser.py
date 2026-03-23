@@ -8,7 +8,7 @@ import re
 import json
 import yaml
 import logging
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
@@ -94,16 +94,54 @@ class APISpecParser:
     
     def __init__(self, http_client):
         self.http_client = http_client
+        self._discovered_bases: Set[str] = set()
+        self._scanned_specs: Set[str] = set()
+    
+    def _mark_base_discovered(self, base_url: str) -> bool:
+        """
+        标记 base_url 已发现，如果已经发现过则返回 False
+        
+        Returns:
+            True 表示新发现，False 表示已存在
+        """
+        normalized = self._normalize_base_url(base_url)
+        if normalized in self._discovered_bases:
+            return False
+        self._discovered_bases.add(normalized)
+        return True
+    
+    def _mark_spec_scanned(self, spec_url: str) -> bool:
+        """
+        标记 spec_url 已扫描，如果已经扫描过则返回 False
+        
+        Returns:
+            True 表示新扫描，False 表示已扫描
+        """
+        if spec_url in self._scanned_specs:
+            return False
+        self._scanned_specs.add(spec_url)
+        return True
+    
+    def _normalize_base_url(self, url: str) -> str:
+        """规范化 URL 用于去重"""
+        parsed = urlparse(url.rstrip('/'))
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    
+    def _is_already_discovered(self, base_url: str) -> bool:
+        """检查 base_url 是否已发现"""
+        normalized = self._normalize_base_url(base_url)
+        return normalized in self._discovered_bases
     
     async def discover_and_parse(self, target_url: str) -> Optional[APISpecResult]:
         """
         发现并解析 API 规范
         
         流程:
-        1. 先访问目标首页，提取 API base path
+        1. 检查缓存，已发现则跳过
         2. 从 URL 路径中提取可能的 base_path
         3. 使用发现的 base_path 发现 swagger
-        4. 解析规范，获取最终 base_url
+        4. 从多个渠道发现 API base path
+        5. 解析规范，获取最终 base_url
         
         Args:
             target_url: 目标 URL (如 https://api.example.com)
@@ -111,6 +149,10 @@ class APISpecParser:
         Returns:
             APISpecResult 或 None
         """
+        if self._is_already_discovered(target_url):
+            logger.debug(f"Base URL already discovered: {target_url}")
+            return None
+        
         parsed = urlparse(target_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         
@@ -118,6 +160,8 @@ class APISpecParser:
         
         for bp in url_base_paths:
             full_base = urljoin(base_url, bp)
+            if not self._mark_base_discovered(full_base):
+                continue
             spec = await self._discover_openapi(full_base)
             if spec:
                 return spec
@@ -126,9 +170,10 @@ class APISpecParser:
         
         if api_base_path:
             full_base = urljoin(base_url, api_base_path)
-            spec = await self._discover_openapi(full_base)
-            if spec:
-                return spec
+            if self._mark_base_discovered(full_base):
+                spec = await self._discover_openapi(full_base)
+                if spec:
+                    return spec
         
         spec = await self._discover_wsdl(base_url)
         if spec:
@@ -136,10 +181,13 @@ class APISpecParser:
         
         for path in self.SWAGGER_PATHS:
             spec_url = urljoin(base_url, path)
+            if not self._mark_spec_scanned(spec_url):
+                continue
             spec = await self._discover_and_parse_spec(spec_url, base_url)
             if spec:
                 return spec
         
+        self._mark_base_discovered(base_url)
         return None
     
     def _extract_base_paths_from_url(self, url: str) -> List[str]:
