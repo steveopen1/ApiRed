@@ -300,11 +300,29 @@ class JSParser:
         re.compile(r'<[^>]+>'),
     ]
     
+    FILE_EXTENSIONS = {
+        '.js', '.css', '.html', '.htm', '.json', '.xml',
+        '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+        '.woff', '.woff2', '.ttf', '.eot', '.map',
+        '.txt', '.md', '.yaml', '.yml', '.env',
+    }
+    
+    COMMON_FILE_PATHS = {
+        'assets', 'static', 'public', 'dist', 'build',
+        'images', 'img', 'icons', 'fonts', 'css', 'js',
+        'lib', 'libs', 'node_modules', 'vendor', 'bower_components',
+    }
+    
     def __init__(self, cache: Optional[JSFingerprintCache] = None):
         self.cache = cache
         self._ast_parser = None
         self._use_ast = self._check_esprima_available()
         self._extracted_apis = set()
+        
+        self.prefix_discovery_enabled = True
+        self.max_prefix_count = 50
+        self.min_prefix_frequency = 2
+        self.max_path_depth = 5
     
     def _check_esprima_available(self) -> bool:
         """检查 esprima 是否可用"""
@@ -318,15 +336,47 @@ class JSParser:
     def _is_likely_id(self, s: str) -> bool:
         """
         判断路径段是否可能是 ID
-        
-        用于智能前缀发现中过滤掉 ID 部分。
         """
-        return (
-            s.isdigit() or 
-            bool(self._UUID_PATTERN.match(s)) or
-            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 8 and bool(self._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(s)) and ('-' in s or '_' in s))
-        )
+        if not s or len(s) < 1:
+            return False
+        
+        if s.isdigit():
+            return True
+        
+        if self._UUID_PATTERN.match(s):
+            return True
+        
+        if len(s) > 3 and s[:2].isalpha() and s[2:].isdigit():
+            return True
+        
+        if len(s) > 8 and self._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(s) and ('-' in s or '_' in s):
+            return True
+        
+        if len(s) > 12 and self._LOWERCASE_ALPHANUM_PATTERN.match(s):
+            return True
+        
+        return False
+    
+    def _is_file_path(self, path: str) -> bool:
+        """
+        判断路径是否可能是文件路径而非 API 路径
+        """
+        if not path:
+            return False
+        
+        path_lower = path.lower()
+        
+        if any(path_lower.endswith(ext) for ext in self.FILE_EXTENSIONS):
+            return True
+        
+        parts = path.strip('/').lower().split('/')
+        for part in parts:
+            if part in self.COMMON_FILE_PATHS:
+                return True
+            if '.' in part and not part.startswith('.'):
+                return True
+        
+        return False
     
     def generate_parent_paths(self, path: str, max_depth: int = 3) -> List[str]:
         """
@@ -386,24 +436,26 @@ class JSParser:
         
         return parent_paths
     
-    def discover_api_prefixes(self, paths: List[str], min_frequency: int = 2) -> List[str]:
+    def discover_api_prefixes(
+        self,
+        paths: List[str],
+        min_frequency: Optional[int] = None,
+        max_prefixes: Optional[int] = None
+    ) -> List[str]:
         """
-        从多个 API 路径中发现公共前缀（智能前缀发现）
+        从多个 API 路径中发现公共前缀（智能前缀发现 - 改进版）
         
-        给定一组 API 路径，自动识别公共前缀作为可能的 API 端点。
-        不依赖预定义前缀列表，基于路径结构和出现频率。
-        
-        例如:
-        - /admin/user/list, /admin/user/123, /admin/user/exists
-          -> 发现前缀: /admin/user
-        - /api/v2/users/page, /api/v2/users/add, /api/v2/users/delete
-          -> 发现前缀: /api/v2/users
-        - /sysAuth/login, /sysAuth/captcha, /sysAuth/logout
-          -> 发现前缀: /sysAuth
+        改进点：
+        - 过滤文件路径（.js, .css, .html 等）
+        - 限制最大路径深度
+        - 限制返回的前缀数量
+        - 去重去子路径
+        - 记录发现来源用于调试
         
         Args:
             paths: API 路径列表
-            min_frequency: 最小出现频率
+            min_frequency: 最小出现频率（默认使用 self.min_prefix_frequency）
+            max_prefixes: 最大前缀数量（默认使用 self.max_prefix_count）
             
         Returns:
             发现的 API 前缀列表
@@ -411,10 +463,19 @@ class JSParser:
         if not paths or len(paths) < 2:
             return []
         
-        path_segments = []
+        if not self.prefix_discovery_enabled:
+            return []
+        
+        min_freq = min_frequency if min_frequency is not None else self.min_prefix_frequency
+        max_pfx = max_prefixes if max_prefixes is not None else self.max_prefix_count
+        
+        path_segments: List[Tuple[List[str], str]] = []
+        
         for path in paths:
             if not isinstance(path, str):
                 continue
+            
+            original_path = path
             
             if path.startswith('http://') or path.startswith('https://'):
                 from urllib.parse import urlparse
@@ -425,45 +486,149 @@ class JSParser:
             if not path:
                 continue
             
-            parts = path.split('/')
-            filtered_parts = []
+            if self._is_file_path(path):
+                continue
             
+            parts = path.split('/')
+            
+            if len(parts) > self.max_path_depth:
+                parts = parts[:self.max_path_depth]
+            
+            filtered_parts = []
             for i, part in enumerate(parts):
-                if self._is_likely_id(part) and i > 0:
+                if i > 0 and self._is_likely_id(part):
                     break
                 filtered_parts.append(part)
             
             if len(filtered_parts) >= 1:
-                path_segments.append(filtered_parts)
+                path_segments.append((filtered_parts, original_path))
         
         if not path_segments:
             return []
         
-        prefix_map: Dict[str, int] = {}
+        prefix_sources: Dict[str, Set[str]] = {}
         
-        for segments in path_segments:
+        for segments, original in path_segments:
             for depth in range(1, len(segments) + 1):
                 prefix = '/' + '/'.join(segments[:depth])
-                prefix_map[prefix] = prefix_map.get(prefix, 0) + 1
+                if prefix not in prefix_sources:
+                    prefix_sources[prefix] = set()
+                prefix_sources[prefix].add(original)
         
-        candidates = []
-        for prefix, count in prefix_map.items():
-            if count >= min_frequency:
-                candidates.append((prefix, count))
+        prefix_counts = [(p, len(sources)) for p, sources in prefix_sources.items()]
+        
+        candidates = [(p, c) for p, c in prefix_counts if c >= min_freq]
         
         candidates.sort(key=lambda x: (-x[1], -len(x[0])))
         
-        prefixes = []
+        prefixes: List[str] = []
         for prefix, count in candidates:
+            if len(prefixes) >= max_pfx:
+                break
+            
             is_subpath = False
             for existing in prefixes:
-                if existing.startswith(prefix + '/'):
+                if existing.startswith(prefix + '/') or existing == prefix:
                     is_subpath = True
                     break
             if not is_subpath:
                 prefixes.append(prefix)
         
         return prefixes
+    
+    def discover_api_prefixes_detailed(
+        self,
+        paths: List[str],
+        min_frequency: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        发现 API 前缀的详细版本（包含来源信息）
+        
+        Returns:
+            {
+                'prefixes': [...],
+                'details': {
+                    '/admin/user': {
+                        'count': 5,
+                        'sources': ['/admin/user/list', '/admin/user/add', ...]
+                    }
+                }
+            }
+        """
+        if not paths or len(paths) < 2:
+            return {'prefixes': [], 'details': {}}
+        
+        min_freq = min_frequency if min_frequency is not None else self.min_prefix_frequency
+        
+        path_segments: List[Tuple[List[str], str]] = []
+        
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            
+            original_path = path
+            
+            if path.startswith('http://') or path.startswith('https://'):
+                from urllib.parse import urlparse
+                parsed = urlparse(path)
+                path = parsed.path
+            
+            path = path.strip('/')
+            if not path or self._is_file_path(path):
+                continue
+            
+            parts = path.split('/')
+            if len(parts) > self.max_path_depth:
+                parts = parts[:self.max_path_depth]
+            
+            filtered_parts = []
+            for i, part in enumerate(parts):
+                if i > 0 and self._is_likely_id(part):
+                    break
+                filtered_parts.append(part)
+            
+            if len(filtered_parts) >= 1:
+                path_segments.append((filtered_parts, original_path))
+        
+        if not path_segments:
+            return {'prefixes': [], 'details': {}}
+        
+        prefix_sources: Dict[str, Set[str]] = {}
+        
+        for segments, original in path_segments:
+            for depth in range(1, len(segments) + 1):
+                prefix = '/' + '/'.join(segments[:depth])
+                if prefix not in prefix_sources:
+                    prefix_sources[prefix] = set()
+                prefix_sources[prefix].add(original)
+        
+        details = {}
+        prefixes = []
+        
+        for prefix, sources in prefix_sources.items():
+            count = len(sources)
+            if count >= min_freq:
+                details[prefix] = {
+                    'count': count,
+                    'sources': list(sources)
+                }
+                prefixes.append(prefix)
+        
+        prefixes.sort(key=lambda p: (-details[p]['count'], -len(p)))
+        
+        prefixes = prefixes[:self.max_prefix_count]
+        
+        final_details = {p: details[p] for p in prefixes}
+        
+        return {
+            'prefixes': prefixes,
+            'details': final_details,
+            'statistics': {
+                'total_paths': len(paths),
+                'unique_prefixes': len(prefixes),
+                'min_frequency': min_freq
+            }
+        }
     
     def extract_path_template(self, path: str) -> str:
         """
@@ -487,6 +652,152 @@ class JSParser:
             template = pattern.sub('{param}', template)
         
         return template
+    
+    def cluster_urls_by_prefix(self, urls: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        将 URL 按域名和路径前缀聚类
+        
+        用于发现同属于一个 API 模块的多个端点。
+        
+        Args:
+            urls: URL 列表
+            
+        Returns:
+            {
+                "http://example.com/admin": {
+                    "domain": "http://example.com",
+                    "path_prefix": "/admin",
+                    "urls": [完整的 URL 列表],
+                    "count": 数量
+                }
+            }
+        """
+        from urllib.parse import urlparse
+        
+        clusters: Dict[str, Dict[str, Any]] = {}
+        
+        for url in urls:
+            if not isinstance(url, str):
+                continue
+            
+            try:
+                parsed = urlparse(url)
+                domain = f"{parsed.scheme}://{parsed.netloc}"
+                path = parsed.path
+                
+                if not path or path == '/':
+                    continue
+                
+                path = path.strip('/')
+                
+                parts = path.split('/')
+                
+                for depth in range(1, len(parts) + 1):
+                    prefix_path = '/' + '/'.join(parts[:depth])
+                    cluster_key = f"{domain}{prefix_path}"
+                    
+                    if cluster_key not in clusters:
+                        clusters[cluster_key] = {
+                            'domain': domain,
+                            'path_prefix': prefix_path,
+                            'full_prefix': cluster_key,
+                            'urls': [],
+                            'count': 0
+                        }
+                    
+                    clusters[cluster_key]['urls'].append(url)
+                    clusters[cluster_key]['count'] += 1
+                    
+            except Exception:
+                continue
+        
+        for cluster in clusters.values():
+            cluster['urls'] = list(set(cluster['urls']))
+            cluster['count'] = len(cluster['urls'])
+        
+        return clusters
+    
+    def extract_restful_templates(self, paths: List[str]) -> List[str]:
+        """
+        从路径列表中提取 RESTful 模板
+        
+        将具体的 ID 路径转换为模板形式：
+        - /users/123 -> /users/{id}
+        - /orders/abc-123/items -> /orders/{id}/items
+        
+        Args:
+            paths: 路径列表
+            
+        Returns:
+            模板化后的路径列表
+        """
+        templates: Set[str] = set()
+        
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            
+            if path.startswith('http://') or path.startswith('https://'):
+                from urllib.parse import urlparse
+                parsed = urlparse(path)
+                path = parsed.path
+            
+            path = path.strip('/')
+            if not path:
+                continue
+            
+            parts = path.split('/')
+            template_parts = []
+            
+            for i, part in enumerate(parts):
+                if self._is_likely_id(part):
+                    template_parts.append('{id}')
+                    break
+                else:
+                    template_parts.append(part)
+            
+            template = '/' + '/'.join(template_parts)
+            
+            if template != '/' + path:
+                templates.add(template)
+        
+        return list(templates)
+    
+    def generate_crud_guesses(self, resource_path: str) -> List[str]:
+        """
+        基于资源路径生成可能的 CRUD 操作猜测
+        
+        Args:
+            resource_path: 资源路径，如 /users, /admin/user
+            
+        Returns:
+            猜测的完整路径列表
+        """
+        if not resource_path:
+            return []
+        
+        path = resource_path.strip('/')
+        base = '/' + path
+        
+        crud_suffixes = [
+            'list', 'page', 'all',
+            'add', 'create', 'new',
+            'update', 'edit', 'modify',
+            'delete', 'remove',
+            'detail', 'info', 'get', 'show',
+            'exists', 'check',
+            'count', 'total', 'sum',
+            'export', 'import', 'upload', 'download',
+            'enable', 'disable',
+            'search', 'query', 'filter',
+            'sort', 'order',
+        ]
+        
+        guesses = []
+        for suffix in crud_suffixes:
+            guesses.append(f'{base}/{suffix}')
+        
+        return guesses
     
     def _to_singular(self, word: str) -> str:
         """复数转单数"""
@@ -703,6 +1014,10 @@ class JSParser:
         for prefix in discovered_prefixes:
             if prefix not in parent_apis:
                 parent_apis.add(prefix)
+        
+        restful_templates = self.extract_restful_templates(list(original_apis))
+        for template in restful_templates:
+            path_templates.add(template)
         
         chunks = WebpackAnalyzer.extract_chunks(js_content)
         modules = WebpackAnalyzer.extract_modules(js_content)
