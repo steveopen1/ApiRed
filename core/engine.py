@@ -115,6 +115,7 @@ class ScanEngine:
         self._current_stage = 0
         self._running = False
         self._checkpoint: Optional[ScanCheckpoint] = None
+        self._collector_results: Dict[str, Any] = {}
         self._callbacks: Dict[str, List[Any]] = {
             'stage_start': [],
             'stage_progress': [],
@@ -124,6 +125,18 @@ class ScanEngine:
         }
         
         self._stage_names = ["collect", "analyze", "test"]
+        
+        self._active_tasks: Set[asyncio.Task] = set()
+        self._tasks_lock = asyncio.Lock()
+    
+    def _register_task(self, task: asyncio.Task):
+        """注册进行中的任务"""
+        self._active_tasks.add(task)
+        task.add_done_callback(self._unregister_task)
+    
+    def _unregister_task(self, task: asyncio.Task):
+        """取消注册完成的任务"""
+        self._active_tasks.discard(task)
     
     def on(self, event: str, callback: Any):
         """注册事件回调"""
@@ -204,18 +217,38 @@ class ScanEngine:
             self._plugins_initialized = False
         
         self._browser_collector: Optional[HeadlessBrowserCollector] = None
+        self._browser_fallback_mode = False
         self._browser_enabled = getattr(self.config, 'chrome', False)
         
         if self._browser_enabled:
-            try:
-                self._browser_collector = HeadlessBrowserCollector()
-                browser_initialized = await self._browser_collector.initialize(headless=True)
-                if not browser_initialized:
-                    self._browser_collector = None
-                    print("Warning: Browser initialization failed, continuing without browser")
-            except Exception as e:
-                print(f"Warning: Browser not available: {e}")
-                self._browser_collector = None
+            browser_initialized = False
+            retry_count = 0
+            max_retries = 2
+            
+            while not browser_initialized and retry_count < max_retries:
+                try:
+                    self._browser_collector = HeadlessBrowserCollector()
+                    browser_initialized = await self._browser_collector.initialize(headless=True)
+                    
+                    if not browser_initialized:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            logger.warning(f"Browser initialization failed, retrying ({retry_count}/{max_retries})...")
+                            await asyncio.sleep(1)
+                        else:
+                            logger.warning("Browser initialization failed, enabling fallback mode")
+                            self._browser_fallback_mode = True
+                            self._browser_collector = None
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        logger.warning(f"Browser not available: {e}, retrying ({retry_count}/{max_retries})...")
+                        await asyncio.sleep(1)
+                    else:
+                        logger.warning(f"Browser not available after {max_retries} retries, enabling fallback mode: {e}")
+                        self._browser_fallback_mode = True
+                        self._browser_collector = None
+                        break
         
         if self.config.ai_enabled:
             from .ai.ai_engine import AIEngine
@@ -237,9 +270,9 @@ class ScanEngine:
                 self._url_deduplicator = URLDeduplicator()
                 latest = self._incremental_scanner.get_latest_snapshot(self.config.target)
                 if latest:
-                    print(f"Found previous scan snapshot: {latest.api_count} APIs, {latest.js_count} JS files")
+                    logger.info(f"Found previous scan snapshot: {latest.api_count} APIs, {latest.js_count} JS files")
             except Exception as e:
-                print(f"Incremental scanner init error: {e}")
+                logger.debug(f"Incremental scanner init error: {e}")
                 self._incremental_scanner = None
                 self._url_deduplicator = None
         
@@ -304,11 +337,10 @@ class ScanEngine:
         missing_config = check_ai_config()
         if missing_config:
             print_ai_config_guide()
-            print(f"错误: Agent 模式需要配置 AI API 密钥")
-            print(f"缺少: {', '.join(missing_config.keys())}")
-            print()
-            print("提示: 也可以使用传统模式，无需配置 AI:")
-            print(f"  python main.py scan -u {self.config.target}")
+            logger.warning(f"错误: Agent 模式需要配置 AI API 密钥")
+            logger.warning(f"缺少: {', '.join(missing_config.keys())}")
+            logger.info("提示: 也可以使用传统模式，无需配置 AI:")
+            logger.info(f"  python main.py scan -u {self.config.target}")
             
             self.result = ScanResult(
                 target_url=self.config.target,
@@ -378,20 +410,29 @@ class ScanEngine:
         if 'js' in active_collectors:
             collector_results['js'] = await self._collect_js()
         
+        self._collector_results = collector_results
+        
         if 'api' in active_collectors:
             collector_results['api'] = await self._extract_apis()
         
         self._collector_results = collector_results
     
     async def _collect_js(self) -> Dict[str, Any]:
-        """采集JS资源 + 框架检测 + 浏览器动态采集"""
+        """采集JS资源 + 框架检测 + 浏览器动态采集 + 内联JS解析"""
         from .utils.http_client import AsyncHttpClient
+        from .collectors.inline_js_parser import InlineJSParser, ResponseBasedAPIDiscovery
+        from .collectors.api_path_finder import ApiPathFinder, ApiPathCombiner
         
         js_urls = []
         alive_js = []
         js_content_all = ""
         browser_routes = []
         browser_api_endpoints = []
+        
+        inline_parser = InlineJSParser()
+        response_discovery = ResponseBasedAPIDiscovery()
+        api_path_finder = ApiPathFinder()
+        api_combiner = ApiPathCombiner()
         
         if self._browser_collector:
             try:
@@ -401,13 +442,33 @@ class ScanEngine:
                     alive_js.extend(browser_result.get('alive_js', []))
                     browser_routes = browser_result.get('spa_routes', [])
                     browser_api_endpoints = browser_result.get('browser_apis', [])
+                    
+                    for js_item in browser_result.get('alive_js', []):
+                        if isinstance(js_item, dict) and 'content' in js_item:
+                            js_content = js_item['content']
+                            js_url = js_item.get('url', '')
+                            api_path_finder.find_api_paths_in_text(js_content, js_url)
             except Exception as e:
-                print(f"Browser collection failed: {e}")
+                logger.warning(f"Browser collection failed: {e}")
         
         response = await self._http_client.request(
             self.config.target,
             headers={'Cookie': self.config.cookies} if self.config.cookies else None
         )
+        
+        content_type = response.headers.get('Content-Type', 'text/html')
+        
+        inline_results = inline_parser.parse_html(response.content)
+        if inline_results['api_paths'] or inline_results['routes']:
+            logger.info(f"Found {len(inline_results['api_paths'])} API paths and {len(inline_results['routes'])} routes from inline JS")
+        
+        discovered_from_response = response_discovery.discover_from_response(
+            self.config.target,
+            response.content,
+            content_type
+        )
+        if discovered_from_response:
+            logger.info(f"Discovered {len(discovered_from_response)} API paths from response analysis")
         
         http_js_urls = self._extract_js_urls(response.content)
         js_parser = JSParser(self._js_cache)
@@ -427,6 +488,15 @@ class ScanEngine:
                         js_content = js_response.content
                         js_content_all += js_content + "\n"
                         alive_js.append({'url': js_url, 'content': js_content})
+                        
+                        inline_parser.parse_html(js_content)
+                        response_discovery.discover_from_response(
+                            js_url, js_content,
+                            js_response.headers.get('Content-Type', 'application/javascript')
+                        )
+                        
+                        api_path_finder.find_api_paths_in_text(js_content, js_url)
+                        
                         try:
                             js_parser.parse(js_content, js_url)
                         except Exception as e:
@@ -445,11 +515,27 @@ class ScanEngine:
         if framework_match:
             self._detected_framework = framework_match.name
         
+        all_extracted = inline_parser.get_all_extracted()
+        all_discovered = response_discovery.get_all_discovered()
+        
+        inline_api_paths = list(all_extracted.get('api_paths', []))
+        inline_routes = list(all_extracted.get('routes', []))
+        
+        finder_api_paths = api_path_finder.get_all_paths()
+        
+        logger.info(f"ApiPathFinder discovered {len(finder_api_paths)} API paths from JS")
+        
         return {
             'total_js': len(js_urls),
             'alive_js': len(alive_js),
             'js_urls': alive_js,
-            'detected_framework': self._detected_framework
+            'detected_framework': self._detected_framework,
+            'inline_api_paths': inline_api_paths,
+            'inline_routes': inline_routes,
+            'response_discovered_paths': all_discovered,
+            'probe_paths': inline_parser.generate_probe_paths(),
+            'browser_api_endpoints': list(browser_api_endpoints) if browser_api_endpoints else [],
+            'finder_api_paths': finder_api_paths
         }
     
     async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
@@ -766,8 +852,6 @@ class ScanEngine:
                     probed_results[parent_path] = sub_endpoints
         
         return probed_results
-        
-        return probed_results
     
     async def _probe_parent_paths_concurrent(
         self, 
@@ -1067,6 +1151,117 @@ class ScanEngine:
                         source_info={'source': f'framework_{self._detected_framework}'}
                     )
         
+        if self._collector_results and 'js' in self._collector_results:
+            js_result = self._collector_results['js']
+            
+            inline_api_paths = js_result.get('inline_api_paths', [])
+            if inline_api_paths:
+                logger.info(f"Adding {len(inline_api_paths)} API paths from inline JS parser")
+                for api_path in inline_api_paths:
+                    if api_path not in existing_paths:
+                        existing_paths.add(api_path)
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=api_path,
+                            method="GET",
+                            source_type="inline_js_parser",
+                            base_url="",
+                            url_type="discovered"
+                        )
+                        self._api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': 'inline_js_parser'}
+                        )
+            
+            inline_routes = js_result.get('inline_routes', [])
+            if inline_routes:
+                logger.info(f"Adding {len(inline_routes)} routes from inline JS parser")
+                for route in inline_routes:
+                    normalized_route = route if route.startswith('/') else f'/{route}'
+                    if normalized_route not in existing_paths:
+                        existing_paths.add(normalized_route)
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=normalized_route,
+                            method="GET",
+                            source_type="inline_js_route",
+                            base_url="",
+                            url_type="route"
+                        )
+                        self._api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': 'inline_js_parser'}
+                        )
+            
+            response_discovered = js_result.get('response_discovered_paths', [])
+            if response_discovered:
+                logger.info(f"Adding {len(response_discovered)} paths from response discovery")
+                for path in response_discovered:
+                    if path not in existing_paths:
+                        existing_paths.add(path)
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=path,
+                            method="GET",
+                            source_type="response_discovery",
+                            base_url="",
+                            url_type="discovered"
+                        )
+                        self._api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': 'response_discovery'}
+                        )
+            
+            browser_apis = js_result.get('browser_api_endpoints', [])
+            if browser_apis:
+                logger.info(f"Adding {len(browser_apis)} API endpoints from browser collector")
+                for api_path in browser_apis:
+                    from urllib.parse import urlparse
+                    if api_path.startswith('http://') or api_path.startswith('https://'):
+                        parsed = urlparse(api_path)
+                        path = parsed.path
+                        base_url = f"{parsed.scheme}://{parsed.netloc}"
+                    elif api_path.startswith('/'):
+                        path = api_path
+                        base_url = ""
+                    else:
+                        path = '/' + api_path
+                        base_url = ""
+                    
+                    if path not in existing_paths:
+                        existing_paths.add(path)
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=path,
+                            method="GET",
+                            source_type="browser_collector",
+                            base_url=base_url,
+                            url_type="discovered"
+                        )
+                        self._api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': 'browser_collector'}
+                        )
+            
+            finder_api_paths = js_result.get('finder_api_paths', [])
+            if finder_api_paths:
+                logger.info(f"Adding {len(finder_api_paths)} API paths from ApiPathFinder")
+                for api_path in finder_api_paths:
+                    if api_path not in existing_paths and len(api_path) > 1:
+                        existing_paths.add(api_path)
+                        from .collectors.api_collector import APIFindResult
+                        api_find_result = APIFindResult(
+                            path=api_path,
+                            method="GET",
+                            source_type="api_path_finder",
+                            base_url="",
+                            url_type="finder"
+                        )
+                        self._api_aggregator.add_api(
+                            api_find_result,
+                            source_info={'source': 'api_path_finder'}
+                        )
+        
         probed_parent_paths = await self._probe_parent_paths(js_results)
         
         for parent_path, sub_endpoints in probed_parent_paths.items():
@@ -1329,7 +1524,7 @@ class ScanEngine:
                     stats = self._url_greper.get_statistics(url_matches)
                     print(f"[IDOR Scan] Filtered {stats['total']} high-risk URLs for IDOR testing")
             except Exception as e:
-                print(f"URL greper error: {e}")
+                logger.debug(f"URL greper error: {e}")
         
         vuln_count = 0
         from .models import Severity
@@ -1525,7 +1720,7 @@ class ScanEngine:
                 formats=formats
             )
         except Exception as e:
-            print(f"Report export error: {e}")
+                logger.error(f"Report export error: {e}")
         
         try:
             attack_chain_exporter = AttackChainExporter()
@@ -1533,7 +1728,7 @@ class ScanEngine:
             html_path = os.path.join(self.config.output_dir, folder_name, 'attack_chain.html')
             attack_chain_exporter.generate_html_report(self.result, html_path)
         except Exception as e:
-            print(f"Attack chain export error: {e}")
+                logger.error(f"Attack chain export error: {e}")
     
     async def _save_checkpoint(self):
         """保存检查点"""
@@ -1603,7 +1798,26 @@ class ScanEngine:
         """清理资源"""
         self._running = False
         
+        if self._active_tasks:
+            try:
+                pending = [t for t in self._active_tasks if not t.done()]
+                if pending:
+                    logger.info(f"Waiting for {len(pending)} tasks to complete...")
+                    await asyncio.wait_for(
+                        asyncio.shield(asyncio.gather(*pending, return_exceptions=True)),
+                        timeout=5.0
+                    )
+            except asyncio.TimeoutError:
+                logger.warning(f"Task wait timeout, cancelling {len(self._active_tasks)} remaining tasks")
+                for task in self._active_tasks:
+                    if not task.done():
+                        task.cancel()
+            except Exception as e:
+                logger.debug(f"Task cleanup error: {e}")
+        
         if self._http_client:
+            if self._http_client.session and not self._http_client.session.closed:
+                await self._http_client.session.close()
             self._http_client.session = None
         
         if self.db_storage:
@@ -1621,7 +1835,12 @@ class ScanEngine:
         """从HTML提取JS URL"""
         import re
         script_pattern = re.compile(r'<script[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
-        return script_pattern.findall(html_content)
+        script_pattern_no_quote = re.compile(r'<script[^>]+src=([^\s>]+)', re.IGNORECASE)
+        
+        urls = script_pattern.findall(html_content)
+        if not urls:
+            urls = script_pattern_no_quote.findall(html_content)
+        return urls
     
     @property
     def is_running(self) -> bool:

@@ -284,7 +284,8 @@ class URLDeduplicator:
                 normalized += f"?{parsed.query}"
             
             return normalized.lower()
-        except:
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"URL normalization error: {e}")
             return url.lower()
     
     def compute_content_hash(self, content: str, length: int = 500) -> str:

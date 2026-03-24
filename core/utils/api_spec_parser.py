@@ -463,7 +463,8 @@ class APISpecParser:
                     spec = json.loads(content)
                 else:
                     spec = yaml.safe_load(content)
-            except:
+            except (json.JSONDecodeError, yaml.YAMLError, ValueError) as e:
+                logger.debug(f"Spec parse error: {e}")
                 return None
             
             if not self._is_openapi_spec(spec):

@@ -4,6 +4,7 @@ API评分模型 - 多源证据聚合与统一评分
 """
 
 import json
+import re
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -37,6 +38,10 @@ class APIScorer:
         r'/admin', r'/user/.*/password', r'/api/.*/token',
         r'/config', r'/secret', r'/debug', r'/actuator',
         r'/swagger', r'/api-docs', r'/upload', r'/download'
+    ]
+    
+    HIGH_VALUE_PATTERNS_COMPILED = [
+        re.compile(p, re.IGNORECASE) for p in HIGH_VALUE_PATTERNS
     ]
     
     def __init__(self, min_high_value_score: int = 5):
@@ -119,9 +124,8 @@ class APIScorer:
         if evidence.ai_high_value:
             score += 2
         
-        for pattern in self.HIGH_VALUE_PATTERNS:
-            import re
-            if re.search(pattern, evidence.path, re.IGNORECASE):
+        for compiled_pattern in self.HIGH_VALUE_PATTERNS_COMPILED:
+            if compiled_pattern.search(evidence.path):
                 score += 1
                 break
         

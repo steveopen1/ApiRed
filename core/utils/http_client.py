@@ -141,12 +141,8 @@ class AsyncHttpClient:
                         ).hexdigest()[:16]
                         result.duration = time.time() - start_time
                         
-                        if self._request_count % 100 == 0:
-                            async with self._lock:
-                                self._request_count += 1
-                        else:
-                            async with self._lock:
-                                self._request_count += 1
+                        async with self._lock:
+                            self._request_count += 1
                         
                         return result
                         

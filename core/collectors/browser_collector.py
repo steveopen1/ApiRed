@@ -14,6 +14,23 @@ from urllib.parse import urljoin, urlparse
 logger = logging.getLogger(__name__)
 
 
+def check_browser_dependencies() -> dict:
+    """
+    检查浏览器依赖状态
+    
+    Returns:
+        状态报告字典
+    """
+    try:
+        from ..utils.browser_deps import BrowserDependencyInstaller, check_and_install_browser_deps
+        return check_and_install_browser_deps()
+    except ImportError:
+        return {
+            'error': 'browser_deps module not found',
+            'can_run_browser': False
+        }
+
+
 @dataclass
 class BrowserResource:
     """浏览器采集的资源"""
@@ -61,9 +78,27 @@ class HeadlessBrowserCollector:
             r'/rpc/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',
             r'/[a-zA-Z0-9_]+/(?:get|post|put|delete|list|query|export|import)',
         ]
+        self._dep_check_done = False
     
     async def initialize(self, headless: bool = True):
         """初始化浏览器"""
+        deps_status = check_browser_dependencies()
+        
+        if not deps_status.get('can_run_browser', False):
+            error_msg = "Browser dependencies not available"
+            
+            if 'missing_dependencies' in deps_status and deps_status['missing_dependencies']:
+                missing = deps_status['missing_dependencies']
+                logger.warning(f"Missing browser dependencies: {len(missing)} libraries")
+                logger.warning(f"Installation command:\n  {deps_status.get('install_command', 'N/A')}")
+            
+            if not deps_status.get('playwright_installed', False):
+                logger.warning("Playwright is not installed. Run: pip install playwright && python -m playwright install chromium")
+            elif not deps_status.get('chromium_installed', False):
+                logger.warning("Chromium is not installed. Run: python -m playwright install chromium")
+            
+            return False
+        
         try:
             from playwright.async_api import async_playwright
             
@@ -79,9 +114,20 @@ class HeadlessBrowserCollector:
             self.page = await self.context.new_page()
             
             await self._setup_interceptors()
+            self._dep_check_done = True
             return True
         except Exception as e:
-            print(f"Failed to initialize browser: {e}")
+            error_str = str(e)
+            
+            if 'libglib' in error_str or 'libnss' in error_str or 'libnspr' in error_str:
+                deps_status = check_browser_dependencies()
+                if deps_status.get('missing_dependencies'):
+                    logger.warning(f"Browser initialization failed due to missing system dependencies")
+                    logger.warning(f"Run the following command to install dependencies:")
+                    logger.warning(f"  {deps_status.get('install_command', '')}")
+            else:
+                logger.warning(f"Failed to initialize browser: {e}")
+            
             return False
     
     async def _setup_interceptors(self):

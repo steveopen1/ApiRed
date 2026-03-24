@@ -7,7 +7,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 import threading
 import time
 
@@ -70,7 +70,8 @@ class TaskDispatcher:
                 self._stats['pending_tasks'] += 1
             
             return True
-        except:
+        except (Full, Exception) as e:
+            logger.debug(f"Add task error: {e}")
             return False
     
     def add_tasks(self, tasks: List[Task]) -> int:

@@ -7,21 +7,26 @@ import sqlite3
 import json
 import os
 import hashlib
+import logging
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
 import threading
 
+logger = logging.getLogger(__name__)
+
 
 class DBStorage:
     """数据库存储封装"""
     
-    def __init__(self, db_path: str, wal_mode: bool = True):
+    def __init__(self, db_path: str, wal_mode: bool = True, max_retries: int = 3):
         self.db_path = db_path
         self.wal_mode = wal_mode
+        self.max_retries = max_retries
         self._ensure_dir()
         self._local = threading.local()
         self._init_db()
+        self._connection_valid = True
     
     def _ensure_dir(self):
         """确保目录存在"""
@@ -29,24 +34,88 @@ class DBStorage:
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
     
+    def _is_connection_valid(self, conn: sqlite3.Connection) -> bool:
+        """检查连接是否有效"""
+        try:
+            conn.execute("SELECT 1")
+            return True
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError) as e:
+            logger.debug(f"Connection validity check failed: {e}")
+            return False
+    
+    def _reconnect(self):
+        """重新建立数据库连接"""
+        logger.info("Attempting to reconnect to database...")
+        
+        if hasattr(self._local, 'conn') and self._local.conn:
+            try:
+                self._local.conn.close()
+            except Exception:
+                pass
+            self._local.conn = None
+        
+        self._local.conn = sqlite3.connect(
+            self.db_path,
+            timeout=60,
+            check_same_thread=False
+        )
+        self._local.conn.row_factory = sqlite3.Row
+        
+        if self.wal_mode:
+            self._local.conn.execute("PRAGMA journal_mode=WAL")
+        
+        self._local.conn.execute("PRAGMA synchronous=OFF")
+        self._local.conn.execute("PRAGMA cache_size=-64000")
+        self._local.conn.execute("PRAGMA temp_store=MEMORY")
+        
+        self._connection_valid = True
+        logger.info("Database reconnection successful")
+    
     def _get_connection(self) -> sqlite3.Connection:
         """获取线程本地连接"""
-        if not hasattr(self._local, 'conn') or self._local.conn is None:
-            self._local.conn = sqlite3.connect(
-                self.db_path,
-                timeout=60,
-                check_same_thread=False
-            )
-            self._local.conn.row_factory = sqlite3.Row
-            
-            if self.wal_mode:
-                self._local.conn.execute("PRAGMA journal_mode=WAL")
-            
-            self._local.conn.execute("PRAGMA synchronous=OFF")
-            self._local.conn.execute("PRAGMA cache_size=-64000")
-            self._local.conn.execute("PRAGMA temp_store=MEMORY")
+        retry_count = 0
         
+        while retry_count < self.max_retries:
+            if not hasattr(self._local, 'conn') or self._local.conn is None:
+                self._local.conn = self._create_connection()
+            
+            if self._is_connection_valid(self._local.conn):
+                return self._local.conn
+            else:
+                self._connection_valid = False
+                self._local.conn = None
+                retry_count += 1
+                logger.warning(f"Invalid connection, retrying ({retry_count}/{self.max_retries})...")
+        
+        self._reconnect()
         return self._local.conn
+    
+    def _create_connection(self) -> sqlite3.Connection:
+        """创建新的数据库连接"""
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=60,
+            check_same_thread=False
+        )
+        conn.row_factory = sqlite3.Row
+        
+        if self.wal_mode:
+            conn.execute("PRAGMA journal_mode=WAL")
+        
+        conn.execute("PRAGMA synchronous=OFF")
+        conn.execute("PRAGMA cache_size=-64000")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        
+        return conn
+    
+    def is_healthy(self) -> bool:
+        """检查数据库健康状态"""
+        try:
+            conn = self._get_connection()
+            return self._is_connection_valid(conn)
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
     
     @property
     def conn(self) -> sqlite3.Connection:
@@ -161,7 +230,7 @@ class DBStorage:
             self.conn.commit()
             return True
         except Exception as e:
-            print(f"Insert API error: {e}")
+            logger.error(f"Insert API error: {e}")
             return False
     
     def insert_js_cache(self, content_hash: str, js_url: str, 
@@ -182,7 +251,7 @@ class DBStorage:
             self.conn.commit()
             return True
         except Exception as e:
-            print(f"Insert JS cache error: {e}")
+            logger.error(f"Insert JS cache error: {e}")
             return False
     
     def get_js_cache(self, content_hash: str) -> Optional[Dict]:
@@ -218,7 +287,7 @@ class DBStorage:
             self.conn.commit()
             return True
         except Exception as e:
-            print(f"Insert evidence error: {e}")
+            logger.error(f"Insert evidence error: {e}")
             return False
     
     def record_stage_stats(self, stats: Dict[str, Any]) -> bool:
@@ -240,7 +309,7 @@ class DBStorage:
             self.conn.commit()
             return True
         except Exception as e:
-            print(f"Record stage stats error: {e}")
+            logger.error(f"Record stage stats error: {e}")
             return False
     
     def get_all_apis(self) -> List[Dict]:
@@ -306,7 +375,7 @@ class FileStorage:
             full_path = os.path.join(self.base_dir, file_path)
             normalized = os.path.normpath(full_path)
             if not normalized.startswith(os.path.normpath(self.base_dir)):
-                print("Save JSON error: path traversal attempt detected")
+                logger.warning("Save JSON error: path traversal attempt detected")
                 return False
             os.makedirs(os.path.dirname(normalized), exist_ok=True)
             
@@ -314,7 +383,7 @@ class FileStorage:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"Save JSON error: {e}")
+            logger.error(f"Save JSON error: {e}")
             return False
     
     def load_json(self, file_path: str) -> Optional[Any]:
@@ -327,33 +396,41 @@ class FileStorage:
             with open(full_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Load JSON error: {e}")
+            logger.error(f"Load JSON error: {e}")
             return None
     
     def save_text(self, content: str, file_path: str) -> bool:
         """保存文本文件"""
         try:
             full_path = os.path.join(self.base_dir, file_path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            normalized = os.path.normpath(full_path)
+            if not normalized.startswith(os.path.normpath(self.base_dir)):
+                logger.warning("Save text error: path traversal attempt detected")
+                return False
+            os.makedirs(os.path.dirname(normalized), exist_ok=True)
             
-            with open(full_path, 'w', encoding='utf-8') as f:
+            with open(normalized, 'w', encoding='utf-8') as f:
                 f.write(content)
             return True
         except Exception as e:
-            print(f"Save text error: {e}")
+            logger.error(f"Save text error: {e}")
             return False
     
     def append_text(self, content: str, file_path: str) -> bool:
         """追加文本文件"""
         try:
             full_path = os.path.join(self.base_dir, file_path)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            normalized = os.path.normpath(full_path)
+            if not normalized.startswith(os.path.normpath(self.base_dir)):
+                logger.warning("Append text error: path traversal attempt detected")
+                return False
+            os.makedirs(os.path.dirname(normalized), exist_ok=True)
             
-            with open(full_path, 'a', encoding='utf-8') as f:
+            with open(normalized, 'a', encoding='utf-8') as f:
                 f.write(content)
             return True
         except Exception as e:
-            print(f"Append text error: {e}")
+            logger.error(f"Append text error: {e}")
             return False
 
 
@@ -384,10 +461,10 @@ class MySQLStorage:
             import pymysql
             self._conn = pymysql.connect(**self.config)
         except ImportError:
-            print("Warning: pymysql not installed, MySQL storage unavailable")
+            logger.warning("pymysql not installed, MySQL storage unavailable")
             self._conn = None
         except Exception as e:
-            print(f"MySQL connection failed: {e}")
+            logger.error(f"MySQL connection failed: {e}")
             self._conn = None
 
     def _ensure_database(self):
@@ -401,7 +478,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Create database error: {e}")
+            logger.error(f"Create database error: {e}")
             return False
 
     def init_tables(self):
@@ -526,7 +603,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Init tables error: {e}")
+            logger.error(f"Init tables error: {e}")
             return False
 
     def insert_load_url(self, url: str, load_url: str, load_url_type: str, referer: str = "") -> bool:
@@ -542,7 +619,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert load_url error: {e}")
+            logger.error(f"Insert load_url error: {e}")
             return False
 
     def insert_js_url(self, url: str, js_url: str, url_type: str, status_code: int = 200,
@@ -560,7 +637,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert js_url error: {e}")
+            logger.error(f"Insert js_url error: {e}")
             return False
 
     def insert_api_path(self, url: str, api_path: str, method: str = "GET",
@@ -577,7 +654,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert api_path error: {e}")
+            logger.error(f"Insert api_path error: {e}")
             return False
 
     def insert_base_url(self, url: str, tree_url: str = "", base_url: str = "") -> bool:
@@ -593,7 +670,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert base_url error: {e}")
+            logger.error(f"Insert base_url error: {e}")
             return False
 
     def insert_parameter(self, url: str, api_path: str, parameter: str,
@@ -610,7 +687,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert parameter error: {e}")
+            logger.error(f"Insert parameter error: {e}")
             return False
 
     def insert_api_result(self, url: str, api_url: str, method: str, parameter: str = "",
@@ -629,7 +706,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert api_result error: {e}")
+            logger.error(f"Insert api_result error: {e}")
             return False
 
     def insert_sensitive_data(self, url: str, api_url: str, sensitive_type: str,
@@ -648,7 +725,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert sensitive_data error: {e}")
+            logger.error(f"Insert sensitive_data error: {e}")
             return False
 
     def insert_vulnerability(self, url: str, api_url: str, vuln_type: str, severity: str,
@@ -666,7 +743,7 @@ class MySQLStorage:
             self._conn.commit()
             return True
         except Exception as e:
-            print(f"Insert vulnerability error: {e}")
+            logger.error(f"Insert vulnerability error: {e}")
             return False
 
     def query_sensitive_keywords(self, keywords: str) -> List[Dict]:
@@ -682,7 +759,7 @@ class MySQLStorage:
                 )
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            print(f"Query sensitive keywords error: {e}")
+            logger.error(f"Query sensitive keywords error: {e}")
             return []
 
     def query_similar_responses(self, content_hash: str) -> List[Dict]:
@@ -696,7 +773,7 @@ class MySQLStorage:
                 )
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            print(f"Query similar responses error: {e}")
+            logger.error(f"Query similar responses error: {e}")
             return []
 
     def close(self):

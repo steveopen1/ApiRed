@@ -235,6 +235,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_stats()
         elif parsed.path == '/api/config':
             self._send_config()
+        elif parsed.path == '/api/health':
+            self._send_health()
         elif parsed.path.startswith('/api/task/'):
             task_id = parsed.path.split('/')[-1]
             if parsed.path.endswith('/stop'):
@@ -253,7 +255,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         
         try:
             data = json.loads(body) if body else {}
-        except:
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"JSON parse error: {e}")
             data = {}
         
         if parsed.path == '/api/scan':
@@ -276,7 +279,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         
         try:
             data = json.loads(body) if body else {}
-        except:
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"JSON parse error: {e}")
             data = {}
         
         if parsed.path == '/api/config':
@@ -544,6 +548,40 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "total_vulns": total_vulns,
             "last_scan": results[-1].get('start_time') if results else None
         })
+    
+    def _send_health(self):
+        """健康检查端点"""
+        health_report = {
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            'components': {
+                'dashboard': {'status': 'up'},
+                'task_manager': {'status': 'up'},
+                'results_storage': {'status': 'unknown'},
+            }
+        }
+        
+        try:
+            results_dir = "./results"
+            if os.path.exists(results_dir):
+                health_report['components']['results_storage']['status'] = 'up'
+            else:
+                health_report['components']['results_storage']['status'] = 'down'
+        except Exception as e:
+            health_report['components']['results_storage']['status'] = 'error'
+            health_report['status'] = 'degraded'
+        
+        try:
+            tasks = self.task_manager.list_tasks() if self.task_manager else []
+            running = [t for t in tasks if t.get('status') == 'running']
+            health_report['components']['task_manager']['running_tasks'] = len(running)
+            health_report['components']['task_manager']['total_tasks'] = len(tasks)
+        except Exception as e:
+            health_report['components']['task_manager']['status'] = 'error'
+            health_report['status'] = 'degraded'
+        
+        status_code = 200 if health_report['status'] == 'healthy' else 503
+        self._send_json(health_report, status_code)
     
     def _send_config(self):
         config_mgr = ConfigManager()

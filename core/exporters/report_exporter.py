@@ -5,11 +5,14 @@ Export Module
 
 import json
 import os
+import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,7 +47,7 @@ class OpenAPIExporter:
             
             return True
         except Exception as e:
-            print(f"OpenAPI export error: {e}")
+            logger.error(f"OpenAPI export error: {e}")
             return False
     
     def _build_openapi_spec(self, apis: List[Dict], target: str) -> Dict:
@@ -105,7 +108,8 @@ class OpenAPIExporter:
                 'netloc': parsed.netloc,
                 'domain': parsed.netloc.split(':')[0] if parsed.netloc else target
             }
-        except:
+        except (ValueError, Exception) as e:
+            logger.debug(f"Target parse error: {e}")
             return {'scheme': 'https', 'netloc': target, 'domain': target}
     
     def _build_parameters(self, api: Dict) -> List[Dict]:
@@ -150,7 +154,7 @@ class CSVExporter:
 
             return True
         except Exception as e:
-            print(f"CSV export error: {e}")
+            logger.error(f"CSV export error: {e}")
             return False
 
     def _export_summary_csv(self, data: Dict) -> List[str]:
@@ -256,7 +260,7 @@ class JSONExporter:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"JSON export error: {e}")
+            logger.error(f"JSON export error: {e}")
             return False
 
 
@@ -282,7 +286,7 @@ class ExcelExporter:
             wb.save(output_path)
             return True
         except Exception as e:
-            print(f"Excel export error: {e}")
+            logger.error(f"Excel export error: {e}")
             return False
     
     def _create_summary_sheet(self, wb, data: Dict):
@@ -480,7 +484,7 @@ class HTMLReporter:
             
             return True
         except Exception as e:
-            print(f"HTML export error: {e}")
+            logger.error(f"HTML export error: {e}")
             return False
     
     def _render_template(self, data: Dict) -> str:
@@ -543,7 +547,7 @@ class JUnitExporter:
             
             return True
         except Exception as e:
-            print(f"JUnit export error: {e}")
+            logger.error(f"JUnit export error: {e}")
             return False
     
     def _build_test_cases(self, scan_result: Dict) -> List[Dict]:
@@ -669,6 +673,6 @@ class ReportExporter:
                 if success:
                     results[fmt] = output_path
             except Exception as e:
-                print(f"Export {fmt} failed: {e}")
+                logger.error(f"Export {fmt} failed: {e}")
         
         return results
