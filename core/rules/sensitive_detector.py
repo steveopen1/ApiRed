@@ -2,16 +2,119 @@
 Sensitive Information Rule Engine
 规则化敏感信息检测引擎
 基于 0x727/ChkApi rule.yaml
+支持 Shannon 熵值验证，过滤假阳性
 """
 
 import re
 import yaml
+import math
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+def calculate_shannon_entropy(text: str) -> float:
+    """
+    计算字符串的 Shannon 熵值
+    
+    用于检测高随机性字符串（如密钥、Token），过滤假阳性
+    
+    Args:
+        text: 输入字符串
+        
+    Returns:
+        float: Shannon 熵值 (0-8, 越高越随机)
+    """
+    if not text:
+        return 0.0
+    
+    import collections
+    Counter = collections.Counter(text)
+    length = len(text)
+    
+    entropy = 0.0
+    for count in Counter.values():
+        if count > 0:
+            probability = count / length
+            entropy -= probability * math.log2(probability)
+    
+    return entropy
+
+
+class EntropyValidator:
+    """
+    熵值验证器
+    用于判断字符串是否是真正的密钥/Token
+    """
+    
+    HIGH_ENTROPY_THRESHOLD = 4.5
+    VERY_HIGH_ENTROPY_THRESHOLD = 5.5
+    
+    FAKE_KEY_PATTERNS = [
+        r'example',
+        r'test',
+        r'sample',
+        r'demo',
+        r'placeholder',
+        r'xxxx+',
+        r'yyyy+',
+        r'0000+',
+        r'1234+',
+        r'null',
+        r'undefined',
+        r'none',
+    ]
+    
+    @classmethod
+    def is_real_key(cls, text: str) -> bool:
+        """
+        判断是否为真实的密钥/Token（而非示例数据）
+        
+        通过熵值和模式匹配来判断
+        """
+        if not text or len(text) < 8:
+            return False
+        
+        entropy = calculate_shannon_entropy(text)
+        
+        for pattern in cls.FAKE_KEY_PATTERNS:
+            if re.search(pattern, text.lower()):
+                return False
+        
+        if len(text) >= 20 and entropy >= cls.HIGH_ENTROPY_THRESHOLD:
+            return True
+        
+        if len(text) >= 32 and entropy >= cls.VERY_HIGH_ENTROPY_THRESHOLD:
+            return True
+        
+        return False
+    
+    @classmethod
+    def get_key_confidence(cls, text: str) -> float:
+        """
+        获取密钥置信度
+        
+        Returns:
+            float: 0.0-1.0, 越高越可能是真实密钥
+        """
+        if not text or len(text) < 8:
+            return 0.0
+        
+        entropy = calculate_shannon_entropy(text)
+        
+        confidence = min(entropy / 8.0, 1.0)
+        
+        for pattern in cls.FAKE_KEY_PATTERNS:
+            if re.search(pattern, text.lower()):
+                confidence *= 0.3
+        
+        length_bonus = min(len(text) / 64.0, 1.0)
+        confidence = confidence * 0.7 + length_bonus * 0.3
+        
+        return confidence
 
 
 @dataclass
