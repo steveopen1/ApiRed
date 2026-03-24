@@ -278,6 +278,93 @@ class TestAgent(AgentInterface):
                     except Exception as e:
                         logger.debug(f"URL scan error: {e}")
 
+                    vuln_tester = self._get_vulnerability_tester()
+                    endpoint_params = {}
+                    if hasattr(endpoint, 'parameters') and endpoint.parameters:
+                        for param in endpoint.parameters:
+                            param_name = param if isinstance(param, str) else getattr(param, 'name', None)
+                            if param_name:
+                                endpoint_params[param_name] = 'test'
+
+                    for param_name in endpoint_params.keys():
+                        try:
+                            sql_result = await vuln_tester.test_sql_injection(full_url, method=endpoint.method, param_name=param_name)
+                            if sql_result and sql_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'SQL_INJECTION',
+                                    'severity': sql_result.severity,
+                                    'url': full_url,
+                                    'evidence': sql_result.evidence,
+                                    'payload': sql_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"SQL injection test error: {e}")
+
+                        try:
+                            xss_result = await vuln_tester.test_xss(full_url, method=endpoint.method, param_name=param_name)
+                            if xss_result and xss_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'XSS',
+                                    'severity': xss_result.severity,
+                                    'url': full_url,
+                                    'evidence': xss_result.evidence,
+                                    'payload': xss_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"XSS test error: {e}")
+
+                        try:
+                            ssrf_result = await vuln_tester.test_ssrf(full_url, method=endpoint.method, param_name=param_name)
+                            if ssrf_result and ssrf_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'SSRF',
+                                    'severity': ssrf_result.severity,
+                                    'url': full_url,
+                                    'evidence': ssrf_result.evidence,
+                                    'payload': ssrf_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"SSRF test error: {e}")
+
+                        try:
+                            crlf_result = await vuln_tester.test_crlf_injection(full_url, param_name=param_name)
+                            if crlf_result and crlf_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'CRLF_INJECTION',
+                                    'severity': crlf_result.severity,
+                                    'url': full_url,
+                                    'evidence': crlf_result.evidence,
+                                    'payload': crlf_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"CRLF injection test error: {e}")
+
+                        try:
+                            lfi_result = await vuln_tester.test_lfi(full_url, param_name=param_name)
+                            if lfi_result and lfi_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'LFI',
+                                    'severity': lfi_result.severity,
+                                    'url': full_url,
+                                    'evidence': lfi_result.evidence,
+                                    'payload': lfi_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"LFI test error: {e}")
+
+                        try:
+                            cmd_result = await vuln_tester.test_command_injection(full_url, param_name=param_name)
+                            if cmd_result and cmd_result.is_vulnerable:
+                                result['vulnerabilities'].append({
+                                    'type': 'COMMAND_INJECTION',
+                                    'severity': cmd_result.severity,
+                                    'url': full_url,
+                                    'evidence': cmd_result.evidence,
+                                    'payload': cmd_result.payload,
+                                })
+                        except Exception as e:
+                            logger.debug(f"Command injection test error: {e}")
+
                     bypass_results = tester.test_with_bypass(full_url, params=None, headers=context.headers)
                     for bypass_resp in bypass_results:
                         if bypass_resp.bypass_performed:
@@ -292,13 +379,6 @@ class TestAgent(AgentInterface):
                     smart_fuzzer = self._get_smart_fuzzer()
                     
                     if endpoint.method in ('POST', 'PUT', 'PATCH'):
-                        endpoint_params = {}
-                        if hasattr(endpoint, 'parameters') and endpoint.parameters:
-                            for param in endpoint.parameters:
-                                param_name = param if isinstance(param, str) else getattr(param, 'name', None)
-                                if param_name:
-                                    endpoint_params[param_name] = smart_fuzzer.generate_param_value(param_name)
-                        
                         multi_format_requests = smart_fuzzer.generate_multi_format_requests(
                             endpoint.method, full_url, endpoint_params
                         )
