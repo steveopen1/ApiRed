@@ -1,0 +1,131 @@
+# BFLA - Broken Function Level Authorization Tests
+# Reference: CWE-285, OWASP API1-2023
+
+api_version: "1.0"
+category: BFLA
+
+test_cases:
+
+  - id: BFLA-001
+    name: Admin function accessible by regular user
+    severity: HIGH
+    category: BFLA
+    cwe_id: CWE-285
+    owasp_ref: API1-2023
+    description: |
+      Test for BFLA where admin-only functions are accessible by regular users.
+      Change HTTP method from GET to POST/DELETE on admin endpoints.
+    vuln_type: BFLA
+    method: GET
+    path: /api/admin/users
+    bypass_techniques:
+      - method_change: "POST"
+      - method_change: "DELETE"
+      - method_change: "PUT"
+    expected_response:
+      status_code: 403
+    validation:
+      type: auth_check
+      indicators:
+        - "unauthorized"
+        - "forbidden"
+        - "access denied"
+        - "admin only"
+    remediation: |
+      Implement proper function-level access control.
+      Verify user role before executing privileged operations.
+
+  - id: BFLA-002
+    name: Change password without admin verification
+    severity: HIGH
+    category: BFLA
+    cwe_id: CWE-285
+    description: |
+      Test for BFLA where users can change other users' passwords
+      without admin privileges.
+    vuln_type: BFLA
+    method: POST
+    path: /api/user/password
+    attack_vectors:
+      - name: change_other_user_password
+        payload:
+          user_id: "123"
+          new_password: "hacked123"
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "success"
+        - "password changed"
+    remediation: |
+      Verify current user password before allowing password changes.
+      Check authorization for target user.
+
+  - id: BFLA-003
+    name: Delete resource without proper authorization
+    severity: HIGH
+    category: BFLA
+    cwe_id: CWE-285
+    description: |
+      Test for BFLA where users can delete resources they shouldn't have access to.
+    vuln_type: BFLA
+    method: DELETE
+    path: /api/{resource}/{id}
+    attack_vectors:
+      - name: delete_others_resource
+        payload:
+          resource_id: "999"
+    validation:
+      type: auth_check
+      indicators:
+        - "success"
+        - "deleted"
+    remediation: |
+      Verify ownership before allowing deletions.
+      Implement proper authorization checks.
+
+  - id: BFLA-004
+    name: Access admin panel via regular user session
+    severity: HIGH
+    category: BFLA
+    cwe_id: CWE-285
+    description: |
+      Test for BFLA where admin panel is accessible via regular user session.
+    vuln_type: BFLA
+    method: GET
+    path: /api/admin/dashboard
+    expected_response:
+      status_code: 200
+    validation:
+      type: content_access
+      indicators:
+        - "dashboard"
+        - "admin"
+    remediation: |
+      Implement server-side authorization.
+      Verify admin role on every privileged operation.
+
+  - id: BFLA-005
+    name: Modify user role via API
+    severity: CRITICAL
+    category: BFLA
+    cwe_id: CWE-285
+    description: |
+      Test for BFLA where users can escalate privileges by modifying their role via API.
+    vuln_type: BFLA
+    method: PUT
+    path: /api/user/{id}/role
+    attack_vectors:
+      - name: role_escalation
+        payload:
+          role: "admin"
+    expected_response:
+      status_code: 200
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "role"
+        - "admin"
+        - "success"
+    remediation: |
+      Only admins should be able to modify roles.
+      Implement server-side role verification.

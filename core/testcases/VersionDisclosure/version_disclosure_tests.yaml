@@ -1,0 +1,163 @@
+# VersionDisclosure - Version Disclosure Tests
+# Reference: CWE-200, OWASP API7-2023
+
+api_version: "1.0"
+category: VersionDisclosure
+
+test_cases:
+
+  - id: VERSION-001
+    name: Server header version disclosure
+    severity: LOW
+    category: VersionDisclosure
+    cwe_id: CWE-200
+    owasp_ref: API7-2023
+    description: |
+      Test for server version in Server header.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /*
+    expected_response:
+      headers_check:
+        - Server
+    validation:
+      type: server_version
+      indicators:
+        - "Apache/2.4"
+        - "nginx/1.18"
+        - "Microsoft-IIS"
+    remediation: |
+      Suppress Server header version.
+      Use custom Server header.
+
+  - id: VERSION-002
+    name: X-Powered-By header disclosure
+    severity: LOW
+    category: VersionDisclosure
+    cwe_id: CWE-200
+    description: |
+      Test for PHP/ASP.NET version in X-Powered-By header.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /*
+    expected_response:
+      headers_check:
+        - X-Powered-By
+    validation:
+      type: powered_by_version
+      indicators:
+        - "PHP/7.4"
+        - "ASP.NET"
+    remediation: |
+      Suppress X-Powered-By header.
+      Disable version headers.
+
+  - id: VERSION-003
+    name: File extension disclosure
+    severity: LOW
+    category: VersionDisclosure
+    cwe_id: CWE-200
+    description: |
+      Test for file extensions in URLs revealing technology.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /*
+    expected_response:
+      status_code: 200
+    validation:
+      type: extension_check
+      indicators:
+        - ".php"
+        - ".aspx"
+        - ".jsp"
+    remediation: |
+      Use URL routing without extensions.
+      Configure server to hide extensions.
+
+  - id: VERSION-004
+    name: OpenAPI/Swagger endpoint exposed
+    severity: MEDIUM
+    category: VersionDisclosure
+    cwe_id: CWE-200
+    description: |
+      Test for exposed API documentation.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /api/*
+    expected_response:
+      status_code: 200
+    validation:
+      type: api_docs
+      indicators:
+        - "swagger"
+        - "openapi"
+        - "api-docs"
+    remediation: |
+      Protect API documentation with authentication.
+      Use no-index header on docs.
+
+  - id: VERSION-005
+    name: Git repository exposed
+    severity: HIGH
+    category: VersionDisclosure
+    cwe_id: CWE-538
+    description: |
+      Test for exposed .git repository.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /.git/config
+    expected_response:
+      status_code: 200
+    validation:
+      type: git_exposure
+      indicators:
+        - "repository"
+    remediation: |
+      Block .git directory in robots.txt and server config.
+      Use .git-credential exposure check.
+
+  - id: VERSION-006
+    name: Debug endpoint exposed
+    severity: HIGH
+    category: VersionDisclosure
+    cwe_id: CWE-11
+    description: |
+      Test for exposed debug or actuator endpoints.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /actuator/*
+    expected_response:
+      status_code: 200
+    validation:
+      type: debug_endpoints
+      indicators:
+        - "env"
+        - "beans"
+        - "heapdump"
+    remediation: |
+      Disable debug endpoints in production.
+      Use firewall rules to restrict.
+
+  - id: VERSION-007
+    name: Technology fingerprinting via headers
+    severity: LOW
+    category: VersionDisclosure
+    cwe_id: CWE-200
+    description: |
+      Test for multiple headers revealing technology stack.
+    vuln_type: VERSION_DISCLOSURE
+    method: GET
+    path: /*
+    expected_response:
+      headers_check:
+        - X-AspNet-Version
+        - X-Powered-By
+        - Server
+        - X-Runtime
+    validation:
+      type: fingerprinting
+      indicators:
+        - "version"
+    remediation: |
+      Remove version-revealing headers.
+      Use minimal headers.

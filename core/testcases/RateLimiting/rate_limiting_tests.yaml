@@ -1,0 +1,154 @@
+# RateLimiting - Rate Limiting and Resource Tests
+# Reference: CWE-307, OWASP API4-2023
+
+api_version: "1.0"
+category: RateLimiting
+
+test_cases:
+
+  - id: RATE-001
+    name: Missing rate limiting
+    severity: MEDIUM
+    category: RateLimiting
+    cwe_id: CWE-307
+    owasp_ref: API4-2023
+    description: |
+      Test for missing or insufficient rate limiting.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/login
+    bypass_techniques:
+      - ip_rotation: "X-Forwarded-For: 1.1.1.1"
+      - ip_rotation: "X-Forwarded-For: 1.1.1.2"
+    expected_response:
+      status_code: 429
+    validation:
+      type: rate_limit_check
+      indicators:
+        - "rate limit"
+        - "too many requests"
+    remediation: |
+      Implement rate limiting.
+      Use Redis or similar for distributed rate limiting.
+
+  - id: RATE-002
+    name: Rate limit bypass via header injection
+    severity: MEDIUM
+    category: RateLimiting
+    cwe_id: CWE-307
+    description: |
+      Test for rate limiting bypass via HTTP header manipulation.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/login
+    bypass_techniques:
+      - x_forwarded_for: "1.1.1.1"
+      - x_forwarded_for: "2.2.2.2"
+      - x_real_ip: "127.0.0.1"
+      - x_client_ip: "10.0.0.1"
+    expected_response:
+      status_code: 429
+    validation:
+      type: header_bypass
+      indicators:
+        - status_200
+    remediation: |
+      Validate rate limit headers server-side.
+      Use IP-based rate limiting with proper validation.
+
+  - id: RATE-003
+    name: Parameter pollution for rate limit bypass
+    severity: MEDIUM
+    category: RateLimiting
+    cwe_id: CWE-88
+    description: |
+      Test for rate limiting bypass via parameter pollution.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: GET
+    path: /api/search
+    bypass_techniques:
+      - param_pollution: "q=term&q=term2"
+      - param_pollution: "q[]=term&q[]=term2"
+    expected_response:
+      status_code: 200
+    validation:
+      type: param_pollution_bypass
+      indicators:
+        - multiple_results
+    remediation: |
+      Normalize parameters.
+      Apply rate limiting per unique user.
+
+  - id: RATE-004
+    name: Missing resource limits
+    severity: MEDIUM
+    category: RateLimiting
+    cwe_id: CWE-400
+    description: |
+      Test for missing resource/bandwidth limits.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/upload
+    parameters:
+      - name: file
+        type: file
+        location: body
+    payloads:
+      - size: 100MB
+      - size: 500MB
+    expected_response:
+      status_code: 200
+    validation:
+      type: resource_limit
+      indicators:
+        - "success"
+    remediation: |
+      Set maximum file sizes.
+      Implement resource quotas.
+
+  - id: RATE-005
+    name: JWT token expiration bypass
+    severity: LOW
+    category: RateLimiting
+    cwe_id: CWE-613
+    description: |
+      Test for missing token expiration or reuse.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/token/validate
+    parameters:
+      - name: token
+        type: string
+        location: header
+    payloads:
+      - "expired_token_value"
+    validation:
+      type: token_validation
+      indicators:
+        - "valid"
+    remediation: |
+      Implement proper token expiration.
+      Check token validity on every request.
+
+  - id: RATE-006
+    name: Concurrent session limit bypass
+    severity: MEDIUM
+    category: RateLimiting
+    cwe_id: CWE-307
+    description: |
+      Test for missing concurrent session limits.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/login
+    payloads:
+      - username: user
+        password: pass
+    expected_response:
+      status_code: 200
+    validation:
+      type: session_limit
+      indicators:
+        - multiple_sessions
+    remediation: |
+      Implement concurrent session limits.
+      Track and limit active sessions.

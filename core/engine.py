@@ -2198,6 +2198,27 @@ class ScanEngine:
             )
         elif category == TestCategory.INFORMATION_DISCLOSURE:
             return await self._vulnerability_tester.test_information_disclosure(endpoint.full_url)
+        elif category == TestCategory.BFLA:
+            return await self._vulnerability_tester.test_bfla(
+                endpoint.full_url,
+                endpoint.method
+            )
+        elif category == TestCategory.INJECTION_ATTACKS:
+            return await self._vulnerability_tester.test_injection_attacks(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.INPUT_VALIDATION:
+            return await self._vulnerability_tester.test_input_validation(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.HTTP_HEADERS:
+            return await self._vulnerability_tester.test_http_headers(endpoint.full_url)
+        elif category == TestCategory.SECURITY_MISCONFIG:
+            return await self._vulnerability_tester.test_security_misconfig(endpoint.full_url)
+        elif category == TestCategory.VERSION_DISCLOSURE:
+            return await self._vulnerability_tester.test_version_disclosure(endpoint.full_url)
         
         return None
     

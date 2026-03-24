@@ -1,0 +1,174 @@
+# HTTPHeaders - HTTP Security Headers Tests
+# Reference: CWE-693, OWASP API5-2023
+
+api_version: "1.0"
+category: HTTPHeaders
+
+test_cases:
+
+  - id: HTTPHEAD-001
+    name: Missing Strict-Transport-Security header
+    severity: MEDIUM
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    owasp_ref: API5-2023
+    description: |
+      Test for missing HSTS header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - Strict-Transport-Security
+    validation:
+      type: header_check
+      indicators:
+        - missing_hsts
+    remediation: |
+      Add Strict-Transport-Security header.
+      Set max-age to at least 31536000.
+
+  - id: HTTPHEAD-002
+    name: Missing X-Content-Type-Options header
+    severity: LOW
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing X-Content-Type-Options header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - X-Content-Type-Options
+    validation:
+      type: header_check
+      indicators:
+        - missing_xcto
+    remediation: |
+      Add X-Content-Type-Options: nosniff header.
+
+  - id: HTTPHEAD-003
+    name: Missing X-Frame-Options header
+    severity: MEDIUM
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing X-Frame-Options header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - X-Frame-Options
+    validation:
+      type: header_check
+      indicators:
+        - missing_xfo
+    remediation: |
+      Add X-Frame-Options: DENY or SAMEORIGIN header.
+      Or use Content-Security-Policy frame-ancestors.
+
+  - id: HTTPHEAD-004
+    name: Missing Content-Security-Policy header
+    severity: MEDIUM
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing CSP header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - Content-Security-Policy
+    validation:
+      type: header_check
+      indicators:
+        - missing_csp
+    remediation: |
+      Add Content-Security-Policy header.
+      Restrict script sources.
+
+  - id: HTTPHEAD-005
+    name: Missing Cache-Control for sensitive data
+    severity: MEDIUM
+    category: HTTPHeaders
+    cwe_id: CWE-525
+    description: |
+      Test for missing Cache-Control on sensitive endpoints.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/user/profile
+    expected_response:
+      headers_check:
+        - Cache-Control
+    validation:
+      type: header_check
+      indicators:
+        - cacheable
+    remediation: |
+      Add Cache-Control: no-store for sensitive data.
+      Set appropriate caching headers.
+
+  - id: HTTPHEAD-006
+    name: Missing X-XSS-Protection header
+    severity: LOW
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing X-XSS-Protection header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - X-XSS-Protection
+    validation:
+      type: header_check
+      indicators:
+        - missing_xss_protection
+    remediation: |
+      Add X-XSS-Protection: 1; block=1 header.
+      Consider using CSP instead.
+
+  - id: HTTPHEAD-007
+    name: Missing Referrer-Policy header
+    severity: LOW
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing Referrer-Policy header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - Referrer-Policy
+    validation:
+      type: header_check
+      indicators:
+        - missing_referrer_policy
+    remediation: |
+      Add Referrer-Policy: no-referrer header.
+
+  - id: HTTPHEAD-008
+    name: Missing Permissions-Policy header
+    severity: LOW
+    category: HTTPHeaders
+    cwe_id: CWE-693
+    description: |
+      Test for missing Permissions-Policy header.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    expected_response:
+      headers_check:
+        - Permissions-Policy
+    validation:
+      type: header_check
+      indicators:
+        - missing_permissions_policy
+    remediation: |
+      Add Permissions-Policy header.
+      Disable unnecessary browser features.

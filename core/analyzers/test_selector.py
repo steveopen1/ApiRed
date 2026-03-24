@@ -27,6 +27,12 @@ class TestCategory(Enum):
     RATE_LIMIT = "rate_limit"
     INFORMATION_DISCLOSURE = "information_disclosure"
     BOLA = "bola"
+    BFLA = "bfla"
+    INJECTION_ATTACKS = "injection_attacks"
+    INPUT_VALIDATION = "input_validation"
+    HTTP_HEADERS = "http_headers"
+    SECURITY_MISCONFIG = "security_misconfig"
+    VERSION_DISCLOSURE = "version_disclosure"
 
 
 @dataclass
@@ -212,6 +218,50 @@ class TestSelector:
                 excluded_features=[],
                 priority=5
             ),
+            TestSelectionRule(
+                name="BFLA - Function Level Authorization on admin endpoint",
+                category=TestCategory.BFLA,
+                required_features=[EndpointFeature.IS_ADMIN_ENDPOINT],
+                excluded_features=[],
+                priority=10
+            ),
+            TestSelectionRule(
+                name="Injection Attacks on login endpoint",
+                category=TestCategory.INJECTION_ATTACKS,
+                required_features=[EndpointFeature.IS_LOGIN_ENDPOINT],
+                excluded_features=[],
+                priority=9,
+                param_name_hints=['username', 'email', 'password', 'login']
+            ),
+            TestSelectionRule(
+                name="Input Validation on search endpoint",
+                category=TestCategory.INPUT_VALIDATION,
+                required_features=[EndpointFeature.HAS_SEARCH_PARAM],
+                excluded_features=[],
+                priority=5,
+                param_name_hints=['q', 'query', 'search', 'input']
+            ),
+            TestSelectionRule(
+                name="HTTP Headers on API endpoint",
+                category=TestCategory.HTTP_HEADERS,
+                required_features=[EndpointFeature.IS_API_ENDPOINT],
+                excluded_features=[],
+                priority=4
+            ),
+            TestSelectionRule(
+                name="Security Misconfiguration on sensitive endpoint",
+                category=TestCategory.SECURITY_MISCONFIG,
+                required_features=[EndpointFeature.IS_SENSITIVE_ENDPOINT],
+                excluded_features=[],
+                priority=6
+            ),
+            TestSelectionRule(
+                name="Version Disclosure on API endpoint",
+                category=TestCategory.VERSION_DISCLOSURE,
+                required_features=[EndpointFeature.IS_API_ENDPOINT],
+                excluded_features=[],
+                priority=3
+            ),
         ]
     
     def select_tests(
@@ -310,9 +360,15 @@ class TestSelector:
             TestCategory.VERBOSE_ERROR: "test_verbose_error",
             TestCategory.AUTH_BYPASS: "test_unauthorized_access",
             TestCategory.JWT_SECURITY: "test_jwt_security",
-            TestCategory.RATE_LIMIT: "test_bypass_techniques",
+            TestCategory.RATE_LIMIT: "test_rate_limiting",
             TestCategory.INFORMATION_DISCLOSURE: "test_information_disclosure",
             TestCategory.BOLA: "test_idor",
+            TestCategory.BFLA: "test_bfla",
+            TestCategory.INJECTION_ATTACKS: "test_injection_attacks",
+            TestCategory.INPUT_VALIDATION: "test_input_validation",
+            TestCategory.HTTP_HEADERS: "test_http_headers",
+            TestCategory.SECURITY_MISCONFIG: "test_security_misconfig",
+            TestCategory.VERSION_DISCLOSURE: "test_version_disclosure",
         }
         return mapping.get(category, "")
 

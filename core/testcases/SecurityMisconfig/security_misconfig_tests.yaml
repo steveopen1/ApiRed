@@ -1,0 +1,176 @@
+# SecurityMisconfig - Security Misconfiguration Tests
+# Reference: CWE-16, CWE-17, OWASP API5-2023
+
+api_version: "1.0"
+category: SecurityMisconfig
+
+test_cases:
+
+  - id: MISCONF-001
+    name: Debug mode enabled
+    severity: HIGH
+    category: SecurityMisconfig
+    cwe_id: CWE-11
+    owasp_ref: API5-2023
+    description: |
+      Test for debug mode or stack traces exposed.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/*
+    parameters:
+      - name: debug
+        type: boolean
+        location: query
+    payloads:
+      - "true"
+      - "1"
+    expected_response:
+      check_pattern: "(stack|trace|debug|error|exception)"
+    validation:
+      type: debug_mode
+      indicators:
+        - "stack trace"
+        - "debug mode"
+    remediation: |
+      Disable debug mode in production.
+      Return generic error messages.
+
+  - id: MISCONF-002
+    name: Default credentials exposed
+    severity: CRITICAL
+    category: SecurityMisconfig
+    cwe_id: CWE-798
+    description: |
+      Test for default or common credentials.
+    vuln_type: SECURITY_MISCONFIG
+    method: POST
+    path: /api/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: admin
+        password: admin
+      - username: admin
+        password: password123
+      - username: root
+        password: toor
+    validation:
+      type: default_creds
+      indicators:
+        - "login success"
+        - "token"
+    remediation: |
+      Change default credentials.
+      Implement strong password policy.
+
+  - id: MISCONF-003
+    name: Insecure CORS configuration
+    severity: MEDIUM
+    category: SecurityMisconfig
+    cwe_id: CWE-942
+    description: |
+      Test for overly permissive CORS.
+    vuln_type: CORS_MISCONFIG
+    method: GET
+    path: /api/*
+    headers:
+      - name: Origin
+        payload: https://evil.com
+    expected_response:
+      headers_check:
+        - Access-Control-Allow-Origin
+    validation:
+      type: cors_config
+      indicators:
+        - "Access-Control-Allow-Origin: *"
+        - "Access-Control-Allow-Origin: https://evil.com"
+    remediation: |
+      Use strict origin validation.
+      Never use wildcard with credentials.
+
+  - id: MISCONF-004
+    name: Verbose GraphQL introspection
+    severity: MEDIUM
+    category: SecurityMisconfig
+    cwe_id: CWE-200
+    description: |
+      Test for GraphQL introspection enabled.
+    vuln_type: SECURITY_MISCONFIG
+    method: POST
+    path: /graphql
+    payloads:
+      - query: "{ __schema { types { name } }"
+    expected_response:
+      status_code: 200
+    validation:
+      type: introspection
+      indicators:
+        - "__schema"
+        - "__type"
+    remediation: |
+      Disable introspection in production.
+      Use persisted queries.
+
+  - id: MISCONF-005
+    name: Missing API version pinning
+    severity: LOW
+    category: SecurityMisconfig
+    cwe_id: CWE-16
+    description: |
+      Test for unversioned APIs that may have breaking changes.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/v1/*
+    expected_response:
+      status_code: 200
+    validation:
+      type: version_check
+      indicators:
+        - no_version_header
+    remediation: |
+      Pin API versions.
+      Deprecate old versions properly.
+
+  - id: MISCONF-006
+    name: Missing security.txt
+    severity: LOW
+    category: SecurityMisconfig
+    cwe_id: CWE-16
+    description: |
+      Test for missing security.txt or robots.txt exposure.
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /.well-known/security.txt
+    expected_response:
+      status_code: 404
+    validation:
+      type: security_txt
+      indicators:
+        - "not found"
+    remediation: |
+      Add security.txt with contact information.
+      Use security.txt.net for guidance.
+
+  - id: MISCONF-007
+    name: Information disclosure via OPTIONS method
+    severity: MEDIUM
+    category: SecurityMisconfig
+    cwe_id: CWE-200
+    method: OPTIONS
+    path: /api/*
+    expected_response:
+      headers_check:
+        - Allow
+    validation:
+      type: method_discovery
+      indicators:
+        - "PUT"
+        - "DELETE"
+    remediation: |
+      Disable unnecessary HTTP methods.
+      Only allow required methods.

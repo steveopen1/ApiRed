@@ -1,0 +1,55 @@
+api_version: "1.0"
+category: InputValidation
+
+test_cases:
+
+  - id: INPUT-001
+    name: Missing input length validation
+    severity: MEDIUM
+    cwe_id: CWE-20
+    payloads:
+      - "A" * 10000
+    remediation: Implement strict length validation.
+
+  - id: INPUT-002
+    name: Missing type validation
+    severity: MEDIUM
+    cwe_id: CWE-20
+    payloads:
+      - "abc"
+      - "123.456"
+    remediation: Implement strict type checking.
+
+  - id: INPUT-003
+    name: Missing range validation
+    severity: MEDIUM
+    cwe_id: CWE-20
+    payloads:
+      - "-999999"
+      - "999999999"
+    remediation: Validate numeric ranges.
+
+  - id: INPUT-004
+    name: Unicode encoding bypass
+    severity: MEDIUM
+    cwe_id: CWE-20
+    payloads:
+      - "..%2F..%2F..%2Fetc%2Fpasswd"
+    remediation: Normalize and validate encodings.
+
+  - id: INPUT-005
+    name: Format validation bypass
+    severity: MEDIUM
+    cwe_id: CWE-20
+    payloads:
+      - "notanemail"
+      - "@nodomain"
+    remediation: Use regex patterns for format validation.
+
+  - id: INPUT-006
+    name: Mandatory field bypass
+    severity: LOW
+    cwe_id: CWE-20
+    payloads:
+      - " "
+    remediation: Validate all mandatory fields.
