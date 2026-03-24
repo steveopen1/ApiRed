@@ -928,6 +928,11 @@ class ScanEngine:
         fuzzed_results = {}
         base_url = self.config.target.rstrip('/')
         
+        js_result_count = len(js_results)
+        suffix_limit = min(400, max(160, js_result_count * 40))
+        resource_limit = min(100, max(50, js_result_count * 10))
+        independent_suffix_limit = min(250, max(100, js_result_count * 25))
+        
         parent_paths = set()
         js_suffixes = set()
         js_resources = set()
@@ -969,21 +974,21 @@ class ScanEngine:
         for parent_path in parent_paths:
             parent_base = parent_path.rstrip('/')
             
-            for suffix in list(all_suffixes)[:80]:
+            for suffix in list(all_suffixes)[:suffix_limit]:
                 if suffix.startswith('/'):
                     fuzz_targets.append((parent_base, suffix))
                 else:
                     fuzz_targets.append((parent_base, f'/{suffix}'))
             
-            for resource in list(all_resources)[:50]:
+            for resource in list(all_resources)[:resource_limit]:
                 for suffix in list(self.RESTFUL_SUFFIXES)[:30]:
                     if suffix:
                         fuzz_targets.append((parent_base, f'/{resource}{suffix}'))
                     else:
                         fuzz_targets.append((parent_base, f'/{resource}'))
         
-        for resource in list(all_resources)[:100]:
-            for suffix in list(all_suffixes)[:50]:
+        for resource in list(all_resources)[:resource_limit]:
+            for suffix in list(all_suffixes)[:independent_suffix_limit]:
                 if suffix.startswith('/'):
                     path = f'/{resource}{suffix}'
                 else:
