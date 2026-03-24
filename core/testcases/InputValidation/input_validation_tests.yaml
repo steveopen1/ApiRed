@@ -8,7 +8,7 @@ test_cases:
     severity: MEDIUM
     cwe_id: CWE-20
     payloads:
-      - "A" * 10000
+      - "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     remediation: Implement strict length validation.
 
   - id: INPUT-002
