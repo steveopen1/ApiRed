@@ -963,18 +963,20 @@ class ScanEngine:
                 if path not in existing_apis:
                     fuzz_targets.append(('', path))
         
+        async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
+            try:
+                response = await self._http_client.request(url, method=method, timeout=5)
+                return response.status_code
+            except Exception:
+                if method == 'HEAD':
+                    return await try_request(url, 'GET')
+            return None
+        
         async def probe_fuzz_target(base: str, path: str) -> Optional[str]:
             full_url = base_url + base + path if base else base_url + path
-            try:
-                response = await self._http_client.request(
-                    full_url,
-                    method='HEAD',
-                    timeout=3
-                )
-                if 200 <= response.status_code < 400:
-                    return base + path if base else path
-            except Exception:
-                pass
+            status_code = await try_request(full_url)
+            if status_code and 200 <= status_code < 400:
+                return base + path if base else path
             return None
         
         logger.info(f"Fuzzing {len(fuzz_targets)} API path combinations...")

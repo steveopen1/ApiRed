@@ -321,12 +321,12 @@ class JSParser:
     
     _COMMON_SUFFIXES_SET = frozenset([
         'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
-        'get', 'set', 'save', 'submit', 'query', 'search', 'filter', 'sort', 'page',
+        'get', 'set', 'save', 'query', 'search', 'filter', 'sort', 'page',
         'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
         'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
         'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
         'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
-        'approve', 'reject', 'submit', 'cancel', 'close', 'open', 'check',
+        'approve', 'reject', 'cancel', 'close', 'open', 'check',
         'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
     ])
     
@@ -334,10 +334,10 @@ class JSParser:
         'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
         'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
         'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
-        'department', 'dept', 'organization', 'org', 'employee', 'employee',
+        'department', 'dept', 'organization', 'org', 'employee',
         'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
         'profile', 'permission', 'permissions', 'resource', 'resources',
-        'article', 'articles', 'news', 'category', 'tag', 'tags', 'comment', 'comments',
+        'tag', 'tags', 'comment', 'comments',
         'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
         'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
         'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
