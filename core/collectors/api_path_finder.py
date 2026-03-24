@@ -32,35 +32,27 @@ URL_BLACK_LIST = [
 PATH_BLACK_PREFIX = [
     "/2000/", "/1999/", "/1998/", "/1997/", "/1996/",
     "/node_modules/", "/npm/", "/bower_components/",
+    "/webpack/", "/target/", "/dist/", 
 ]
 
-PATH_BLACK_PATTERN = [
-    r'^\/\d+\/',
-    r'\.min\.(js|css)$',
-    r'^/@[a-zA-Z0-9]',
+PATH_BLACK_KEYWORDS = [
+    'blots/', 'modules/syntax', 'element-ui@',
+    'alicdn.com', 'cdnjs.cloudflare.com', 'unpkg.com', 'jsdelivr.net',
+    'github.com', 'github.io', 'googleapis.com',
 ]
 
-FILE_EXT_BLACK_LIST = [
-    "exe", "apk", "mp4", "mkv", "mp3", "flv", "js", "css", "less",
-    "woff", "woff2", "vue", "svg", "png", "jpg", "jpeg", "tif",
-    "bmp", "gif", "psd", "exif", "fpx", "avif", "apng", "webp",
-    "swf", "ico", "svga", "html", "htm", "shtml", "ts", "eot",
-    "lrc", "tpl", "cur", "success", "error", "complete", "zip",
-    "rar", "7z", "tar", "gz", "xz"
+PATH_BLACK_PATTERNS = [
+    r'^//',  # //开头
+    r'^/\d{3}$',  # /401, /404, /500等HTTP状态码
+    r'^/\.$',  # /.
+    r'^/#',  # /#
+    r'^[a-z],$',  # 单字母逗号 g,
+    r'^[a-z]=[a-z]$',  # 单字母等于 g=u
+    r't\.ttl$',  # TTL类文件
 ]
 
-URL_EXT_BLACK_LIST = ["." + x if not x.startswith(",") else x for x in FILE_EXT_BLACK_LIST]
-
-STATIC_FILE_EXT_BLACK_LIST = [
-    "pdf", "docx", "doc", "exe", "apk", "mp4", "mkv", "mp3", "flv",
-    "css", "less", "woff", "woff2", "vue", "svg", "png", "jpg",
-    "jpeg", "tif", "bmp", "gif", "psd", "exif", "fpx", "avif",
-    "apng", "webp", "swf", "ico", "svga", "ts", "eot", "lrc",
-    "tpl", "cur", "success", "error", "complete", "zip", "rar",
-    "7z", "tar", "gz", "xz"
-]
-
-STATIC_FILE_EXT_BLACK_LIST_FULL = [f".{ext}" for ext in STATIC_FILE_EXT_BLACK_LIST]
+API_PATH_MIN_LENGTH = 2
+API_PATH_MAX_LENGTH = 200
 
 COMMON_API_PATHS = [
     'add', 'ls', 'focus', 'calc', 'download', 'bind', 'execute',
@@ -171,6 +163,19 @@ CONTENT_TYPE_LIST = [
 ]
 
 CONTENT_TYPE_PURE = [x['key'] for x in CONTENT_TYPE_LIST]
+
+STATIC_FILE_EXT_BLACK_LIST = [
+    "pdf", "docx", "doc", "exe", "apk", "mp4", "mkv", "mp3", "flv",
+    "css", "less", "woff", "woff2", "vue", "svg", "png", "jpg",
+    "jpeg", "tif", "bmp", "gif", "psd", "exif", "fpx", "avif",
+    "apng", "webp", "swf", "ico", "svga", "ts", "eot", "lrc",
+    "tpl", "cur", "success", "error", "complete", "zip", "rar",
+    "7z", "tar", "gz", "xz"
+]
+
+STATIC_FILE_EXT_BLACK_LIST_FULL = [f".{ext}" for ext in STATIC_FILE_EXT_BLACK_LIST]
+
+URL_EXT_BLACK_LIST = ["." + x if not x.startswith(",") else x for x in STATIC_FILE_EXT_BLACK_LIST]
 
 
 @dataclass
@@ -286,9 +291,13 @@ class ApiPathFinder:
             if any(x in clean_line for x in URL_BLACK_LIST):
                 continue
             
+            is_blacklisted = False
             for x in URL_EXT_BLACK_LIST:
                 if clean_line.lower().endswith(x):
-                    continue
+                    is_blacklisted = True
+                    break
+            if is_blacklisted:
+                continue
             
             path_lower = clean_line.lower()
             
@@ -296,6 +305,7 @@ class ApiPathFinder:
                 continue
             if path_lower.startswith('/bower_components/') or '/bower_components/' in path_lower:
                 continue
+            
             if re.match(r'^/\d{3,}/', clean_line):
                 continue
             if re.search(r'/v\d+\.\d+', clean_line):
@@ -303,7 +313,21 @@ class ApiPathFinder:
             if '/webpack/' in path_lower or '/target/' in path_lower:
                 continue
             
-            if not clean_line or len(clean_line) < 2:
+            for keyword in PATH_BLACK_KEYWORDS:
+                if keyword in path_lower:
+                    is_blacklisted = True
+                    break
+            if is_blacklisted:
+                continue
+            
+            for pattern in PATH_BLACK_PATTERNS:
+                if re.match(pattern, clean_line):
+                    is_blacklisted = True
+                    break
+            if is_blacklisted:
+                continue
+            
+            if len(clean_line) < API_PATH_MIN_LENGTH or len(clean_line) > API_PATH_MAX_LENGTH:
                 continue
             
             tmp.append(clean_line)
