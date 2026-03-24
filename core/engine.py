@@ -1278,7 +1278,7 @@ class ScanEngine:
         except Exception:
             pass
         
-        return all_js_content
+        return path_segments
     
     async def _recursive_js_extract(self, initial_js_urls: List[str], max_depth: int = 3) -> Dict[str, str]:
         """
