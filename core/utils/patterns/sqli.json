@@ -10,10 +10,22 @@
       "severity": "critical"
     },
     {
-      "name": "sqli_error",
+      "name": "sqli_error_db_first",
       "pattern": "(?i)(mysql|postgresql|sqlite|oracle|sqlserver).*error",
-      "description": "SQL Error Based Injection",
+      "description": "SQL Error DB First",
       "severity": "high"
+    },
+    {
+      "name": "sqli_error_err_first",
+      "pattern": "(?i)error.*(mysql|postgresql|sqlite|oracle|sqlserver)",
+      "description": "SQL Error Err First",
+      "severity": "high"
+    },
+    {
+      "name": "sqli_error_keyword",
+      "pattern": "(?i)(sql|syntax|query|database).*error",
+      "description": "SQL Error Generic",
+      "severity": "medium"
     },
     {
       "name": "sqli_boolean",
@@ -23,7 +35,7 @@
     },
     {
       "name": "sqli_comment",
-      "pattern": "(--|#|\\/\\*)",
+      "pattern": "(--|#|/\\*)",
       "description": "SQL Comment Injection",
       "severity": "medium"
     },
