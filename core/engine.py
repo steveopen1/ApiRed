@@ -676,7 +676,7 @@ class ScanEngine:
         js_suffixes: Set[str] = None,
         js_resources: Set[str] = None
     ) -> Dict[str, Set[str]]:
-        """串行探测父路径"""
+        """并发探测父路径（使用 Semaphore 控制并发数）"""
         if path_templates is None:
             path_templates = set()
         if js_suffixes is None:
@@ -699,6 +699,8 @@ class ScanEngine:
                     template_fragments.add(part)
         all_suffixes.update([f'/{f}' for f in template_fragments])
         
+        semaphore = asyncio.Semaphore(5)
+        
         async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
             try:
                 response = await self._http_client.request(url, method=method, timeout=5)
@@ -708,49 +710,62 @@ class ScanEngine:
                     return await try_request(url, 'GET')
             return None
         
-        for parent_path in parent_paths_to_probe:
-            full_url = base_url + parent_path
-            status_code = await try_request(full_url)
-            
-            if status_code and 200 <= status_code < 400:
-                logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
-                probed_results[parent_path] = set()
+        async def probe_with_semaphore(parent_path: str) -> Tuple[str, Set[str], int]:
+            async with semaphore:
+                full_url = base_url + parent_path
+                status_code = await try_request(full_url)
+                sub_endpoints = set()
                 
-                for suffix in list(all_suffixes)[:100]:
-                    sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                    sub_url = base_url + sub_path
-                    sub_status = await try_request(sub_url)
-                    if sub_status and 200 <= sub_status < 400:
-                        probed_results[parent_path].add(sub_path)
-                        logger.debug(f"  Found: {sub_path} (status: {sub_status})")
-                
-                for resource in list(js_resources)[:30]:
-                    for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                        combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
-                        sub_url = base_url + parent_path.rstrip('/') + combined
+                if status_code and 200 <= status_code < 400:
+                    logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
+                    
+                    for suffix in list(all_suffixes)[:100]:
+                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
+                        sub_url = base_url + sub_path
                         sub_status = await try_request(sub_url)
                         if sub_status and 200 <= sub_status < 400:
-                            probed_results[parent_path].add(parent_path.rstrip('/') + combined)
-            
-            elif status_code in (401, 403):
-                logger.info(f"Parent path exists (auth required): {parent_path} (status: {status_code})")
-                probed_results[parent_path] = set()
+                            sub_endpoints.add(sub_path)
+                            logger.debug(f"  Found: {sub_path} (status: {sub_status})")
+                    
+                    for resource in list(js_resources)[:30]:
+                        for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                            combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
+                            sub_url = base_url + parent_path.rstrip('/') + combined
+                            sub_status = await try_request(sub_url)
+                            if sub_status and 200 <= sub_status < 400:
+                                sub_endpoints.add(parent_path.rstrip('/') + combined)
                 
-                for suffix in list(all_suffixes)[:100]:
-                    sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                    sub_url = base_url + sub_path
-                    sub_status = await try_request(sub_url)
-                    if sub_status and 200 <= sub_status < 400:
-                        probed_results[parent_path].add(sub_path)
-                        logger.debug(f"  Found (auth): {sub_path} (status: {sub_status})")
-                
-                for resource in list(js_resources)[:30]:
-                    for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                        combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
-                        sub_url = base_url + parent_path.rstrip('/') + combined
+                elif status_code in (401, 403):
+                    logger.info(f"Parent path exists (auth required): {parent_path} (status: {status_code})")
+                    
+                    for suffix in list(all_suffixes)[:100]:
+                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
+                        sub_url = base_url + sub_path
                         sub_status = await try_request(sub_url)
                         if sub_status and 200 <= sub_status < 400:
-                            probed_results[parent_path].add(parent_path.rstrip('/') + combined)
+                            sub_endpoints.add(sub_path)
+                            logger.debug(f"  Found (auth): {sub_path} (status: {sub_status})")
+                    
+                    for resource in list(js_resources)[:30]:
+                        for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                            combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
+                            sub_url = base_url + parent_path.rstrip('/') + combined
+                            sub_status = await try_request(sub_url)
+                            if sub_status and 200 <= sub_status < 400:
+                                sub_endpoints.add(parent_path.rstrip('/') + combined)
+                
+                return (parent_path, sub_endpoints, status_code if status_code else 0)
+        
+        tasks = [probe_with_semaphore(p) for p in parent_paths_to_probe]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, tuple) and len(result) == 3:
+                parent_path, sub_endpoints, status_code = result
+                if status_code in (200, 401, 403):
+                    probed_results[parent_path] = sub_endpoints
+        
+        return probed_results
         
         return probed_results
     
