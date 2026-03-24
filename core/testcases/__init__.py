@@ -96,7 +96,13 @@ class TestCaseManager:
         self._libraries: Dict[str, TestCaseSet] = {}
     
     def load(self, category: str = "owasp_api_security") -> TestCaseSet:
-        """加载测试用例库"""
+        """加载测试用例库
+        
+        Args:
+            category: 测试库名称，可以是：
+                - 文件名: "owasp_api_security"
+                - 子目录/文件名: "BOLA/idor_tests"
+        """
         if category in self._libraries:
             return self._libraries[category]
         
@@ -105,6 +111,10 @@ class TestCaseManager:
         if not yaml_path.exists():
             raise FileNotFoundError(f"Test case library not found: {yaml_path}")
         
+        return self._load_yaml(yaml_path, category)
+    
+    def _load_yaml(self, yaml_path: Path, category: str) -> TestCaseSet:
+        """从 YAML 文件加载测试用例"""
         with open(yaml_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
         
@@ -139,7 +149,12 @@ class TestCaseManager:
         return library
     
     def load_all(self) -> Dict[str, TestCaseSet]:
-        """加载所有测试用例库"""
+        """加载所有测试用例库
+        
+        支持两种加载方式:
+        1. 根目录 YAML 文件: owasp_api_security.yaml -> "owasp_api_security"
+        2. 子目录 YAML 文件: BOLA/idor_tests.yaml -> "BOLA/idor_tests"
+        """
         libraries = {}
         
         for yaml_file in self.base_path.glob("*.yaml"):
@@ -148,6 +163,15 @@ class TestCaseManager:
                 libraries[category] = self.load(category)
             except Exception as e:
                 print(f"Failed to load {category}: {e}")
+        
+        for subdir in self.base_path.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith('_'):
+                for yaml_file in subdir.glob("*.yaml"):
+                    category = f"{subdir.name}/{yaml_file.stem}"
+                    try:
+                        libraries[category] = self.load(category)
+                    except Exception as e:
+                        print(f"Failed to load {category}: {e}")
         
         return libraries
     

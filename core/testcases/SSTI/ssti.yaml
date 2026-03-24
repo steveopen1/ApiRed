@@ -1,0 +1,158 @@
+# SSTI - Server Side Template Injection Tests
+# Reference: CWE-1336, OWASP API4-2023
+
+api_version: "1.0"
+category: SSTI
+
+test_cases:
+
+  - id: SSTI-001
+    name: Jinja2 Template Injection
+    severity: CRITICAL
+    category: SSTI
+    cwe_id: CWE-1336
+    owasp_ref: API4-2023
+    description: |
+      Test for Server Side Template Injection in Jinja2 (Python) templates.
+      {{7*7}} should return 49 if vulnerable.
+    vuln_type: SSTI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "{{7*7}}"
+      - "{{config}}"
+      - "{{request}}"
+      - "{{ ''.__class__.__mro__[1__.__subclasses__() }}"
+    expected_response:
+      check_pattern: "49"
+    validation:
+      type: template_evaluation
+      indicators:
+        - "49"
+        - "config"
+        - "<class"
+    remediation: |
+      Never use user input directly in template rendering.
+      Use sandboxed template engines.
+      Implement proper input validation.
+
+  - id: SSTI-002
+    name: Freemarker Template Injection
+    severity: CRITICAL
+    category: SSTI
+    cwe_id: CWE-1336
+    description: |
+      Test for Server Side Template Injection in Freemarker (Java) templates.
+    vuln_type: SSTI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "${7*7}"
+      - "${config}"
+      - "${product.getClass().getModule().getName()}"
+    expected_response:
+      check_pattern: "49"
+    validation:
+      type: template_evaluation
+      indicators:
+        - "49"
+        - "Freemarker"
+    remediation: |
+      Never use user input in template rendering.
+      Use secure template configuration.
+      Validate input against expected patterns.
+
+  - id: SSTI-003
+    name: Thymeleaf Template Injection
+    severity: CRITICAL
+    category: SSTI
+    cwe_id: CWE-1336
+    description: |
+      Test for Server Side Template Injection in Thymeleaf (Java) templates.
+    vuln_type: SSTI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "#{7*7}"
+      - "@{T(java.lang.Runtime).getRuntime().exec('id')}"
+    expected_response:
+      check_pattern: "49"
+    validation:
+      type: template_evaluation
+      indicators:
+        - "49"
+    remediation: |
+      Never use user input in template expressions.
+      Use Spring's SandBoxSecurityConfiguration.
+      Implement proper input validation.
+
+  - id: SSTI-004
+    name: Twig Template Injection
+    severity: CRITICAL
+    category: SSTI
+    cwe_id: CWE-1336
+    description: |
+      Test for Server Side Template Injection in Twig (PHP) templates.
+    vuln_type: SSTI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "{{7*7}}"
+      - "{{_self}}"
+      - "{{app}}"
+    expected_response:
+      check_pattern: "49"
+    validation:
+      type: template_evaluation
+      indicators:
+        - "49"
+        - "Twig"
+    remediation: |
+      Never use user input in template rendering.
+      Use Twig's sandbox mode.
+      Validate input properly.
+
+  - id: SSTI-005
+    name: Handlebars Template Injection
+    severity: CRITICAL
+    category: SSTI
+    cwe_id: CWE-1336
+    description: |
+      Test for Server Side Template Injection in Handlebars (JavaScript) templates.
+    vuln_type: SSTI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "{{7*7}}"
+      - "{{this}}"
+      - "{{#with \"\" as |var|}}{{var}}{{/with}}"
+    expected_response:
+      check_pattern: "49"
+    validation:
+      type: template_evaluation
+      indicators:
+        - "49"
+    remediation: |
+      Never use user input in template rendering.
+      Use Handlebars safe-string or escape.
+      Validate input properly.

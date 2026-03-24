@@ -1,0 +1,127 @@
+# CRLF - Carriage Return Line Feed Injection Tests
+# Reference: CWE-93, OWASP API4-2023
+
+api_version: "1.0"
+category: CRLF
+
+test_cases:
+
+  - id: CRLF-001
+    name: HTTP Response Splitting via query parameter
+    severity: HIGH
+    category: CRLF
+    cwe_id: CWE-93
+    owasp_ref: API4-2023
+    description: |
+      Test for HTTP Response Splitting vulnerability by injecting
+      CRLF characters in query parameters.
+    vuln_type: CRLF_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "%0d%0aSet-Cookie:%20evil=xxx"
+      - "%0d%0aContent-Length:%200%0d%0a%0d%0aHTTP/1.1%20200%20OK"
+      - "test%0a%0dX-Injected:%20header"
+    expected_response:
+      check_pattern: "(?i)set-cookie.*evil"
+    validation:
+      type: header_injection
+      indicators:
+        - "Set-Cookie: evil"
+        - "X-Injected"
+        - "HTTP/1.1 200 OK"
+    remediation: |
+      Sanitize user input to remove CR and LF characters.
+      Use proper output encoding.
+      Validate input against expected format.
+
+  - id: CRLF-002
+    name: Log Injection via user-agent header
+    severity: LOW
+    category: CRLF
+    cwe_id: CWE-117
+    description: |
+      Test for Log Injection by injecting CRLF in User-Agent header.
+      Attackers can forge log entries.
+    vuln_type: CRLF_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: User-Agent
+        type: string
+        location: header
+    payloads:
+      - "Mozilla/5.0%0d%0aInjected-Log: malicious entry"
+      - "Mozilla/5.0%0a%0dAdmin%20Login%20Success"
+    validation:
+      type: log_injection
+      indicators:
+        - "Injected-Log"
+        - "Admin Login Success"
+    remediation: |
+      Sanitize log output.
+      Encode or remove newline characters.
+      Use structured logging.
+
+  - id: CRLF-003
+    name: HTTP Header Injection via path
+    severity: MEDIUM
+    category: CRLF
+    cwe_id: CWE-93
+    description: |
+      Test for HTTP Header Injection via path parameters.
+    vuln_type: CRLF_INJECTION
+    method: GET
+    path: /api/{path}
+    parameters:
+      - name: path
+        type: string
+        location: path
+    payloads:
+      - "normal%0d%0aX-Injected-Header:%20value"
+      - "test%0a%0dLocation:%20https://evil.com"
+    expected_response:
+      headers_check:
+        - X-Injected-Header
+        - Location
+    validation:
+      type: header_injection
+      indicators:
+        - "X-Injected-Header"
+        - "Location: https://evil"
+    remediation: |
+      Validate path parameters.
+      Remove or encode CRLF characters.
+      Use path allowlists.
+
+  - id: CRLF-004
+    name: XSS via CRLF injection
+    severity: HIGH
+    category: CRLF
+    cwe_id: CWE-79
+    description: |
+      Test for XSS via CRLF injection in headers.
+      Newlines can be used to inject additional headers or body content.
+    vuln_type: CRLF_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "%0d%0a%0d%0a<script>alert(1)</script>"
+      - "test%0a%0dContent-Type:%20text/html%0a%0d%0a<html>"
+    validation:
+      type: header_and_body_injection
+      indicators:
+        - "<script>alert"
+        - "Content-Type: text/html"
+    remediation: |
+      Encode output properly.
+      Sanitize user input.
+      Use Content-Type Security headers.

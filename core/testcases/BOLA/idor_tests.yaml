@@ -1,0 +1,186 @@
+# BOLA - Broken Object Level Authorization Tests
+# Test cases for IDOR vulnerabilities
+# Reference: OWASP API Security Top 10 2023 - API1
+
+api_version: "1.0"
+category: BOLA
+
+test_cases:
+
+  - id: BOLA-001
+    name: IDOR by manipulating numeric ID in path
+    severity: HIGH
+    category: BOLA
+    cwe_id: CWE-639
+    owasp_ref: API1-2023
+    description: |
+      Test for IDOR vulnerabilities by manipulating numeric object IDs in the URL path.
+      Attempt to access another user's resource by changing the ID parameter.
+    vuln_type: IDOR
+    method: GET
+    path: /api/{resource}/{id}
+    parameters:
+      - name: id
+        type: integer
+        location: path
+    payloads:
+      - "999999"
+      - "0"
+      - "-1"
+      - "123456"
+    expected_response:
+      status_code: 200
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "forbidden"
+        - "not found"
+        - "permission"
+      false_positive_patterns:
+        - "public"
+        - "anonymous"
+        - "guest"
+    remediation: |
+      Implement proper authorization checks for all object-level operations.
+      Use indirect references instead of direct object IDs.
+      Validate that the requested object belongs to the authenticated user.
+
+  - id: BOLA-002
+    name: IDOR by manipulating UUID/string ID in path
+    severity: HIGH
+    category: BOLA
+    cwe_id: CWE-639
+    owasp_ref: API1-2023
+    description: |
+      Test for IDOR vulnerabilities by manipulating UUID or string-based object IDs.
+    vuln_type: IDOR
+    method: GET
+    path: /api/{resource}/{uuid}
+    parameters:
+      - name: uuid
+        type: string
+        location: path
+    payloads:
+      - "550e8400-e29b-41d4-a716-446655440000"
+      - "user-123-456-789"
+      - "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    expected_response:
+      status_code: 200
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "forbidden"
+        - "not found"
+      false_positive_patterns:
+        - "public"
+        - "anonymous"
+    remediation: |
+      Implement proper authorization checks.
+      Validate object ownership before returning data.
+
+  - id: BOLA-003
+    name: IDOR via query parameter manipulation
+    severity: HIGH
+    category: BOLA
+    cwe_id: CWE-639
+    owasp_ref: API1-2023
+    description: |
+      Test for IDOR vulnerabilities by manipulating object IDs in query parameters.
+    vuln_type: IDOR
+    method: GET
+    path: /api/{resource}
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "user_id=999999"
+      - "id=0"
+      - "object_id=-1"
+      - "resource_id=123456"
+    expected_response:
+      status_code: 200
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "forbidden"
+    false_positive_patterns:
+      - "public"
+      - "anonymous"
+    remediation: |
+      Implement proper authorization checks for all query parameter-based lookups.
+      Validate that the requested object belongs to the authenticated user.
+
+  - id: BOLA-004
+    name: IDOR via header parameter
+    severity: HIGH
+    category: BOLA
+    cwe_id: CWE-639
+    owasp_ref: API1-2023
+    description: |
+      Test for IDOR vulnerabilities by manipulating object IDs in HTTP headers.
+    vuln_type: IDOR
+    method: GET
+    path: /api/{resource}
+    parameters:
+      - name: X-Object-ID
+        type: string
+        location: header
+    payloads:
+      - "999999"
+      - "0"
+      - "-1"
+    expected_response:
+      status_code: 200
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "forbidden"
+    remediation: |
+      Implement proper authorization checks for header-based object lookups.
+      Never trust object IDs from request headers without validation.
+
+  - id: BOLA-005
+    name: IDOR via JSON body parameter
+    severity: HIGH
+    category: BOLA
+    cwe_id: CWE-639
+    owasp_ref: API1-2023
+    description: |
+      Test for IDOR vulnerabilities in POST/PUT requests by manipulating object IDs in JSON body.
+    vuln_type: IDOR
+    method: POST
+    path: /api/{resource}/action
+    parameters:
+      - name: target_id
+        type: string
+        location: body
+    attack_vectors:
+      - name: privilege_escalation_via_body
+        payload:
+          target_id: "999999"
+          action: "delete"
+      - name: object_manipulation
+        payload:
+          object_id: "123456"
+          owner_id: "999999"
+    expected_response:
+      status_code: 200
+    validation:
+      type: response_comparison
+      indicators:
+        - "unauthorized"
+        - "access denied"
+        - "forbidden"
+        - "success"
+    remediation: |
+      Implement proper authorization checks for all POST/PUT operations.
+      Validate object ownership before performing actions.

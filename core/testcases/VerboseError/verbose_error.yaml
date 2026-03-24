@@ -1,0 +1,156 @@
+# VerboseError - Verbose Error Message Tests
+# Reference: CWE-11, CWE-388, OWASP API7-2023
+
+api_version: "1.0"
+category: VerboseError
+
+test_cases:
+
+  - id: VERBOSE-001
+    name: Stack trace exposure
+    severity: MEDIUM
+    category: VerboseError
+    cwe_id: CWE-11
+    owasp_ref: API7-2023
+    description: |
+      Test for verbose error messages that expose stack traces.
+      Stack traces can reveal internal implementation details.
+    vuln_type: VERBOSE_ERROR
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    attack_vectors:
+      - name: invalid_json
+        payload: "{invalid"
+      - name: special_chars
+        payload: "'\";--"
+      - name: type_mismatch
+        payload: "string_for_int_param"
+    expected_response:
+      check_pattern: "(stack|trace|at java|at python|Exception)"
+    validation:
+      type: error_disclosure
+      indicators:
+        - "at java."
+        - "Traceback"
+        - "Exception"
+        - "Error in"
+        - "stack trace"
+    remediation: |
+      Implement custom error pages.
+      Log detailed errors server-side only.
+      Return generic error messages to clients.
+
+  - id: VERBOSE-002
+    name: Database error exposure
+    severity: MEDIUM
+    category: VerboseError
+    cwe_id: CWE-209
+    description: |
+      Test for verbose database error messages that expose SQL queries
+      or database structure information.
+    vuln_type: VERBOSE_ERROR
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "'"
+      - "1' AND '1'='1"
+      - "\""
+      - "\\"
+    expected_response:
+      check_pattern: "(sql|syntax|mysql|postgres|sqlite|oracle|mssql|sqlcode)"
+    validation:
+      type: error_disclosure
+      indicators:
+        - "SQL"
+        - "syntax error"
+        - "MySQL"
+        - "PostgreSQL"
+        - "Oracle"
+        - "SQLite"
+        - "Microsoft SQL Server"
+        - "ODBC"
+    remediation: |
+      Implement proper error handling.
+      Return generic database errors to users.
+      Log detailed errors server-side.
+
+  - id: VERBOSE-003
+    name: Source code exposure
+    severity: HIGH
+    category: VerboseError
+    cwe_id: CWE-540
+    description: |
+      Test for error messages that expose source code or
+      internal implementation details.
+    vuln_type: VERBOSE_ERROR
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "null"
+      - "undefined"
+      - "NaN"
+      - "../"
+    expected_response:
+      check_pattern: "(function|var |const |class |import |require|module|exports)"
+    validation:
+      type: source_disclosure
+      indicators:
+        - "function"
+        - "const "
+        - "var "
+        - "class "
+        - "import "
+        - "require("
+        - "module.exports"
+    remediation: |
+      Configure error handlers properly.
+      Disable detailed errors in production.
+      Return generic error messages.
+
+  - id: VERBOSE-004
+    name: Internal path exposure
+    severity: MEDIUM
+    category: VerboseError
+    cwe_id: CWE-538
+    description: |
+      Test for error messages that expose internal file paths
+      or directory structures.
+    vuln_type: VERBOSE_ERROR
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "../../../etc/passwd"
+      - "../../webapp/WEB-INF/web.xml"
+      - "../internal/config"
+    expected_response:
+      check_pattern: "(/home/|/var/|/usr/|/opt/|/etc/|C:\\\\|\\\\\\\\inetpub\\\\)"
+    validation:
+      type: path_disclosure
+      indicators:
+        - "/home/"
+        - "/var/"
+        - "/usr/"
+        - "/opt/"
+        - "/etc/"
+        - "C:\\"
+        - "inetpub"
+    remediation: |
+      Sanitize error messages.
+      Remove file paths from error responses.
+      Use generic error messages.

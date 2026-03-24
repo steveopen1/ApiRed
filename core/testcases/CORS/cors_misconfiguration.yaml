@@ -1,0 +1,152 @@
+# CORS - Cross-Origin Resource Sharing Misconfiguration Tests
+# Reference: CWE-942, OWASP
+
+api_version: "1.0"
+category: CORS
+
+test_cases:
+
+  - id: CORS-001
+    name: Origin reflection allowing arbitrary origins
+    severity: MEDIUM
+    category: CORS
+    cwe_id: CWE-942
+    description: |
+      Test for CORS misconfiguration that allows arbitrary origins.
+      The server reflects the Origin header without validation.
+    vuln_type: CORS_MISCONFIG
+    method: GET
+    path: /api/{endpoint}
+    checks:
+      - name: origin_reflection
+        attack_vector:
+          Origin: https://evil.example.com
+        validation:
+          access_control_allow_origin: "https://evil.example.com"
+          access_control_allow_credentials: "true"
+    expected_response:
+      headers_check:
+        - Access-Control-Allow-Origin
+        - Access-Control-Allow-Credentials
+    validation:
+      type: header_check
+      indicators:
+        - "Access-Control-Allow-Origin: *"
+        - "Access-Control-Allow-Origin: https://evil"
+    remediation: |
+      Validate Origin header against an allowlist.
+      Do not reflect arbitrary origins.
+      Use secure CORS configuration.
+
+  - id: CORS-002
+    name: Null origin allowed
+    severity: MEDIUM
+    category: CORS
+    cwe_id: CWE-942
+    description: |
+      Test for CORS misconfiguration that allows null origin.
+      File:// or null origin bypasses CORS restrictions.
+    vuln_type: CORS_MISCONFIG
+    method: GET
+    path: /api/{endpoint}
+    checks:
+      - name: null_origin
+        attack_vector:
+          Origin: "null"
+        validation:
+          access_control_allow_origin: "null"
+    validation:
+      type: header_check
+      indicators:
+        - "Access-Control-Allow-Origin: null"
+    remediation: |
+      Reject null origin in CORS configuration.
+      Use secure origin validation.
+
+  - id: CORS-003
+    name: Wildcard origin with credentials
+    severity: HIGH
+    category: CORS
+    cwe_id: CWE-942
+    description: |
+      Test for dangerous CORS configuration that uses wildcard
+      origin with Access-Control-Allow-Credentials: true.
+    vuln_type: CORS_MISCONFIG
+    method: GET
+    path: /api/{endpoint}
+    checks:
+      - name: wildcard_with_credentials
+        attack_vector:
+          Origin: https://any.example.com
+        validation:
+          access_control_allow_origin: "*"
+          access_control_allow_credentials: "true"
+    expected_response:
+      headers_check:
+        - Access-Control-Allow-Origin
+        - Access-Control-Allow-Credentials
+    validation:
+      type: header_check
+      indicators:
+        - "Access-Control-Allow-Origin: *"
+        - "Access-Control-Allow-Credentials: true"
+    remediation: |
+      Never use wildcard (*) with credentials.
+      Specify exact origins when credentials are needed.
+
+  - id: CORS-004
+    name: Missing Access-Control-Allow-Credentials on sensitive endpoint
+    severity: MEDIUM
+    category: CORS
+    cwe_id: CWE-942
+    description: |
+      Test for CORS configuration on sensitive endpoints.
+      Credentials may be sent without proper CORS validation.
+    vuln_type: CORS_MISCONFIG
+    method: GET
+    path: /api/user/profile
+    checks:
+      - name: sensitive_endpoint_cors
+        attack_vector:
+          Origin: https://trusted.example.com
+          Cookie: "session=123"
+        validation:
+          access_control_allow_credentials: "true"
+    validation:
+      type: header_check
+      indicators:
+        - missing_allow_credentials
+    remediation: |
+      Configure CORS properly for sensitive endpoints.
+      Ensure credentials are only sent to trusted origins.
+
+  - id: CORS-005
+    name: Unsafe Allow-Methods or Allow-Headers
+    severity: LOW
+    category: CORS
+    cwe_id: CWE-942
+    description: |
+      Test for CORS misconfiguration that allows unsafe methods
+      or headers in CORS configuration.
+    vuln_type: CORS_MISCONFIG
+    method: OPTIONS
+    path: /api/{endpoint}
+    checks:
+      - name: unsafe_methods_headers
+        attack_vector:
+          Origin: https://trusted.example.com
+          Access-Control-Request-Method: DELETE
+          Access-Control-Request-Headers: authorization,x-custom-header
+        validation:
+          access_control_allow_methods: "DELETE"
+          access_control_allow_headers: "authorization,x-custom-header"
+    validation:
+      type: header_check
+      indicators:
+        - "Access-Control-Allow-Methods: DELETE"
+        - "Access-Control-Allow-Methods: PUT"
+        - "Access-Control-Allow-Methods: DELETE"
+    remediation: |
+      Limit allowed methods to minimum necessary.
+      Limit allowed headers to minimum necessary.
+      Validate all CORS configuration.
