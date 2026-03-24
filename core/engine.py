@@ -6,6 +6,7 @@ ScanEngine - 统一扫描引擎
 import asyncio
 import time
 import os
+import re
 import logging
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
@@ -1011,74 +1012,269 @@ class ScanEngine:
         if not parent_paths:
             return fuzzed_results
         
-        all_suffixes = set()
-        all_suffixes.update(self.RESTFUL_SUFFIXES)
+        return fuzzed_results
+    
+    async def _cross_source_fuzz(self) -> Dict[str, Set[str]]:
+        """
+        跨来源智能路径组合Fuzzing
+        
+        从所有HTTP响应中提取路径片段进行智能组合：
+        1. 从主页面响应中提取链接
+        2. 从JS响应中提取API路径
+        3. 从API响应中提取关联路径
+        4. 跨来源路径片段组合
+        
+        例如:
+        - 来源1: /api/users (来自JS)
+        - 来源2: /user/list (来自HTML)
+        - 组合: /api/users/list, /api/user/list
+        
+        Returns:
+            {探测到的有效路径: 来源信息}
+        """
+        fuzzed_results = {}
+        base_url = self.config.target.rstrip('/')
+        
+        all_path_segments = set()
+        all_suffixes = set(self.RESTFUL_SUFFIXES)
         all_suffixes.update(self.FUZZ_SUFFIXES)
-        all_suffixes.update(js_suffixes)
         
-        all_resources = set()
-        all_resources.update(self.PATH_FRAGMENTS)
-        all_resources.update(js_resources)
+        await self._collect_all_path_segments(all_path_segments, all_suffixes)
         
-        fuzz_targets: List[Tuple[str, str]] = []
+        if not all_path_segments:
+            return fuzzed_results
         
-        for parent_path in parent_paths:
-            parent_base = parent_path.rstrip('/')
-            
-            for suffix in list(all_suffixes)[:suffix_limit]:
-                if suffix.startswith('/'):
-                    fuzz_targets.append((parent_base, suffix))
-                else:
-                    fuzz_targets.append((parent_base, f'/{suffix}'))
-            
-            for resource in list(all_resources)[:resource_limit]:
-                for suffix in list(self.RESTFUL_SUFFIXES)[:30]:
-                    if suffix:
-                        fuzz_targets.append((parent_base, f'/{resource}{suffix}'))
-                    else:
-                        fuzz_targets.append((parent_base, f'/{resource}'))
+        logger.info(f"Cross-source fuzzing with {len(all_path_segments)} path segments...")
         
-        for resource in list(all_resources)[:resource_limit]:
-            for suffix in list(all_suffixes)[:independent_suffix_limit]:
-                if suffix.startswith('/'):
-                    path = f'/{resource}{suffix}'
-                else:
-                    path = f'/{resource}/{suffix}'
-                if path not in existing_apis:
-                    fuzz_targets.append(('', path))
+        fuzz_targets = self._generate_cross_fuzz_targets(all_path_segments, all_suffixes)
         
-        async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
+        logger.info(f"Generated {len(fuzz_targets)} fuzz targets")
+        
+        async def probe_target(base: str, path: str) -> Optional[str]:
+            full_url = base_url + base + path
             try:
-                response = await self._http_client.request(url, method=method, timeout=5)
-                return response.status_code
+                response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                if response.status_code and 200 <= response.status_code < 400:
+                    return base + path
             except Exception:
-                if method == 'HEAD':
-                    return await try_request(url, 'GET')
+                try:
+                    response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    if response.status_code and 200 <= response.status_code < 400:
+                        return base + path
+                except Exception:
+                    pass
             return None
-        
-        async def probe_fuzz_target(base: str, path: str) -> Optional[str]:
-            full_url = base_url + base + path if base else base_url + path
-            status_code = await try_request(full_url)
-            if status_code and 200 <= status_code < 400:
-                return base + path if base else path
-            return None
-        
-        logger.info(f"Fuzzing {len(fuzz_targets)} API path combinations...")
         
         batch_size = 50
         for i in range(0, len(fuzz_targets), batch_size):
             batch = fuzz_targets[i:i+batch_size]
-            tasks = [probe_fuzz_target(base, path) for base, path in batch]
+            tasks = [probe_target(base, path) for base, path in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             for result in results:
                 if result and isinstance(result, str):
-                    parent = '/' + '/'.join(result.rstrip('/').split('/')[:-1])
-                    if parent not in fuzzed_results:
-                        fuzzed_results[parent] = set()
-                    fuzzed_results[parent].add(result)
+                    fuzzed_results[result] = {'source': 'cross_fuzz'}
         
         return fuzzed_results
+    
+    async def _collect_all_path_segments(self, path_segments: set, suffixes: set):
+        """
+        从所有HTTP响应中收集路径片段
+        
+        收集来源:
+        1. 主页HTML中的链接
+        2. 所有JS文件内容
+        3. 所有API响应
+        4. 响应中的URL
+        """
+        try:
+            main_response = await self._http_client.request(self.config.target, timeout=10)
+            if main_response and main_response.status_code == 200:
+                content = main_response.content
+                
+                href_pattern = re.compile(r'href=["\']([^"\']+)["\']')
+                for match in href_pattern.findall(content):
+                    if self._is_valid_path_segment(match):
+                        path_segments.add(self._normalize_path_segment(match))
+                
+                src_pattern = re.compile(r'src=["\']([^"\']+)["\']')
+                for match in src_pattern.findall(content):
+                    if self._is_valid_path_segment(match):
+                        path_segments.add(self._normalize_path_segment(match))
+                
+                action_pattern = re.compile(r'action=["\']([^"\']+)["\']')
+                for match in action_pattern.findall(content):
+                    if self._is_valid_path_segment(match):
+                        path_segments.add(self._normalize_path_segment(match))
+                
+                url_pattern = re.compile(r'url:\s*["\']([^"\']+)["\']')
+                for match in url_pattern.findall(content):
+                    if self._is_valid_path_segment(match):
+                        path_segments.add(self._normalize_path_segment(match))
+                
+                api_url_pattern = re.compile(r'["\'](\/api\/[^"\']+)["\']')
+                for match in api_url_pattern.findall(content):
+                    if self._is_valid_path_segment(match):
+                        path_segments.add(self._normalize_path_segment(match))
+                        
+        except Exception as e:
+            logger.debug(f"Failed to collect from main page: {e}")
+        
+        try:
+            js_urls = await self._extract_all_js_urls()
+            for js_url in js_urls:
+                try:
+                    js_response = await self._http_client.request(js_url, timeout=10)
+                    if js_response and js_response.status_code == 200:
+                        content = js_response.content
+                        
+                        api_pattern = re.compile(r'["\'](/[a-zA-Z0-9_/-]+)["\']')
+                        for match in api_pattern.findall(content):
+                            if self._is_valid_path_segment(match):
+                                path_segments.add(self._normalize_path_segment(match))
+                        
+                        config_pattern = re.compile(r'(?:baseURL|apiUrl|api_base)\s*[:=]\s*["\']([^"\']+)["\']')
+                        for match in config_pattern.findall(content):
+                            if match.startswith('/'):
+                                path_segments.add(self._normalize_path_segment(match))
+                        
+                        router_pattern = re.compile(r'router(?:\.push|\.replace)\(["\']([^"\']+)["\']')
+                        for match in router_pattern.findall(content):
+                            if self._is_valid_path_segment(match):
+                                path_segments.add(self._normalize_path_segment(match))
+                                
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    
+    async def _extract_all_js_urls(self) -> List[str]:
+        """提取所有JS URL"""
+        js_urls = []
+        try:
+            response = await self._http_client.request(self.config.target, timeout=10)
+            if response and response.status_code == 200:
+                script_pattern = re.compile(r'<script[^>]+src=["\']([^"\']+\.js)["\']', re.IGNORECASE)
+                for match in script_pattern.findall(response.content):
+                    if match.startswith('http'):
+                        js_urls.append(match)
+                    elif match.startswith('//'):
+                        js_urls.append('https:' + match)
+                    else:
+                        base = self.config.target.rstrip('/')
+                        js_urls.append(base + match if match.startswith('/') else base + '/' + match)
+        except Exception:
+            pass
+        return js_urls
+    
+    def _is_valid_path_segment(self, path: str) -> bool:
+        """判断路径片段是否有效"""
+        if not path or len(path) < 2:
+            return False
+        
+        if path.startswith('http') or path.startswith('//') or path.startswith('javascript'):
+            return False
+        
+        if path.startswith('./') or path.startswith('../'):
+            return False
+        
+        invalid_ext = ('.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2')
+        if any(path.lower().endswith(ext) for ext in invalid_ext):
+            return False
+        
+        if re.match(r'^[\w]+://', path):
+            return False
+        
+        if re.search(r'[\(\)\<\>\[\]{}"]', path):
+            return False
+        
+        return True
+    
+    def _normalize_path_segment(self, path: str) -> str:
+        """规范化路径片段"""
+        path = path.strip()
+        
+        if path.startswith('"') or path.startswith("'"):
+            path = path[1:]
+        if path.endswith('"') or path.endswith("'"):
+            path = path[:-1]
+        
+        path = path.split('?')[0]
+        path = path.split('#')[0]
+        
+        if path.startswith('/'):
+            path = path[1:]
+        
+        return path
+    
+    def _generate_cross_fuzz_targets(self, path_segments: set, suffixes: set) -> List[Tuple[str, str]]:
+        """
+        生成跨来源Fuzzing目标组合
+        
+        策略:
+        1. 路径片段 + RESTful后缀 (/user + /list -> /user/list)
+        2. API前缀 + 路径片段 (/api + /users -> /api/users)
+        3. 完整路径拼接 (/users + /profile -> /users/profile)
+        4. 去重单复数组合 (user <-> users)
+        """
+        targets = set()
+        
+        segments = sorted(list(path_segments), key=len, reverse=True)
+        
+        for i, seg1 in enumerate(segments):
+            for seg2 in segments[i+1:]:
+                if seg1 == seg2:
+                    continue
+                
+                if '/' not in seg1 and '/' not in seg2:
+                    continue
+                
+                candidates = [
+                    (seg1, '/' + seg2),
+                    (seg2, '/' + seg1),
+                ]
+                
+                if self._is_likely_api_segment(seg1) and not self._is_likely_api_segment(seg2):
+                    candidates.append((seg1, '/' + seg2))
+                elif self._is_likely_api_segment(seg2) and not self._is_likely_api_segment(seg1):
+                    candidates.append((seg2, '/' + seg1))
+                
+                for base, path in candidates:
+                    if base and path:
+                        targets.add((base, path))
+        
+        for segment in segments:
+            for suffix in list(suffixes)[:50]:
+                if suffix.startswith('/'):
+                    targets.add((segment, suffix))
+                else:
+                    targets.add((segment, '/' + suffix))
+        
+        api_prefixes = ['api', 'v1', 'v2', 'v3', 'rest', 'rpc', 'graphql']
+        for prefix in api_prefixes:
+            for segment in segments:
+                if prefix not in segment and not segment.startswith(prefix):
+                    targets.add(('', '/' + prefix + '/' + segment))
+                    targets.add(('api', '/' + prefix + '/' + segment))
+        
+        return list(targets)[:5000]
+    
+    def _is_likely_api_segment(self, segment: str) -> bool:
+        """判断路径片段是否是API相关"""
+        api_keywords = [
+            'user', 'users', 'order', 'orders', 'product', 'products',
+            'admin', 'login', 'logout', 'auth', 'token', 'api', 'menu',
+            'role', 'permission', 'config', 'system', 'dict', 'dept',
+            'menu', 'dict', 'log', 'monitor', 'tool', 'gen'
+        ]
+        
+        segment_lower = segment.lower()
+        
+        for keyword in api_keywords:
+            if keyword in segment_lower:
+                return True
+        
+        return False
     
     async def _extract_apis(self) -> Dict[str, Any]:
         """提取API端点 + 基于框架生成更多端点"""
@@ -1299,6 +1495,25 @@ class ScanEngine:
                         api_find_result,
                         source_info={'source': f'fuzz_api:{parent_path}'}
                     )
+        
+        logger.info("Starting cross-source fuzzing for additional API discovery...")
+        cross_fuzz_results = await self._cross_source_fuzz()
+        
+        for fuzzed_path, info in cross_fuzz_results.items():
+            if fuzzed_path not in existing_paths:
+                existing_paths.add(fuzzed_path)
+                from .collectors.api_collector import APIFindResult
+                api_find_result = APIFindResult(
+                    path=fuzzed_path,
+                    method="GET",
+                    source_type="cross_source_fuzz",
+                    base_url="",
+                    url_type="fuzzed"
+                )
+                self._api_aggregator.add_api(
+                    api_find_result,
+                    source_info={'source': 'cross_source_fuzz'}
+                )
         
         raw_endpoints = self._api_aggregator.get_all()
         final_endpoints = []
