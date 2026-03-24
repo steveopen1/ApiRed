@@ -32,6 +32,18 @@
       "pattern": "(?i)(sleep\\(|waitfor|benchmark\\()",
       "description": "SQL Time-based Blind Injection",
       "severity": "high"
+    },
+    {
+      "name": "sqli_or_classic",
+      "pattern": "'\\s*[Oo][Rr]\\s+'[^']+'='[^']+",
+      "description": "SQL Classic OR Injection",
+      "severity": "critical"
+    },
+    {
+      "name": "sqli_or_numeric",
+      "pattern": "(?i)(or|and)\\s+\\d+\\s*=\\s*\\d+",
+      "description": "SQL OR Numeric Injection",
+      "severity": "high"
     }
   ]
 }
