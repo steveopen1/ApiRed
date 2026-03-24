@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional, Set
 from urllib.parse import urlparse
 import logging
 import hashlib
+import os
 
 from .orchestrator import AgentInterface, ScanContext
 from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
@@ -17,9 +18,13 @@ from ..testers.bypass_techniques import BypassTechniques
 from ..testers.vulnerability_tester import VulnerabilityTester
 from ..testers.fuzzer import SmartFuzzer
 from ..rules.sensitive_detector import SensitiveRuleEngine
-from ..analyzers.response_baseline import ResponseDifferentiator
+from ..analyzers.response_baseline import ResponseDifferentiator, ResponseBaselineLearner
 from ..analyzers.response_cluster import ResponseCluster
 from ..analyzers.api_scorer import APIScorer
+from ..analyzers.test_selector import TestSelector, TestCategory
+from ..analyzers.endpoint_analyzer import EndpointAnalyzer
+from ..utils.gf import GFLibrary
+from ..utils.http_client import AsyncHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -38,20 +43,49 @@ class TestAgent(AgentInterface):
         self._sensitive_detector = None
         self._differentiator = None
         self._response_cluster = None
+        self._response_baseline = None
         self._api_scorer = None
+        self._test_selector = None
+        self._endpoint_analyzer = None
+        self._gf_library = None
         self._tested_urls = set()
         self._http_client = None
+    
+    async def initialize(self, context: ScanContext) -> None:
+        """初始化 Agent - 同步主链路模块"""
+        await super().initialize(context)
+        
+        self._http_client = AsyncHttpClient(
+            max_concurrent=context.concurrency,
+            max_retries=3,
+            timeout=30,
+            verify_ssl=True
+        )
+        
+        patterns_dir = os.path.join(os.path.dirname(__file__), '..', 'utils', 'patterns')
+        if os.path.exists(patterns_dir):
+            self._gf_library = GFLibrary(patterns_dir)
+            logger.info(f"TestAgent: GF Library initialized from {patterns_dir}")
+        else:
+            self._gf_library = GFLibrary()
+            logger.info("TestAgent: GF Library initialized with default patterns")
+        
+        self._response_cluster = ResponseCluster()
+        self._response_baseline = ResponseBaselineLearner()
+        self._api_scorer = APIScorer()
+        self._test_selector = TestSelector()
+        self._endpoint_analyzer = EndpointAnalyzer()
     
     def _get_tester(self) -> APIRequestTester:
         """延迟初始化 tester"""
         if self._tester is None:
-            self._tester = APIRequestTester()
+            self._tester = APIRequestTester(self._http_client)
         return self._tester
     
     def _get_vulnerability_tester(self):
         """获取漏洞测试器"""
         if self._vulnerability_tester is None:
-            self._vulnerability_tester = VulnerabilityTester(self._http_client)
+            self._vulnerability_tester = VulnerabilityTester(self._http_client, self._gf_library)
         return self._vulnerability_tester
     
     def _get_bypass_techniques(self):
@@ -78,11 +112,29 @@ class TestAgent(AgentInterface):
             self._response_cluster = ResponseCluster()
         return self._response_cluster
     
+    def _get_response_baseline(self) -> ResponseBaselineLearner:
+        """获取响应基线学习器"""
+        if self._response_baseline is None:
+            self._response_baseline = ResponseBaselineLearner()
+        return self._response_baseline
+    
     def _get_api_scorer(self) -> APIScorer:
         """获取 API 评分器"""
         if self._api_scorer is None:
             self._api_scorer = APIScorer()
         return self._api_scorer
+    
+    def _get_test_selector(self) -> TestSelector:
+        """获取测试选择器"""
+        if self._test_selector is None:
+            self._test_selector = TestSelector()
+        return self._test_selector
+    
+    def _get_endpoint_analyzer(self) -> EndpointAnalyzer:
+        """获取端点分析器"""
+        if self._endpoint_analyzer is None:
+            self._endpoint_analyzer = EndpointAnalyzer()
+        return self._endpoint_analyzer
     
     def _get_smart_fuzzer(self) -> SmartFuzzer:
         """获取智能模糊测试器"""
@@ -190,7 +242,7 @@ class TestAgent(AgentInterface):
         tester = self._get_tester()
 
         try:
-            responses = tester.test_endpoint(full_url, params=None, headers=context.headers)
+            responses = await tester.test_endpoint(full_url, params=None, headers=context.headers)
 
             if responses:
                 first_response = responses[0]
@@ -304,7 +356,7 @@ class TestAgent(AgentInterface):
 
         for endpoint in endpoints[:50]:
             try:
-                responses = tester.test_endpoint(
+                responses = await tester.test_endpoint(
                     f"{context.target.rstrip('/')}{endpoint.path}",
                     params=None,
                     headers=context.headers
