@@ -26,6 +26,8 @@ class ParsedJSResult:
     file_size: int
     parent_paths: Dict[str, List[str]] = field(default_factory=dict)
     path_templates: List[str] = field(default_factory=list)
+    extracted_suffixes: List[str] = field(default_factory=list)
+    resource_fragments: List[str] = field(default_factory=list)
 
 
 class JSFingerprintCache:
@@ -58,7 +60,9 @@ class JSFingerprintCache:
                 content_hash=cache_key,
                 file_size=len(content),
                 parent_paths=cached.get('parent_paths', {}),
-                path_templates=cached.get('path_templates', [])
+                path_templates=cached.get('path_templates', []),
+                extracted_suffixes=cached.get('extracted_suffixes', []),
+                resource_fragments=cached.get('resource_fragments', [])
             )
             
             self._add_to_memory(cache_key, result)
@@ -79,7 +83,9 @@ class JSFingerprintCache:
             'urls': result.urls,
             'dynamic_imports': result.dynamic_imports,
             'parent_paths': result.parent_paths,
-            'path_templates': result.path_templates
+            'path_templates': result.path_templates,
+            'extracted_suffixes': result.extracted_suffixes,
+            'resource_fragments': result.resource_fragments
         }
         regex_data = {
             'base_urls': result.base_urls
@@ -762,6 +768,89 @@ class JSParser:
                 templates.add(template)
         
         return list(templates)
+
+    def extract_suffixes_from_js(self, js_content: str) -> Tuple[List[str], List[str]]:
+        """
+        从 JS 代码中智能提取后缀和资源片段
+        
+        从 JS 代码字符串字面量中识别：
+        - 后缀：list, add, create, delete, detail, info 等
+        - 资源片段：user, order, product, role, menu 等
+        
+        Args:
+            js_content: JS 代码内容
+            
+        Returns:
+            (extracted_suffixes, resource_fragments) 元组
+        """
+        suffixes: Set[str] = set()
+        resources: Set[str] = set()
+        
+        suffix_patterns = [
+            r'["\']((?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)[A-Z][a-zA-Z]*)["\']',
+            r'["\'](/(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)(?:/[^"\']*)?)["\']',
+            r'["\']((?:List|Add|Create|Delete|Detail|Info|Update|Edit|Remove|Get|Set|Save|Submit)[A-Za-z]*)["\']',
+            r'\.(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)\s*\(',
+        ]
+        
+        for pattern in suffix_patterns:
+            for match in re.finditer(pattern, js_content):
+                word = match.group(1) if match.lastindex else match.group(0)
+                if word:
+                    clean_word = word.strip('/').lower()
+                    if len(clean_word) > 2 and len(clean_word) < 30:
+                        suffixes.add(clean_word)
+        
+        resource_patterns = [
+            r'["\'](?:/(?:admin|user|order|product|role|menu|category|config|system|auth|api|v\d+(?:\.\d+)?)/[a-z][a-zA-Z]*(?:/[a-z][a-zA-Z]*)?)["\']',
+            r'["\'](#{(?:/[a-z][a-zA-Z]*)+})["\']',
+            r'(?:url|path|api|endpoint|route)\s*[:=]\s*["\']([^"\']+)["\']',
+        ]
+        
+        for pattern in resource_patterns:
+            for match in re.finditer(pattern, js_content, re.IGNORECASE):
+                path = match.group(1) if match.lastindex else match.group(0)
+                if path:
+                    parts = path.strip('/').split('/')
+                    for part in parts:
+                        if part and len(part) > 2 and len(part) < 30:
+                            if not part.startswith('{') and not part.endswith('}'):
+                                if not part[0].isupper() and part.lower() not in ('api', 'v1', 'v2', 'v3', 'admin'):
+                                    resources.add(part.lower())
+        
+        common_suffixes = [
+            'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+            'get', 'set', 'save', 'submit', 'query', 'search', 'filter', 'sort', 'page',
+            'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+            'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+            'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+            'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
+            'approve', 'reject', 'submit', 'cancel', 'close', 'open', 'check',
+            'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
+        ]
+        
+        for suffix in common_suffixes:
+            if suffix in js_content.lower():
+                suffixes.add(suffix)
+        
+        common_resources = [
+            'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+            'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+            'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
+            'department', 'dept', 'organization', 'org', 'employee', 'employee',
+            'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+            'profile', 'permission', 'permissions', 'resource', 'resources',
+            'article', 'articles', 'news', 'category', 'tag', 'tags', 'comment', 'comments',
+            'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
+            'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
+            'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
+        ]
+        
+        for resource in common_resources:
+            if resource in js_content.lower():
+                resources.add(resource)
+        
+        return (list(suffixes), list(resources))
     
     def generate_crud_guesses(self, resource_path: str) -> List[str]:
         """
@@ -1027,6 +1116,8 @@ class JSParser:
         
         all_urls = list(set(urls + modules + list(chunks.keys())))
         
+        extracted_suffixes, resource_fragments = self.extract_suffixes_from_js(js_content)
+        
         result = ParsedJSResult(
             apis=all_apis,
             urls=all_urls,
@@ -1035,7 +1126,9 @@ class JSParser:
             content_hash="",
             file_size=len(content_bytes),
             parent_paths=parent_paths_map,
-            path_templates=list(path_templates)
+            path_templates=list(path_templates),
+            extracted_suffixes=extracted_suffixes,
+            resource_fragments=resource_fragments
         )
         
         if self.cache:

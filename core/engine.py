@@ -552,6 +552,103 @@ class ScanEngine:
         'news', 'article', 'blog', 'comment', 'file', 'files', 'upload',
         'download', 'image', 'images', 'video', 'videos', 'audio',
     ]
+
+    RESTFUL_SUFFIXES = [
+        '', '/', '/list', '/page', '/all', '/count', '/total', '/sum',
+        '/add', '/create', '/new', '/edit', '/update', '/modify', '/save',
+        '/delete', '/remove', '/del', '/batch', '/batchAdd', '/batchUpdate', '/batchDelete',
+        '/detail', '/info', '/get', '/show', '/find', '/fetch', '/load',
+        '/enable', '/disable', '/toggle', '/status', '/state',
+        '/config', '/configuration', '/settings', '/preferences', '/params',
+        '/export', '/exportExcel', '/exportCsv', '/import', '/importExcel', '/upload', '/download',
+        '/search', '/query', '/filter', '/sort', '/order', '/page', '/pagination',
+        '/listJsonData', '/listData', '/listAll', '/json', '/xml', '/tree', '/treeData', '/treeList',
+        '/options', '/select', '/combo', '/combobox', '/autocomplete', '/suggest',
+        '/submit', '/reset', '/init', '/initialize', '/refresh', '/reload', '/sync', '/merge',
+        '/login', '/logout', '/register', '/signup', '/signin', '/signout', '/resetPwd', '/forgotPwd',
+        '/auth', '/authorize', '/token', '/refreshToken', '/verify', '/validate', '/captcha',
+        '/menu', '/nav', '/navigation', '/sidebar', '/routes', '/permissions', '/access',
+        '/permission', '/permissions', '/perms', '/role', '/roles', '/roleId', '/roleName',
+        '/user', '/users', '/userList', '/userInfo', '/profile', '/account', '/current', '/own',
+        '/dashboard', '/home', '/index', '/welcome', '/main', '/console', '/workspace',
+        '/log', '/logs', '/logging', '/audit', '/history', '/record', '/records', '/track',
+        '/stat', '/stats', '/statistics', '/analytics', '/report', '/reports', '/summary',
+        '/dict', '/dicts', '/dictionary', '/enum', '/enums', '/constants', '/configs',
+        '/area', '/region', '/province', '/city', '/district', '/street', '/address',
+        '/org', '/organization', '/orgId', '/dept', '/department', '/deptId', '/company',
+        '/category', '/categories', '/catalog', '/type', '/types', '/kind', '/class',
+        '/tag', '/tags', '/label', '/labels', '/classify', '/group', '/groups',
+        '/attachment', '/attachments', '/file', '/files', '/document', '/documents', '/doc',
+        '/image', '/images', '/img', '/pictures', '/picture', '/photo', '/photos', '/avatar',
+        '/video', '/videos', '/audio', '/media', '/uploads', '/resource', '/resources',
+        '/comment', '/comments', '/reply', '/replies', '/message', '/messages', '/msg',
+        '/notice', '/notices', '/notification', '/notifications', '/notify', '/alert', '/alerts', '/announce',
+        '/news', '/article', '/articles', '/blog', '/post', '/posts', '/topic', '/topics',
+        '/product', '/products', '/goods', '/item', '/items', '/sku', '/merchandise',
+        '/order', '/orders', '/orderId', '/cart', '/shop', '/store', '/payment', '/transaction', '/trans',
+        '/invoice', '/refund', '/return', '/exchange', '/coupon', '/promo', '/discount',
+        '/workflow', '/process', '/processId', '/task', '/tasks', '/taskId', '/approve', '/approval', '/reject',
+        '/schedule', '/calendar', '/booking', '/appointment', '/reservation', '/resourceId',
+        '/validate', '/validation', '/verify', '/verification', '/check', '/inspect', '/test',
+        '/loginLog', '/operationLog', '/accessLog', '/errorLog', '/trace', '/debug',
+        '/excel', '/pdf', '/csv', '/zip', '/tar', '/archive', '/backup', '/restore',
+        '/copy', '/move', '/rename', '/share', '/link', '/unlink', '/bind', '/unbind',
+        '/logininfo', '/loginlog', '/logoutinfo', '/online', '/onlineUsers', '/active',
+        '/build', '/compile', '/deploy', '/publish', '/release', '/version', '/versions',
+    ]
+
+    FUZZ_SUFFIXES = [
+        'List', 'ListJson', 'ListJsonData', 'ListData', 'ListAll', 'ListByPage', 'ListPage',
+        'GetList', 'GetAll', 'GetPage', 'GetById', 'GetByCode', 'GetByName', 'GetInfo', 'GetDetail',
+        'Save', 'SaveOrUpdate', 'Update', 'Add', 'Create', 'Delete', 'Remove', 'BatchDelete',
+        'JsonData', 'Json', 'TreeList', 'TreeData', 'Tree', 'Select', 'SelectById',
+        'Combo', 'ComboData', 'ComboBox', 'Option', 'Options', 'Autocomplete', 'Suggest',
+        'Export', 'ExportExcel', 'Import', 'ImportExcel', 'Download', 'Upload',
+        'Page', 'PageData', 'PageList', 'PageJson', 'Pagination', 'Query',
+        'Count', 'Total', 'Sum', 'Stat', 'Statistics', 'Summary', 'Analytics',
+        'Info', 'Detail', 'Details', 'View', 'Show', 'Fetch', 'Load', 'Get',
+        'Login', 'Logout', 'Register', 'Signin', 'Signout', 'ResetPwd', 'ForgotPwd',
+        'Auth', 'Token', 'RefreshToken', 'Verify', 'Captcha', 'Validate', 'Validation',
+        'Menu', 'Nav', 'NavMenu', 'Routes', 'Permissions', 'Access', 'Permission',
+        'User', 'UserList', 'UserInfo', 'UserPage', 'Profile', 'Account', 'Current',
+        'Role', 'RoleList', 'RoleInfo', 'Dept', 'DeptList', 'Org', 'OrgList',
+        'Product', 'ProductList', 'Order', 'OrderList', 'Category', 'CategoryList',
+        'Config', 'ConfigList', 'Settings', 'Dict', 'DictList', 'Enum', 'EnumList',
+        'Log', 'LogList', 'LogPage', 'Audit', 'History', 'Record', 'Records',
+        'Article', 'ArticleList', 'News', 'NewsList', 'Comment', 'CommentList',
+        'File', 'FileList', 'Image', 'ImageList', 'Video', 'VideoList',
+        'Notice', 'NoticeList', 'Notification', 'Notify', 'Alert', 'Message', 'Msg',
+        'Search', 'Query', 'Filter', 'Sort', 'Order', 'Export', 'Import',
+        'Enable', 'Disable', 'Toggle', 'Status', 'State', 'Check', 'Verify',
+        'Submit', 'Reset', 'Init', 'Initialize', 'Refresh', 'Reload', 'Sync', 'Merge',
+        'Approve', 'Reject', 'Process', 'Task', 'Schedule', 'Booking', 'Appointment',
+        'Customer', 'Supplier', 'Employee', 'Member', 'Partner', 'Admin',
+    ]
+
+    PATH_FRAGMENTS = [
+        'user', 'users', 'userinfo', 'userlist', 'userpage', 'profile', 'account',
+        'order', 'orders', 'orderdetail', 'orderlist', 'cart', 'payment', 'transaction',
+        'product', 'products', 'productlist', 'goods', 'item', 'items', 'sku', 'merchandise',
+        'role', 'roles', 'permission', 'permissions', 'menu', 'menus', 'resource', 'resources',
+        'dept', 'depts', 'department', 'departments', 'org', 'orgs', 'organization', 'company',
+        'category', 'categories', 'catalog', 'tag', 'tags', 'label', 'labels', 'group', 'groups',
+        'config', 'configs', 'configuration', 'settings', 'dict', 'dicts', 'dictionary',
+        'admin', 'system', 'auth', 'login', 'logout', 'register', 'captcha', 'validcode',
+        'api', 'apis', 'v1', 'v2', 'v3', 'v4', 'rest', 'soap', 'graphql',
+        'file', 'files', 'document', 'documents', 'attachment', 'attachments',
+        'image', 'images', 'img', 'picture', 'pictures', 'photo', 'photos', 'avatar',
+        'video', 'videos', 'audio', 'media', 'upload', 'uploads', 'download',
+        'article', 'articles', 'news', 'blog', 'post', 'posts', 'topic', 'topics', 'comment', 'comments',
+        'notice', 'notices', 'notification', 'notifications', 'message', 'messages', 'msg',
+        'workflow', 'process', 'task', 'tasks', 'schedule', 'calendar', 'booking',
+        'area', 'region', 'province', 'city', 'district', 'address', 'location',
+        'log', 'logs', 'logging', 'audit', 'history', 'record', 'records', 'track',
+        'stat', 'stats', 'statistics', 'analytics', 'report', 'reports', 'summary',
+        'customer', 'customers', 'supplier', 'suppliers', 'employee', 'employees', 'member', 'members',
+        'invoice', 'refund', 'return', 'exchange', 'coupon', 'promo', 'discount',
+        'backup', 'restore', 'export', 'import', 'migrate', 'transfer',
+        'dashboard', 'home', 'index', 'main', 'workspace', 'console', 'welcome',
+    ]
     
     async def _probe_parent_paths(self, js_results: List) -> Dict[str, Set[str]]:
         """
@@ -561,7 +658,8 @@ class ScanEngine:
         1. 父路径 + RESTful 后缀 (/list, /add, /detail 等)
         2. 父路径 + 业务API词 (/user, /order, /product 等)  
         3. 父路径 + JS路径模板片段 (从JS提取的 /users/{id} -> /users)
-        4. 独立路径探测 (从JS模板提取独立资源名)
+        4. 父路径 + 资源 + 后缀组合探测 (/admin/role/list)
+        5. JS提取的后缀和资源片段进行智能拼接
         
         Returns:
             {探测到的有效父路径: 该路径下探测到的额外端点}
@@ -571,6 +669,8 @@ class ScanEngine:
         
         parent_paths_to_probe = set()
         path_templates = set()
+        js_suffixes = set()
+        js_resources = set()
         
         for js_result in js_results:
             if hasattr(js_result, 'parent_paths') and js_result.parent_paths:
@@ -582,19 +682,27 @@ class ScanEngine:
             if hasattr(js_result, 'path_templates') and js_result.path_templates:
                 for template in js_result.path_templates:
                     path_templates.add(template)
+            
+            if hasattr(js_result, 'extracted_suffixes') and js_result.extracted_suffixes:
+                for suffix in js_result.extracted_suffixes:
+                    js_suffixes.add(suffix)
+            
+            if hasattr(js_result, 'resource_fragments') and js_result.resource_fragments:
+                for resource in js_result.resource_fragments:
+                    js_resources.add(resource)
         
         if not parent_paths_to_probe:
             return probed_results
         
-        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths + {len(path_templates)} path templates...")
+        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths + {len(path_templates)} templates + {len(js_suffixes)} suffixes + {len(js_resources)} resources...")
         
         if self.config.concurrency_probe:
             probed_results = await self._probe_parent_paths_concurrent(
-                base_url, parent_paths_to_probe, path_templates
+                base_url, parent_paths_to_probe, path_templates, js_suffixes, js_resources
             )
         else:
             probed_results = await self._probe_parent_paths_serial(
-                base_url, parent_paths_to_probe, path_templates
+                base_url, parent_paths_to_probe, path_templates, js_suffixes, js_resources
             )
         
         return probed_results
@@ -603,14 +711,24 @@ class ScanEngine:
         self, 
         base_url: str, 
         parent_paths_to_probe: Set[str],
-        path_templates: Set[str] = None
+        path_templates: Set[str] = None,
+        js_suffixes: Set[str] = None,
+        js_resources: Set[str] = None
     ) -> Dict[str, Set[str]]:
         """串行探测父路径"""
         if path_templates is None:
             path_templates = set()
+        if js_suffixes is None:
+            js_suffixes = set()
+        if js_resources is None:
+            js_resources = set()
         probed_results = {}
         
-        common_suffixes = self.COMMON_RESTFUL_SUFFIXES + [f'/{p}' for p in self.COMMON_API_PATHS]
+        all_suffixes = set()
+        all_suffixes.update(self.RESTFUL_SUFFIXES)
+        all_suffixes.update([f'/{p}' for p in self.COMMON_API_PATHS])
+        all_suffixes.update([f'/{p}' for p in self.PATH_FRAGMENTS])
+        all_suffixes.update([f'/{s}' for s in js_suffixes])
         
         template_fragments = set()
         for template in path_templates:
@@ -618,8 +736,25 @@ class ScanEngine:
             for part in parts:
                 if part and not part.startswith('{') and len(part) > 1:
                     template_fragments.add(part)
-        common_suffixes.extend([f'/{f}' for f in template_fragments])
+        all_suffixes.update([f'/{f}' for f in template_fragments])
         
+        combined_targets: List[Tuple[str, str]] = []
+        for parent_path in parent_paths_to_probe:
+            parent_base = parent_path.rstrip('/')
+            for suffix in list(all_suffixes)[:100]:
+                if suffix.startswith('/'):
+                    combined_targets.append((parent_base, suffix))
+                else:
+                    combined_targets.append((parent_base, f'/{suffix}'))
+            
+            for resource in list(js_resources)[:30]:
+                for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                    if suffix:
+                        combined_targets.append((parent_base, f'/{resource}{suffix}'))
+                    else:
+                        combined_targets.append((parent_base, f'/{resource}'))
+        
+        probed = 0
         for parent_path in parent_paths_to_probe:
             full_url = base_url + parent_path
             
@@ -634,7 +769,7 @@ class ScanEngine:
                     logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
                     probed_results[parent_path] = set()
                     
-                    for suffix in common_suffixes:
+                    for suffix in list(all_suffixes)[:100]:
                         sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
                         sub_url = base_url + sub_path
                         
@@ -664,14 +799,24 @@ class ScanEngine:
         self, 
         base_url: str, 
         parent_paths_to_probe: Set[str],
-        path_templates: Set[str] = None
+        path_templates: Set[str] = None,
+        js_suffixes: Set[str] = None,
+        js_resources: Set[str] = None
     ) -> Dict[str, Set[str]]:
         """并发探测父路径"""
         if path_templates is None:
             path_templates = set()
+        if js_suffixes is None:
+            js_suffixes = set()
+        if js_resources is None:
+            js_resources = set()
         probed_results = {}
         
-        common_suffixes = self.COMMON_RESTFUL_SUFFIXES + [f'/{p}' for p in self.COMMON_API_PATHS]
+        all_suffixes = set()
+        all_suffixes.update(self.RESTFUL_SUFFIXES)
+        all_suffixes.update([f'/{p}' for p in self.COMMON_API_PATHS])
+        all_suffixes.update([f'/{p}' for p in self.PATH_FRAGMENTS])
+        all_suffixes.update([f'/{s}' for s in js_suffixes])
         
         template_fragments = set()
         for template in path_templates:
@@ -679,7 +824,7 @@ class ScanEngine:
             for part in parts:
                 if part and not part.startswith('{') and len(part) > 1:
                     template_fragments.add(part)
-        common_suffixes.extend([f'/{f}' for f in template_fragments])
+        all_suffixes.update([f'/{f}' for f in template_fragments])
         
         async def probe_single_path(parent_path: str) -> Tuple[str, Set[str], int]:
             full_url = base_url + parent_path
@@ -714,12 +859,30 @@ class ScanEngine:
                             pass
                         return None
                     
-                    sub_tasks = [probe_sub_path(s) for s in common_suffixes]
+                    sub_tasks = [probe_sub_path(s) for s in list(all_suffixes)[:100]]
                     sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
                     
                     for result in sub_results:
                         if result and isinstance(result, str):
                             sub_endpoints.add(result)
+                    
+                    for resource in list(js_resources)[:30]:
+                        for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                            if suffix:
+                                combined = f'/{resource}{suffix}'
+                            else:
+                                combined = f'/{resource}'
+                            sub_url = base_url + parent_path.rstrip('/') + combined
+                            try:
+                                sub_response = await self._http_client.request(
+                                    sub_url,
+                                    method='HEAD',
+                                    timeout=3
+                                )
+                                if 200 <= sub_response.status_code < 400:
+                                    sub_endpoints.add(parent_path.rstrip('/') + combined)
+                            except Exception:
+                                pass
                 
                 elif response.status_code == 401 or response.status_code == 403:
                     logger.info(f"Parent path exists (auth required): {parent_path} (status: {response.status_code})")
@@ -739,6 +902,116 @@ class ScanEngine:
                     probed_results[parent_path] = sub_endpoints
         
         return probed_results
+    
+    async def _fuzz_api_paths(self, js_results: List) -> Dict[str, Set[str]]:
+        """
+        使用 JS 提取的后缀和资源片段进行智能 API 路径 fuzzing
+        
+        探测策略:
+        1. 父路径 + JS后缀 组合
+        2. 父路径 + JS资源 + RESTful后缀 组合
+        3. 独立资源 + 后缀 组合
+        4. 使用 FUZZ_SUFFIXES 生成更多变体
+        
+        Returns:
+            {探测到的有效路径: 该路径下探测到的额外端点}
+        """
+        fuzzed_results = {}
+        base_url = self.config.target.rstrip('/')
+        
+        parent_paths = set()
+        js_suffixes = set()
+        js_resources = set()
+        existing_apis = set()
+        
+        for js_result in js_results:
+            if hasattr(js_result, 'parent_paths') and js_result.parent_paths:
+                for original_path, parents in js_result.parent_paths.items():
+                    for parent in parents:
+                        parent_paths.add(parent)
+                    existing_apis.add(original_path)
+            
+            if hasattr(js_result, 'extracted_suffixes') and js_result.extracted_suffixes:
+                for suffix in js_result.extracted_suffixes:
+                    js_suffixes.add(suffix)
+            
+            if hasattr(js_result, 'resource_fragments') and js_result.resource_fragments:
+                for resource in js_result.resource_fragments:
+                    js_resources.add(resource)
+            
+            if hasattr(js_result, 'apis'):
+                for api in js_result.apis:
+                    existing_apis.add(api)
+        
+        if not parent_paths:
+            return fuzzed_results
+        
+        all_suffixes = set()
+        all_suffixes.update(self.RESTFUL_SUFFIXES)
+        all_suffixes.update(self.FUZZ_SUFFIXES)
+        all_suffixes.update(js_suffixes)
+        
+        all_resources = set()
+        all_resources.update(self.PATH_FRAGMENTS)
+        all_resources.update(js_resources)
+        
+        fuzz_targets: List[Tuple[str, str]] = []
+        
+        for parent_path in parent_paths:
+            parent_base = parent_path.rstrip('/')
+            
+            for suffix in list(all_suffixes)[:80]:
+                if suffix.startswith('/'):
+                    fuzz_targets.append((parent_base, suffix))
+                else:
+                    fuzz_targets.append((parent_base, f'/{suffix}'))
+            
+            for resource in list(all_resources)[:50]:
+                for suffix in list(self.RESTFUL_SUFFIXES)[:30]:
+                    if suffix:
+                        fuzz_targets.append((parent_base, f'/{resource}{suffix}'))
+                    else:
+                        fuzz_targets.append((parent_base, f'/{resource}'))
+        
+        for resource in list(all_resources)[:100]:
+            for suffix in list(all_suffixes)[:50]:
+                if suffix.startswith('/'):
+                    path = f'/{resource}{suffix}'
+                else:
+                    path = f'/{resource}/{suffix}'
+                if path not in existing_apis:
+                    fuzz_targets.append(('', path))
+        
+        async def probe_fuzz_target(base: str, path: str) -> Optional[str]:
+            full_url = base_url + base + path if base else base_url + path
+            try:
+                response = await self._http_client.request(
+                    full_url,
+                    method='HEAD',
+                    timeout=3
+                )
+                if 200 <= response.status_code < 400:
+                    return base + path if base else path
+            except Exception:
+                pass
+            return None
+        
+        logger.info(f"Fuzzing {len(fuzz_targets)} API path combinations...")
+        
+        batch_size = 50
+        for i in range(0, len(fuzz_targets), batch_size):
+            batch = fuzz_targets[i:i+batch_size]
+            tasks = [probe_fuzz_target(base, path) for base, path in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if result and isinstance(result, str):
+                    parent = '/' + '/'.join(result.rstrip('/').split('/')[:-1])
+                    if parent not in fuzzed_results:
+                        fuzzed_results[parent] = set()
+                    fuzzed_results[parent].add(result)
+        
+        return fuzzed_results
     
     async def _extract_apis(self) -> Dict[str, Any]:
         """提取API端点 + 基于框架生成更多端点"""
@@ -828,6 +1101,25 @@ class ScanEngine:
                     self._api_aggregator.add_api(
                         api_find_result,
                         source_info={'source': f'probed_parent:{parent_path}'}
+                    )
+        
+        fuzzed_paths = await self._fuzz_api_paths(js_results)
+        
+        for parent_path, sub_endpoints in fuzzed_paths.items():
+            for sub_path in sub_endpoints:
+                if sub_path not in existing_paths:
+                    existing_paths.add(sub_path)
+                    from .collectors.api_collector import APIFindResult
+                    api_find_result = APIFindResult(
+                        path=sub_path,
+                        method="GET",
+                        source_type="fuzz_api",
+                        base_url="",
+                        url_type="fuzzed"
+                    )
+                    self._api_aggregator.add_api(
+                        api_find_result,
+                        source_info={'source': f'fuzz_api:{parent_path}'}
                     )
         
         raw_endpoints = self._api_aggregator.get_all()
