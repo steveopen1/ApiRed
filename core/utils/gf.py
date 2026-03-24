@@ -37,20 +37,36 @@ class Pattern:
     category: str = "general"
     tags: List[str] = field(default_factory=list)
     false_positive: Optional[str] = None
+    _compiled_regex: Optional[re.Pattern] = field(default_factory=None, repr=False)
+    _compiled_fp_regex: Optional[re.Pattern] = field(default_factory=None, repr=False)
+    
+    def __post_init__(self):
+        if self._compiled_regex is None:
+            try:
+                self._compiled_regex = re.compile(self.pattern, re.IGNORECASE | re.DOTALL)
+            except re.error:
+                self._compiled_regex = None
+        if self.false_positive and self._compiled_fp_regex is None:
+            try:
+                self._compiled_fp_regex = re.compile(self.false_positive, re.IGNORECASE)
+            except re.error:
+                self._compiled_fp_regex = None
     
     def match(self, text: str) -> Optional[re.Match]:
         """匹配模式"""
+        if self._compiled_regex is None:
+            return None
         try:
-            return re.search(self.pattern, text, re.IGNORECASE | re.DOTALL)
+            return self._compiled_regex.search(text)
         except re.error:
             return None
     
     def is_false_positive(self, text: str) -> bool:
         """判断是否为假阳性"""
-        if not self.false_positive:
+        if not self.false_positive or self._compiled_fp_regex is None:
             return False
         try:
-            return bool(re.search(self.false_positive, text, re.IGNORECASE))
+            return bool(self._compiled_fp_regex.search(text))
         except re.error:
             return False
 
@@ -332,10 +348,24 @@ class GFLibrary:
         source: str = "text"
     ) -> ScanResult:
         """扫描文本内容"""
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        
+        cache_key = f"{text_hash}:{','.join(sorted(patterns or []))}:{','.join(sorted(categories or []))}"
+        
+        if cache_key in self._cache:
+            cached_result = self._cache[cache_key]
+            cached_result.file_path = source
+            return cached_result
+        
         lines = text.splitlines()
-        return self._scan_lines(
+        result = self._scan_lines(
             source, lines, patterns, categories, include_context=0
         )
+        
+        if result.total_matches > 0:
+            self._cache[cache_key] = result
+        
+        return result
     
     def _scan_lines(
         self,
