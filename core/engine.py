@@ -19,6 +19,7 @@ from .utils.config import Config
 from .storage import DBStorage, FileStorage
 from .collectors import JSFingerprintCache, JSParser, APIAggregator, HeadlessBrowserCollector
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
+from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
@@ -435,6 +436,11 @@ class ScanEngine:
         api_path_finder = ApiPathFinder()
         api_combiner = ApiPathCombiner()
         
+        js_params = set()
+        websocket_endpoints = set()
+        env_configs = {}
+        ast_routes = set()
+        
         if self._browser_collector:
             try:
                 browser_result = await self._collect_with_browser()
@@ -498,6 +504,27 @@ class ScanEngine:
                         
                         api_path_finder.find_api_paths_in_text(js_content, js_url)
                         
+                        ast_analyzer = JavaScriptASTAnalyzer()
+                        ast_result = ast_analyzer.parse(js_content)
+                        
+                        for param in ast_result.parameter_names:
+                            if param and len(param) > 1:
+                                js_params.add(param)
+                        
+                        for endpoint in ast_result.endpoints:
+                            if endpoint.params:
+                                for p in endpoint.params:
+                                    js_params.add(p)
+                        
+                        for ws_endpoint in ast_result.websocket_endpoints:
+                            websocket_endpoints.add(ws_endpoint)
+                        
+                        for key, value in ast_result.env_configs.items():
+                            env_configs[key] = value
+                        
+                        for route in ast_result.routes:
+                            ast_routes.add(route)
+                        
                         try:
                             js_parser.parse(js_content, js_url)
                         except Exception as e:
@@ -525,6 +552,7 @@ class ScanEngine:
         finder_api_paths = api_path_finder.get_all_paths()
         
         logger.info(f"ApiPathFinder discovered {len(finder_api_paths)} API paths from JS")
+        logger.info(f"Discovered {len(js_params)} JS parameters for fuzzing: {list(js_params)[:20]}")
         
         return {
             'total_js': len(js_urls),
@@ -536,7 +564,10 @@ class ScanEngine:
             'response_discovered_paths': all_discovered,
             'probe_paths': inline_parser.generate_probe_paths(),
             'browser_api_endpoints': list(browser_api_endpoints) if browser_api_endpoints else [],
-            'finder_api_paths': finder_api_paths
+            'finder_api_paths': finder_api_paths,
+            'js_params': list(js_params),
+            'ast_routes': list(ast_routes),
+            'env_configs': dict(env_configs)
         }
     
     async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
@@ -973,12 +1004,29 @@ class ScanEngine:
         2. 父路径 + JS资源 + RESTful后缀 组合
         3. 独立资源 + 后缀 组合
         4. 使用 FUZZ_SUFFIXES 生成更多变体
+        5. 带参数的路径组合 (父路径 + 资源 + ?param=value)
         
         Returns:
             {探测到的有效路径: 该路径下探测到的额外端点}
         """
         fuzzed_results = {}
         base_url = self.config.target.rstrip('/')
+        
+        js_params = set()
+        for key, value in (self._collector_results.get('js', {}).get('env_configs', {}).items() if self._collector_results else []):
+            if key and len(key) > 1:
+                js_params.add(key)
+        if self._collector_results and 'js' in self._collector_results:
+            for p in self._collector_results['js'].get('js_params', []):
+                if p and len(p) > 1:
+                    js_params.add(p)
+        
+        common_params = ['id', 'page', 'pageNum', 'pageSize', 'limit', 'offset', 'count', 
+                         'userId', 'user_id', 'orderId', 'order_id', 'productId', 'product_id',
+                         'category', 'type', 'status', 'action', 'mode', 'q', 'query', 'search',
+                         'keyword', 'name', 'title', 'email', 'phone', 'code', 'token', 'lang']
+        for p in common_params:
+            js_params.add(p)
         
         js_result_count = len(js_results)
         suffix_limit = min(1000, max(300, js_result_count * 80))
@@ -999,11 +1047,13 @@ class ScanEngine:
             
             if hasattr(js_result, 'extracted_suffixes') and js_result.extracted_suffixes:
                 for suffix in js_result.extracted_suffixes:
-                    js_suffixes.add(suffix)
+                    if len(js_suffixes) < suffix_limit:
+                        js_suffixes.add(suffix)
             
             if hasattr(js_result, 'resource_fragments') and js_result.resource_fragments:
                 for resource in js_result.resource_fragments:
-                    js_resources.add(resource)
+                    if len(js_resources) < resource_limit:
+                        js_resources.add(resource)
             
             if hasattr(js_result, 'apis'):
                 for api in js_result.apis:
@@ -1012,6 +1062,86 @@ class ScanEngine:
         if not parent_paths:
             return fuzzed_results
         
+        fuzz_targets = []
+        seen_targets = set()
+        
+        for parent in parent_paths:
+            parent_clean = parent.rstrip('/')
+            if parent_clean in seen_targets:
+                continue
+            seen_targets.add(parent_clean)
+            fuzz_targets.append((parent_clean, ''))
+            
+            for suffix in js_suffixes:
+                if len(fuzz_targets) >= 5000:
+                    break
+                suffix_clean = suffix.lstrip('/')
+                target = f"{parent_clean}/{suffix_clean}"
+                if target not in seen_targets and target not in existing_apis:
+                    seen_targets.add(target)
+                    fuzz_targets.append((parent_clean, f"/{suffix_clean}"))
+            
+            for resource in js_resources:
+                if len(fuzz_targets) >= 5000:
+                    break
+                resource_clean = resource.lstrip('/')
+                target = f"{parent_clean}/{resource_clean}"
+                if target not in seen_targets and target not in existing_apis:
+                    seen_targets.add(target)
+                    fuzz_targets.append((parent_clean, f"/{resource_clean}"))
+                
+                for rest_suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                    combo = f"{parent_clean}/{resource_clean}/{rest_suffix}"
+                    if combo not in seen_targets and combo not in existing_apis:
+                        seen_targets.add(combo)
+                        fuzz_targets.append((parent_clean, f"/{resource_clean}/{rest_suffix}"))
+                        if len(fuzz_targets) >= 5000:
+                            break
+        
+        for api in list(existing_apis)[:200]:
+            api_clean = api.rstrip('/')
+            if js_params and len(fuzz_targets) < 3000:
+                for param in list(js_params)[:10]:
+                    param_combo = f"{api_clean}?{param}=1"
+                    if param_combo not in seen_targets:
+                        seen_targets.add(param_combo)
+                        fuzz_targets.append((api_clean, f"?{param}=1"))
+                    
+                    param_combo2 = f"{api_clean}/{param}/1"
+                    if param_combo2 not in seen_targets:
+                        seen_targets.add(param_combo2)
+                        fuzz_targets.append((api_clean, f"/{param}/1"))
+        
+        async def probe_target(base: str, suffix: str) -> Optional[Tuple[str, str]]:
+            full_url = base_url + base + suffix
+            try:
+                response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                if response.status_code and 200 <= response.status_code < 400:
+                    return (base, suffix)
+            except Exception:
+                try:
+                    response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    if response.status_code and 200 <= response.status_code < 400:
+                        return (base, suffix)
+                except Exception:
+                    pass
+            return None
+        
+        batch_size = 50
+        for i in range(0, len(fuzz_targets), batch_size):
+            batch = fuzz_targets[i:i+batch_size]
+            tasks = [probe_target(base, suffix) for base, suffix in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if result and isinstance(result, tuple):
+                    parent_path, found_suffix = result
+                    found_path = parent_path + found_suffix
+                    if found_path not in fuzzed_results:
+                        fuzzed_results[found_path] = set()
+                    fuzzed_results[found_path].add(found_suffix)
+        
+        logger.info(f"API path fuzzing found {len(fuzzed_results)} valid paths")
         return fuzzed_results
     
     async def _cross_source_fuzz(self) -> Dict[str, Set[str]]:
@@ -1794,24 +1924,48 @@ class ScanEngine:
         """模糊测试"""
         high_value_apis = [e for e in self.result.api_endpoints if e.is_high_value] if self.result else []
         
+        discovered_params = set()
+        if self._collector_results and 'js' in self._collector_results:
+            js_result = self._collector_results['js']
+            discovered_params.update(js_result.get('js_params', []))
+            for route in js_result.get('ast_routes', []):
+                if '{' in route:
+                    import re
+                    param_patterns = re.findall(r'\{(\w+)\}', route)
+                    discovered_params.update(param_patterns)
+        
+        common_params = ['id', 'page', 'pageNum', 'pageSize', 'limit', 'offset', 'count',
+                        'userId', 'user_id', 'orderId', 'order_id', 'productId', 'product_id',
+                        'category', 'type', 'status', 'action', 'mode', 'q', 'query', 'search',
+                        'keyword', 'name', 'title', 'email', 'phone', 'code', 'token', 'lang',
+                        'start', 'end', 'startDate', 'endDate', 'sort', 'order', 'filter']
+        discovered_params.update(common_params)
+        
         fuzz_count = 0
         fuzz_results = []
         
         for endpoint in high_value_apis:
             try:
-                fuzz_params = endpoint.parameters if endpoint.parameters else ['id', 'page']
+                base_params = set(endpoint.parameters) if endpoint.parameters else set()
+                all_params = list(base_params.union(discovered_params))
+                if not all_params:
+                    all_params = ['id', 'page']
+                
                 results = await self._fuzz_tester.fuzz_parameters(
                     endpoint.full_url,
                     endpoint.method,
-                    fuzz_params
+                    all_params
                 )
                 fuzz_count += len(results)
                 fuzz_results.extend(results)
             except Exception as e:
                 logger.debug(f"Fuzz test error: {e}")
         
+        logger.info(f"Fuzz testing: discovered {len(discovered_params)} params, performed {fuzz_count} fuzz operations")
+        
         return {
             'fuzz_count': fuzz_count,
+            'discovered_params': list(discovered_params),
             'results': [r.to_dict() if hasattr(r, 'to_dict') else str(r) for r in fuzz_results]
         }
     
