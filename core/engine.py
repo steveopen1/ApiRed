@@ -2039,6 +2039,18 @@ class ScanEngine:
             enabled_categories.add(TestCategory.COMMAND_INJECTION)
         if getattr(cfg, 'enable_info_disclosure_test', True):
             enabled_categories.add(TestCategory.INFORMATION_DISCLOSURE)
+        if getattr(cfg, 'enable_bfla_test', True):
+            enabled_categories.add(TestCategory.BFLA)
+        if getattr(cfg, 'enable_injection_attacks_test', True):
+            enabled_categories.add(TestCategory.INJECTION_ATTACKS)
+        if getattr(cfg, 'enable_input_validation_test', True):
+            enabled_categories.add(TestCategory.INPUT_VALIDATION)
+        if getattr(cfg, 'enable_http_headers_test', True):
+            enabled_categories.add(TestCategory.HTTP_HEADERS)
+        if getattr(cfg, 'enable_security_misconfig_test', True):
+            enabled_categories.add(TestCategory.SECURITY_MISCONFIG)
+        if getattr(cfg, 'enable_version_disclosure_test', True):
+            enabled_categories.add(TestCategory.VERSION_DISCLOSURE)
         
         vuln_count = 0
         test_stats = {
@@ -2064,8 +2076,14 @@ class ScanEngine:
             TestCategory.VERBOSE_ERROR: 'test_verbose_error',
             TestCategory.AUTH_BYPASS: 'test_unauthorized_access',
             TestCategory.JWT_SECURITY: 'test_jwt_security',
-            TestCategory.RATE_LIMIT: 'test_bypass_techniques',
+            TestCategory.RATE_LIMIT: 'test_rate_limiting',
             TestCategory.INFORMATION_DISCLOSURE: 'test_information_disclosure',
+            TestCategory.BFLA: 'test_bfla',
+            TestCategory.INJECTION_ATTACKS: 'test_injection_attacks',
+            TestCategory.INPUT_VALIDATION: 'test_input_validation',
+            TestCategory.HTTP_HEADERS: 'test_http_headers',
+            TestCategory.SECURITY_MISCONFIG: 'test_security_misconfig',
+            TestCategory.VERSION_DISCLOSURE: 'test_version_disclosure',
         }
         
         for endpoint in high_value_apis:
