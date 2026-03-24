@@ -1,0 +1,84 @@
+api_version: "1.0"
+category: CSRF
+
+test_cases:
+
+  - id: CSRF-001
+    name: CSRF Login Attack
+    severity: HIGH
+    cwe_id: CWE-352
+    description: |
+      Test for CSRF vulnerability on login endpoint allowing session fixation.
+    vuln_type: CSRF
+    method: POST
+    path: /api/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    attack_vectors:
+      - name: csrf_login
+        payload:
+          username: attacker@evil.com
+          password: password123
+    validation:
+      type: session_fixation
+      indicators:
+        - "session"
+        - "login"
+        - "success"
+    remediation: Implement anti-CSRF tokens for login forms.
+
+  - id: CSRF-002
+    name: CSRF test by replacing with invalid csrf token
+    severity: MEDIUM
+    cwe_id: CWE-352
+    description: |
+      Test for CSRF protection bypass by replacing anti-CSRF token.
+    vuln_type: CSRF
+    method: POST
+    path: /api/user/update
+    parameters:
+      - name: email
+        type: string
+        location: body
+      - name: csrf_token
+        type: string
+        location: body
+    payloads:
+      - email: attacker@evil.com
+        csrf_token: invalid_token
+    validation:
+      type: csrf_bypass
+      indicators:
+        - "success"
+        - "updated"
+    remediation: Validate anti-CSRF token server-side.
+
+  - id: CSRF-003
+    name: CSRF test by removing csrf token
+    severity: MEDIUM
+    cwe_id: CWE-352
+    description: |
+      Test for CSRF protection bypass by removing anti-CSRF token.
+    vuln_type: CSRF
+    method: POST
+    path: /api/profile
+    parameters:
+      - name: name
+        type: string
+        location: body
+      - name: csrf_token
+        type: string
+        location: body
+    payloads:
+      - name: Attacker Name
+    validation:
+      type: csrf_bypass
+      indicators:
+        - "success"
+        - "updated"
+    remediation: Reject requests without valid anti-CSRF token.

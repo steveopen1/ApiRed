@@ -33,6 +33,14 @@ class TestCategory(Enum):
     HTTP_HEADERS = "http_headers"
     SECURITY_MISCONFIG = "security_misconfig"
     VERSION_DISCLOSURE = "version_disclosure"
+    MASS_ASSIGNMENT = "mass_assignment"
+    GRAPHQL = "graphql"
+    SPRING_BOOT_ACTUATOR = "spring_boot_actuator"
+    XSS_REFLECTED = "xss_reflected"
+    CSRF = "csrf"
+    SESSION_FIXATION = "session_fixation"
+    CLOUD_CONFIG = "cloud_config"
+    DEV_OPS_CONFIG = "devops_config"
 
 
 @dataclass
@@ -262,6 +270,68 @@ class TestSelector:
                 excluded_features=[],
                 priority=3
             ),
+            TestSelectionRule(
+                name="Mass Assignment on user registration",
+                category=TestCategory.MASS_ASSIGNMENT,
+                required_features=[EndpointFeature.HAS_USER_PARAM],
+                excluded_features=[],
+                priority=7,
+                param_name_hints=['user', 'name', 'email', 'register']
+            ),
+            TestSelectionRule(
+                name="GraphQL Security on graphql endpoint",
+                category=TestCategory.GRAPHQL,
+                required_features=[],
+                excluded_features=[],
+                priority=8,
+                required_path_patterns=['graphql']
+            ),
+            TestSelectionRule(
+                name="Spring Boot Actuator on sensitive endpoint",
+                category=TestCategory.SPRING_BOOT_ACTUATOR,
+                required_features=[EndpointFeature.IS_SENSITIVE_ENDPOINT],
+                excluded_features=[],
+                priority=6
+            ),
+            TestSelectionRule(
+                name="XSS Reflected on search endpoint",
+                category=TestCategory.XSS_REFLECTED,
+                required_features=[EndpointFeature.HAS_SEARCH_PARAM],
+                excluded_features=[],
+                priority=8,
+                param_name_hints=['q', 'query', 'search', 'keyword']
+            ),
+            TestSelectionRule(
+                name="CSRF on state-changing endpoint",
+                category=TestCategory.CSRF,
+                required_features=[EndpointFeature.HAS_BODY_PARAM],
+                excluded_features=[],
+                priority=7,
+                required_path_patterns=['/api/']
+            ),
+            TestSelectionRule(
+                name="Session Fixation on login endpoint",
+                category=TestCategory.SESSION_FIXATION,
+                required_features=[EndpointFeature.IS_LOGIN_ENDPOINT],
+                excluded_features=[],
+                priority=8
+            ),
+            TestSelectionRule(
+                name="Cloud Config Exposure on config endpoint",
+                category=TestCategory.CLOUD_CONFIG,
+                required_features=[EndpointFeature.IS_API_ENDPOINT],
+                excluded_features=[],
+                priority=5,
+                required_path_patterns=['/config', '/api/config', '/settings']
+            ),
+            TestSelectionRule(
+                name="DevOps Config Exposure",
+                category=TestCategory.DEV_OPS_CONFIG,
+                required_features=[],
+                excluded_features=[],
+                priority=4,
+                required_path_patterns=['/']
+            ),
         ]
     
     def select_tests(
@@ -369,6 +439,14 @@ class TestSelector:
             TestCategory.HTTP_HEADERS: "test_http_headers",
             TestCategory.SECURITY_MISCONFIG: "test_security_misconfig",
             TestCategory.VERSION_DISCLOSURE: "test_version_disclosure",
+            TestCategory.MASS_ASSIGNMENT: "test_mass_assignment",
+            TestCategory.GRAPHQL: "test_graphql_security",
+            TestCategory.SPRING_BOOT_ACTUATOR: "test_spring_boot_actuator",
+            TestCategory.XSS_REFLECTED: "test_xss_reflected",
+            TestCategory.CSRF: "test_csrf",
+            TestCategory.SESSION_FIXATION: "test_session_fixation",
+            TestCategory.CLOUD_CONFIG: "test_cloud_config_exposure",
+            TestCategory.DEV_OPS_CONFIG: "test_devops_config_exposure",
         }
         return mapping.get(category, "")
 

@@ -1,0 +1,101 @@
+api_version: "1.0"
+category: GraphQL
+
+test_cases:
+
+  - id: GRAPHQL-001
+    name: GraphQL Introspection Mode Enabled
+    severity: HIGH
+    cwe_id: CWE-16
+    description: |
+      Test for GraphQL introspection enabled which exposes schema details.
+    vuln_type: GRAPHQL_INTROSPECTION
+    method: POST
+    path: /graphql
+    payloads:
+      - '{ "query": "{ __schema { queryType { name } } }" }'
+      - '{ "query": "{ __typename }" }'
+    validation:
+      type: introspection
+      indicators:
+        - "__schema"
+        - "__type"
+        - "queryType"
+    remediation: Disable introspection in production environments.
+
+  - id: GRAPHQL-002
+    name: GraphQL Debug Mode Enabled
+    severity: HIGH
+    cwe_id: CWE-11
+    description: |
+      Test for GraphQL debug mode exposing stack traces and error details.
+    vuln_type: GRAPHQL_DEBUG
+    method: POST
+    path: /graphql
+    payloads:
+      - '{ "query": "{ __invalid_field }" }'
+      - '{ "query": "{ throw new Error() }" }'
+    validation:
+      type: debug_mode
+      indicators:
+        - "stack trace"
+        - "debug"
+        - "error"
+    remediation: Disable debug mode in production.
+
+  - id: GRAPHQL-003
+    name: GraphQL Development Console Exposed
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed GraphQL development console or playground.
+    vuln_type: GRAPHQL_CONSOLE
+    method: GET
+    path: /graphql
+    expected_response:
+      check_pattern: "(graphql-playground|graphiql|apollo sandbox)"
+    validation:
+      type: console_exposure
+      indicators:
+        - "graphql-playground"
+        - "graphiql"
+        - "sandbox"
+    remediation: Protect GraphQL console with authentication or disable in production.
+
+  - id: GRAPHQL-004
+    name: GraphQL Field Suggestion Enabled
+    severity: LOW
+    cwe_id: CWE-200
+    description: |
+      Test for GraphQL field suggestion enabled exposing schema hints.
+    vuln_type: GRAPHQL_FIELD_SUGGESTION
+    method: POST
+    path: /graphql
+    payloads:
+      - '{ "query": "{ __schema { types { name fiel } } }" }'
+    validation:
+      type: field_suggestion
+      indicators:
+        - "did you mean"
+        - "fields:"
+        - "suggestion"
+    remediation: Disable field suggestions in production.
+
+  - id: GRAPHQL-005
+    name: GraphQL Type Introspection Allowed
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for GraphQL type introspection exposing data model.
+    vuln_type: GRAPHQL_TYPE_INTROSPECTION
+    method: POST
+    path: /graphql
+    payloads:
+      - '{ "query": "{ __type(name: \"User\") { name fields { name type { name } } } }" }'
+    validation:
+      type: type_introspection
+      indicators:
+        - "User"
+        - "fields"
+        - "__type"
+    remediation: Restrict type introspection to authorized users only.

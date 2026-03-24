@@ -1,0 +1,111 @@
+api_version: "1.0"
+category: MassAssignment
+
+test_cases:
+
+  - id: MASS-001
+    name: Mass assignment leading to creation of admin user
+    severity: CRITICAL
+    cwe_id: CWE-915
+    description: |
+      Test for mass assignment vulnerability where a low privilege user can create an admin account.
+    vuln_type: MASS_ASSIGNMENT
+    method: POST
+    path: /api/users
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: newuser
+        password: password123
+        role: admin
+      - username: attacker
+        password: password123
+        is_admin: true
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "admin"
+        - "role"
+        - "created"
+    remediation: Implement strict input validation and use whitelisting for mass assignment.
+
+  - id: MASS-002
+    name: Mass assignment leading to modification of admin role
+    severity: CRITICAL
+    cwe_id: CWE-915
+    description: |
+      Test for mass assignment where a user can escalate privileges by modifying their role.
+    vuln_type: MASS_ASSIGNMENT
+    method: PUT
+    path: /api/user/{id}/role
+    parameters:
+      - name: role
+        type: string
+        location: body
+    payloads:
+      - role: admin
+      - role: administrator
+      - privilege_level: admin
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "admin"
+        - "updated"
+        - "role"
+    remediation: Implement server-side authorization checks for role modifications.
+
+  - id: MASS-003
+    name: Mass assignment leading to modification of account
+    severity: HIGH
+    cwe_id: CWE-915
+    description: |
+      Test for mass assignment where a user can modify other user's account settings.
+    vuln_type: MASS_ASSIGNMENT
+    method: PUT
+    path: /api/account
+    parameters:
+      - name: email
+        type: string
+        location: body
+    payloads:
+      - email: attacker@evil.com
+        verified: true
+      - email: attacker@evil.com
+        admin: true
+    validation:
+      type: unauthorized_modification
+      indicators:
+        - "updated"
+        - "success"
+    remediation: Implement proper authorization checks for all account modifications.
+
+  - id: MASS-004
+    name: Mass assignment granting low privilege user admin role access
+    severity: CRITICAL
+    cwe_id: CWE-915
+    description: |
+      Test for mass assignment where hidden parameters can grant admin access.
+    vuln_type: MASS_ASSIGNMENT
+    method: POST
+    path: /api/profile
+    parameters:
+      - name: name
+        type: string
+        location: body
+    payloads:
+      - name: John Doe
+        permissions: ["admin", "write", "delete"]
+      - name: John Doe
+        access_level: 99
+    validation:
+      type: privilege_escalation
+      indicators:
+        - "admin"
+        - "access"
+        - "permission"
+    remediation: Use explicit field binding instead of automatic mass assignment.

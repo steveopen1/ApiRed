@@ -2051,6 +2051,22 @@ class ScanEngine:
             enabled_categories.add(TestCategory.SECURITY_MISCONFIG)
         if getattr(cfg, 'enable_version_disclosure_test', True):
             enabled_categories.add(TestCategory.VERSION_DISCLOSURE)
+        if getattr(cfg, 'enable_mass_assignment_test', True):
+            enabled_categories.add(TestCategory.MASS_ASSIGNMENT)
+        if getattr(cfg, 'enable_graphql_test', True):
+            enabled_categories.add(TestCategory.GRAPHQL)
+        if getattr(cfg, 'enable_spring_boot_actuator_test', True):
+            enabled_categories.add(TestCategory.SPRING_BOOT_ACTUATOR)
+        if getattr(cfg, 'enable_xss_reflected_test', True):
+            enabled_categories.add(TestCategory.XSS_REFLECTED)
+        if getattr(cfg, 'enable_csrf_test', True):
+            enabled_categories.add(TestCategory.CSRF)
+        if getattr(cfg, 'enable_session_fixation_test', True):
+            enabled_categories.add(TestCategory.SESSION_FIXATION)
+        if getattr(cfg, 'enable_cloud_config_test', True):
+            enabled_categories.add(TestCategory.CLOUD_CONFIG)
+        if getattr(cfg, 'enable_devops_config_test', True):
+            enabled_categories.add(TestCategory.DEV_OPS_CONFIG)
         
         vuln_count = 0
         test_stats = {
@@ -2084,6 +2100,14 @@ class ScanEngine:
             TestCategory.HTTP_HEADERS: 'test_http_headers',
             TestCategory.SECURITY_MISCONFIG: 'test_security_misconfig',
             TestCategory.VERSION_DISCLOSURE: 'test_version_disclosure',
+            TestCategory.MASS_ASSIGNMENT: 'test_mass_assignment',
+            TestCategory.GRAPHQL: 'test_graphql_security',
+            TestCategory.SPRING_BOOT_ACTUATOR: 'test_spring_boot_actuator',
+            TestCategory.XSS_REFLECTED: 'test_xss_reflected',
+            TestCategory.CSRF: 'test_csrf',
+            TestCategory.SESSION_FIXATION: 'test_session_fixation',
+            TestCategory.CLOUD_CONFIG: 'test_cloud_config_exposure',
+            TestCategory.DEV_OPS_CONFIG: 'test_devops_config_exposure',
         }
         
         for endpoint in high_value_apis:
@@ -2237,6 +2261,31 @@ class ScanEngine:
             return await self._vulnerability_tester.test_security_misconfig(endpoint.full_url)
         elif category == TestCategory.VERSION_DISCLOSURE:
             return await self._vulnerability_tester.test_version_disclosure(endpoint.full_url)
+        elif category == TestCategory.MASS_ASSIGNMENT:
+            return await self._vulnerability_tester.test_mass_assignment(
+                endpoint.full_url,
+                endpoint.method
+            )
+        elif category == TestCategory.GRAPHQL:
+            return await self._vulnerability_tester.test_graphql_security(endpoint.full_url)
+        elif category == TestCategory.SPRING_BOOT_ACTUATOR:
+            return await self._vulnerability_tester.test_spring_boot_actuator(endpoint.full_url)
+        elif category == TestCategory.XSS_REFLECTED:
+            return await self._vulnerability_tester.test_xss_reflected(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.CSRF:
+            return await self._vulnerability_tester.test_csrf(
+                endpoint.full_url,
+                endpoint.method
+            )
+        elif category == TestCategory.SESSION_FIXATION:
+            return await self._vulnerability_tester.test_session_fixation(endpoint.full_url)
+        elif category == TestCategory.CLOUD_CONFIG:
+            return await self._vulnerability_tester.test_cloud_config_exposure(endpoint.full_url)
+        elif category == TestCategory.DEV_OPS_CONFIG:
+            return await self._vulnerability_tester.test_devops_config_exposure(endpoint.full_url)
         
         return None
     

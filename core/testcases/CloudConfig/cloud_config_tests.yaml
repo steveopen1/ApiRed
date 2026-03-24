@@ -1,0 +1,101 @@
+api_version: "1.0"
+category: CloudConfig
+
+test_cases:
+
+  - id: CLOUD-001
+    name: AWS S3 Keys Leak
+    severity: CRITICAL
+    cwe_id: CWE-798
+    description: |
+      Test for exposed AWS S3 access keys or credentials.
+    vuln_type: CLOUD_CONFIG
+    method: GET
+    path: /*.json
+    expected_response:
+      check_pattern: "(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}"
+    validation:
+      type: credential_exposure
+      indicators:
+        - "AKIA"
+        - "aws_access_key"
+        - "aws_secret"
+    remediation: Remove hardcoded credentials and use IAM roles.
+
+  - id: CLOUD-002
+    name: AWS Metadata Endpoint SSRF
+    severity: HIGH
+    cwe_id: CWE-918
+    description: |
+      Test for SSRF on AWS metadata endpoint.
+    vuln_type: SSRF
+    method: GET
+    path: /api/*
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+    validation:
+      type: aws_metadata
+      indicators:
+        - "ami-id"
+        - "instance-id"
+        - "iam"
+    remediation: Block access to metadata endpoint from user-facing endpoints.
+
+  - id: CLOUD-003
+    name: Firebase Config Exposure
+    severity: HIGH
+    cwe_id: CWE-200
+    description: |
+      Test for exposed Firebase configuration.
+    vuln_type: CLOUD_CONFIG
+    method: GET
+    path: /api/config
+    expected_response:
+      check_pattern: "(firebase|googleapis).*.com"
+    validation:
+      type: config_exposure
+      indicators:
+        - "firebase"
+        - "apiKey"
+        - "authDomain"
+    remediation: Exclude sensitive config from client-side code.
+
+  - id: CLOUD-004
+    name: Kubernetes Kustomization Disclosure
+    severity: MEDIUM
+    cwe_id: CWE-200
+    description: |
+      Test for exposed Kubernetes kustomization files.
+    vuln_type: CLOUD_CONFIG
+    method: GET
+    path: /*/kustomization.yaml
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "apiVersion"
+        - "kind"
+        - "kustomize"
+    remediation: Block access to Kubernetes configuration files.
+
+  - id: CLOUD-005
+    name: Oracle EBS Credentials Disclosure
+    severity: CRITICAL
+    cwe_id: CWE-798
+    description: |
+      Test for exposed Oracle E-Business Suite credentials.
+    vuln_type: CLOUD_CONFIG
+    method: GET
+    path: /*/connections.xml
+    expected_response:
+      status_code: 200
+    validation:
+      type: credential_exposure
+      indicators:
+        - "oracle"
+        - "password"
+        - "jdbc"
+    remediation: Secure database connection files and use secure credential storage.

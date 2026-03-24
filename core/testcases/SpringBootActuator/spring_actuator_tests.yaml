@@ -1,0 +1,100 @@
+api_version: "1.0"
+category: SpringBootActuator
+
+test_cases:
+
+  - id: SPRING-001
+    name: Spring Boot Beans Actuator Exposed
+    severity: HIGH
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Spring Boot beans endpoint exposing application beans.
+    vuln_type: SPRING_BOOT_ACTUATOR
+    method: GET
+    path: /actuator/beans
+    expected_response:
+      status_code: 200
+    validation:
+      type: endpoint_exposure
+      indicators:
+        - "beans"
+        - "spring"
+        - "applicationContext"
+    remediation: Disable actuator endpoints in production or protect with authentication.
+
+  - id: SPRING-002
+    name: Spring Boot Env Actuator Exposed
+    severity: CRITICAL
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Spring Boot environment actuator exposing sensitive config.
+    vuln_type: SPRING_BOOT_ACTUATOR
+    method: GET
+    path: /actuator/env
+    expected_response:
+      status_code: 200
+    validation:
+      type: sensitive_data_exposure
+      indicators:
+        - "propertySources"
+        - "application"
+        - "systemProperties"
+    remediation: Disable env actuator in production.
+
+  - id: SPRING-003
+    name: Spring Boot Config Props Actuator Exposed
+    severity: HIGH
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Spring Boot configuration properties.
+    vuln_type: SPRING_BOOT_ACTUATOR
+    method: GET
+    path: /actuator/configprops
+    expected_response:
+      status_code: 200
+    validation:
+      type: endpoint_exposure
+      indicators:
+        - "contexts"
+        - "beans"
+        - "configurationProperties"
+    remediation: Disable configprops actuator in production.
+
+  - id: SPRING-004
+    name: Spring Boot Thread Dump Actuator Exposed
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Spring Boot thread dump endpoint.
+    vuln_type: SPRING_BOOT_ACTUATOR
+    method: GET
+    path: /actuator/threaddump
+    expected_response:
+      status_code: 200
+    validation:
+      type: endpoint_exposure
+      indicators:
+        - "threads"
+        - "threaddump"
+        - "stackTrace"
+    remediation: Disable threaddump actuator in production.
+
+  - id: SPRING-005
+    name: Spring Boot Http Trace Actuator Exposed
+    severity: HIGH
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Spring Boot HTTP trace endpoint.
+    vuln_type: SPRING_BOOT_ACTUATOR
+    method: GET
+    path: /actuator/httptrace
+    expected_response:
+      status_code: 200
+    validation:
+      type: sensitive_data_exposure
+      indicators:
+        - "traces"
+        - "timestamp"
+        - "request"
+        - "response"
+    remediation: Disable httptrace actuator in production.

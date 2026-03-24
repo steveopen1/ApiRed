@@ -1,0 +1,42 @@
+api_version: "1.0"
+category: SessionFixation
+
+test_cases:
+
+  - id: SESSION-001
+    name: Session Fixation Vulnerability
+    severity: HIGH
+    cwe_id: CWE-384
+    description: |
+      Test for session fixation vulnerability where attacker can set user's session ID.
+    vuln_type: SESSION_FIXATION
+    method: GET
+    path: /api/login
+    payloads:
+      - ";JSESSIONID=ATTACKER_SESSION"
+    validation:
+      type: session_fixation
+      indicators:
+        - "session"
+        - "jsessionid"
+        - "PHPSESSID"
+    remediation: Regenerate session ID after successful authentication.
+
+  - id: SESSION-002
+    name: Session Token Not Regenerated
+    severity: MEDIUM
+    cwe_id: CWE-384
+    description: |
+      Test for session token not being regenerated after login.
+    vuln_type: SESSION_FIXATION
+    method: POST
+    path: /api/login
+    payloads:
+      - username: user
+        password: password123
+    validation:
+      type: session_regeneration
+      indicators:
+        - "same session"
+        - "session not regenerated"
+    remediation: Implement session regeneration after privilege changes.

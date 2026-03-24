@@ -1,0 +1,194 @@
+api_version: "1.0"
+category: DevOpsConfig
+
+test_cases:
+
+  - id: DEVOPS-001
+    name: Docker Compose Config Exposure
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed docker-compose.yml configuration.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /docker-compose.yml
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "services"
+        - "image:"
+        - "ports:"
+    remediation: Block access to docker-compose files via robots.txt.
+
+  - id: DEVOPS-002
+    name: Dockerfile Hidden Disclosure
+    severity: LOW
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Dockerfile.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /*/Dockerfile
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "FROM"
+        - "RUN"
+        - "COPY"
+    remediation: Exclude Dockerfile from web-accessible directories.
+
+  - id: DEVOPS-003
+    name: Git Config Disclosure
+    severity: MEDIUM
+    cwe_id: CWE-538
+    description: |
+      Test for exposed .git/config file.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.git/config
+    expected_response:
+      status_code: 200
+    validation:
+      type: git_exposure
+      indicators:
+        - "[core]"
+        - "repository"
+        - "remote"
+    remediation: Block .git directory in robots.txt and server config.
+
+  - id: DEVOPS-004
+    name: Git Credentials Disclosure
+    severity: CRITICAL
+    cwe_id: CWE-538
+    description: |
+      Test for exposed git credentials.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.git-credentials
+    expected_response:
+      status_code: 200
+    validation:
+      type: credential_exposure
+      indicators:
+        - "github.com"
+        - "password="
+        - "oauth"
+    remediation: Remove .git-credentials and use git credential helper.
+
+  - id: DEVOPS-005
+    name: CircleCI Config Exposure
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed CircleCI configuration.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.circleci/config.yml
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "version:"
+        - "jobs:"
+        - "workflows:"
+    remediation: Exclude CI configs from web-accessible directories.
+
+  - id: DEVOPS-006
+    name: GitHub Workflows Disclosure
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed GitHub Actions workflows.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.github/workflows/*.yml
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "name:"
+        - "on:"
+        - "jobs:"
+    remediation: Exclude workflow files from web-accessible directories.
+
+  - id: DEVOPS-007
+    name: SSH Authorized Keys Exposure
+    severity: HIGH
+    cwe_id: CWE-538
+    description: |
+      Test for exposed SSH authorized_keys.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.ssh/authorized_keys
+    expected_response:
+      status_code: 200
+    validation:
+      type: credential_exposure
+      indicators:
+        - "ssh-rsa"
+        - "ssh-dss"
+        - "ssh-ed25519"
+    remediation: Block .ssh directory from web access.
+
+  - id: DEVOPS-008
+    name: Redis Config Exposure
+    severity: HIGH
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Redis configuration.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /redis.conf
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "bind"
+        - "port"
+        - "requirepass"
+    remediation: Protect configuration files from web access.
+
+  - id: DEVOPS-009
+    name: Nginx Config File Disclosure
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Nginx configuration.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /nginx.conf
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "server"
+        - "location"
+        - "proxy_pass"
+    remediation: Protect Nginx config from web access.
+
+  - id: DEVOPS-010
+    name: Apache Config File Disclosure
+    severity: MEDIUM
+    cwe_id: CWE-16
+    description: |
+      Test for exposed Apache configuration.
+    vuln_type: DEV OPS_CONFIG
+    method: GET
+    path: /.htaccess
+    expected_response:
+      status_code: 200
+    validation:
+      type: config_exposure
+      indicators:
+        - "RewriteEngine"
+        - "RewriteRule"
+        - "Require"
+    remediation: Protect Apache config files from web access.

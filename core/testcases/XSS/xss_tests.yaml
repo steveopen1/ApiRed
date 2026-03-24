@@ -1,0 +1,96 @@
+api_version: "1.0"
+category: XSS
+
+test_cases:
+
+  - id: XSS-001
+    name: XSS by changing request parameters
+    severity: HIGH
+    cwe_id: CWE-79
+    description: |
+      Test for XSS vulnerability via reflected request parameters.
+    vuln_type: XSS
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "<script>alert(1)</script>"
+      - "<img src=x onerror=alert(1)>"
+      - "<svg onload=alert(1)>"
+      - "javascript:alert(1)"
+    validation:
+      type: reflected_xss
+      indicators:
+        - "<script>"
+        - "alert(1)"
+        - "onerror="
+    remediation: Implement output encoding and Content-Security-Policy headers.
+
+  - id: XSS-002
+    name: XSS by changing path
+    severity: HIGH
+    cwe_id: CWE-79
+    description: |
+      Test for XSS vulnerability via path parameters.
+    vuln_type: XSS
+    method: GET
+    path: /api/user/{name}
+    payloads:
+      - "<script>alert(1)</script>"
+      - "javascript:alert(1)"
+      - "<img src=x onerror=alert(1)>"
+    validation:
+      type: path_xss
+      indicators:
+        - "<script>"
+        - "alert(1)"
+    remediation: Validate and sanitize all path parameters.
+
+  - id: XSS-003
+    name: XSS by changing file names
+    severity: HIGH
+    cwe_id: CWE-79
+    description: |
+      Test for XSS vulnerability via file name parameters.
+    vuln_type: XSS
+    method: GET
+    path: /api/download
+    parameters:
+      - name: filename
+        type: string
+        location: query
+    payloads:
+      - "<filename><script>alert(1)</script>.pdf"
+      - "<img src=x onerror=alert(1)>.png"
+    validation:
+      type: filename_xss
+      indicators:
+        - "<script>"
+        - "alert(1)"
+    remediation: Sanitize file names and set Content-Disposition header.
+
+  - id: XSS-004
+    name: XSS by appending to query parameters
+    severity: MEDIUM
+    cwe_id: CWE-79
+    description: |
+      Test for XSS via appended query parameters.
+    vuln_type: XSS
+    method: GET
+    path: /api/view
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1<script>alert(1)</script>"
+      - "1<img src=x onerror=alert(1)>"
+    validation:
+      type: appended_xss
+      indicators:
+        - "<script>"
+        - "alert(1)"
+    remediation: Encode all user input in output.
