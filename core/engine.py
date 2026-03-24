@@ -7,6 +7,7 @@ import asyncio
 import time
 import os
 import re
+import json
 import logging
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
@@ -22,7 +23,7 @@ from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
-from .testers import FuzzTester, VulnerabilityTester
+from .testers import FuzzTester, VulnerabilityTester, APIRequestTester
 from .testers.idor_tester import IDORTester
 from .utils.url_greper import URLGreper
 from .utils.gf import GFLibrary
@@ -33,6 +34,7 @@ from .knowledge_base import KnowledgeBase
 from .models import ScanResult, APIEndpoint
 from .framework import FrameworkDetector
 from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
+from .observability import RunProfiler
 
 
 @dataclass
@@ -106,6 +108,8 @@ class ScanEngine:
         self._sensitive_detector: Optional[TwoTierSensitiveDetector] = None
         self._fuzz_tester: Optional[FuzzTester] = None
         self._vulnerability_tester: Optional[VulnerabilityTester] = None
+        self._api_request_tester: Optional[APIRequestTester] = None
+        self._profiler: Optional[RunProfiler] = None
         
         self.scanner_agent: Optional[ScannerAgent] = None
         self.analyzer_agent: Optional[AnalyzerAgent] = None
@@ -215,6 +219,8 @@ class ScanEngine:
         self._vulnerability_tester = VulnerabilityTester(self._http_client, self._gf_library)
         self._idor_tester = IDORTester(self._http_client)
         self._url_greper = URLGreper()
+        self._api_request_tester = APIRequestTester(self._http_client)
+        self._profiler = RunProfiler()
         
         self._plugins_initialized = False
         self._plugin_registry = None
@@ -302,6 +308,10 @@ class ScanEngine:
         
         await self.initialize()
         
+        if self._profiler:
+            self._profiler.tracker.start_stage('initialization', input_count=1)
+            self._profiler.tracker.finish_stage()
+        
         attack_mode = getattr(self.config, 'attack_mode', 'all')
         no_api_scan = getattr(self.config, 'no_api_scan', False)
         
@@ -309,29 +319,51 @@ class ScanEngine:
         
         try:
             if attack_mode in ['collect', 'all']:
+                if self._profiler:
+                    self._profiler.tracker.start_stage('js_collection', input_count=0)
                 await self._run_collectors()
+                if self._profiler:
+                    self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'collect', 'status': 'complete'})
             
             if attack_mode in ['scan', 'all'] and not no_api_scan:
+                if self._profiler:
+                    self._profiler.tracker.start_stage('api_scoring', input_count=0)
                 await self._run_analyzers()
+                if self._profiler:
+                    self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'analyze', 'status': 'complete'})
                 
+                if self._profiler:
+                    self._profiler.tracker.start_stage('vuln_testing', input_count=0)
                 await self._run_testers()
+                if self._profiler:
+                    self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'test', 'status': 'complete'})
             
+            if self._profiler:
+                self._profiler.tracker.start_stage('reporting', input_count=0)
             await self._stage_reporting()
+            if self._profiler:
+                self._profiler.tracker.finish_stage()
             self._emit('stage_complete', {'stage': 'reporting', 'status': 'complete'})
             
             if self.result:
                 self.result.status = "completed"
+            
+            if self._profiler:
+                profiler_report = self._profiler.generate_profile()
+                logger.info(f"Profiler Report: {json.dumps(profiler_report, indent=2)}")
         
         except Exception as e:
+            if self._profiler:
+                self._profiler.finish()
             if self.result:
                 self.result.errors.append(str(e))
                 self.result.status = "failed"
@@ -1811,8 +1843,9 @@ class ScanEngine:
         """API评分"""
         endpoints = self.result.api_endpoints if self.result else []
         
-        # 建立 URL -> endpoint 映射，用于后续更新 is_high_value
         url_to_endpoint: Dict[str, Any] = {e.full_url: e for e in endpoints}
+        
+        all_responses: List[Any] = []
         
         for endpoint in endpoints:
             try:
@@ -1820,6 +1853,17 @@ class ScanEngine:
                     endpoint.full_url,
                     method=endpoint.method
                 )
+                from .utils.http_client import TaskResult
+                task_result = TaskResult(
+                    url=endpoint.full_url,
+                    method=endpoint.method,
+                    status_code=response.status_code,
+                    content=response.content,
+                    content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
+                    content_hash=getattr(response, 'content_hash', '')
+                )
+                all_responses.append(task_result)
+                
                 from .analyzers.response_cluster import TaskResult as RCTaskResult
                 rc_task_result = RCTaskResult(
                     status_code=response.status_code,
@@ -1829,35 +1873,56 @@ class ScanEngine:
                 self._response_cluster.add_response(endpoint.api_id, rc_task_result)
                 
                 if not self._response_cluster.is_baseline_404(endpoint.api_id):
-                    from .models import APIStatus
-                    endpoint.status = APIStatus.ALIVE
+                    is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
                     
-                    if self._api_scorer:
-                        self._api_scorer.add_evidence(
-                            endpoint.full_url,
-                            'http_test',
-                            {},
-                            http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
-                        )
+                    if is_valid:
+                        from .models import APIStatus
+                        endpoint.status = APIStatus.ALIVE
+                        
+                        if self._api_scorer:
+                            self._api_scorer.add_evidence(
+                                endpoint.full_url,
+                                'http_test',
+                                {},
+                                http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                            )
             except Exception as e:
                 logger.debug(f"API scoring error: {e}")
         
-        # 从评分器获取高价值 API 证据
+        if self._response_baseline and all_responses:
+            try:
+                self._response_baseline.learn(all_responses)
+                logger.info(f"ResponseBaselineLearner: learned {self._response_baseline.get_baseline_count()} baselines, identified {self._response_baseline.get_default_page_count()} default pages")
+            except Exception as e:
+                logger.debug(f"Baseline learning error: {e}")
+        
+        if self._evidence_aggregator and self._collector_results:
+            try:
+                js_regex_apis = self._collector_results.get('js_regex', [])
+                js_ast_apis = self._collector_results.get('js_ast', [])
+                http_log_apis = self._collector_results.get('http', [])
+                ai_apis = []
+                self._evidence_aggregator.aggregate_from_sources(
+                    js_regex_apis=js_regex_apis,
+                    js_ast_apis=js_ast_apis,
+                    http_log_apis=http_log_apis,
+                    ai_apis=ai_apis
+                )
+                stats = self._evidence_aggregator.get_statistics()
+                logger.info(f"APIEvidenceAggregator: aggregated {stats['total_apis']} APIs from {len(stats['sources_breakdown'])} sources")
+            except Exception as e:
+                logger.debug(f"Evidence aggregation error: {e}")
+        
         high_value_evidence = self._api_scorer.get_high_value() if self._api_scorer else []
         
-        # 更新端点的 is_high_value 标志
-        # evidence.normalized_path 是 lowercased 路径（如 '/areacare/delete'）
-        # 需要匹配到 full_url 的路径部分
         for evidence in high_value_evidence:
             for ep in endpoints:
-                # 检查 full_url 的路径部分是否与 normalized_path 匹配
                 ep_path_lower = ep.path.lower() if ep.path else ''
                 if ep_path_lower == evidence.normalized_path or \
                    ep.full_url.lower().endswith(evidence.normalized_path):
                     ep.is_high_value = True
                     break
         
-        # 统计高价值端点数量
         high_value_count = sum(1 for e in endpoints if e.is_high_value)
         
         if self.result:
