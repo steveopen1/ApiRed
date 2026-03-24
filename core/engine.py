@@ -499,11 +499,69 @@ class ScanEngine:
         '/enable', '/disable', '/status', '/config', '/settings',
         '/export', '/import', '/upload', '/download',
         '/search', '/query', '/filter', '/sort',
+        '/getById', '/getByName', '/getByCode', '/getList', '/getPage',
+        '/listJsonData', '/listData', '/json', '/tree', '/treeData',
+        '/options', '/select', '/combo', '/combobox', '/autocomplete',
+        '/submit', '/save', '/batch', '/batchAdd', '/batchUpdate', '/batchDelete',
+        '/reset', '/init', '/refresh', '/sync', '/merge',
+        '/login', '/logout', '/register', '/signup', '/signin',
+        '/auth', '/authorize', '/token', '/refreshToken', '/verify',
+        '/menu', '/nav', '/navigation', '/sidebar', '/routes',
+        '/permission', '/permissions', '/perms', '/role', '/roles',
+        '/user', '/users', '/profile', '/account', '/info', '/current',
+        '/dashboard', '/home', '/index', '/welcome', '/main',
+        '/config', '/configuration', '/settings', '/preferences',
+        '/log', '/logs', '/logging', '/audit', '/history',
+        '/stat', '/stats', '/statistics', '/analytics', '/report', '/reports',
+        '/dict', '/dicts', '/dictionary', '/enum', '/enums',
+        '/area', '/region', '/province', '/city', '/district',
+        '/org', '/organization', '/dept', '/department', '/company',
+        '/category', '/categories', '/catalog', '/type', '/types',
+        '/tag', '/tags', '/label', '/labels', '/classify',
+        '/attachment', '/attachments', '/file', '/files', '/document', '/documents',
+        '/image', '/images', '/img', '/picture', '/pictures', '/photo', '/photos',
+        '/video', '/videos', '/audio', '/media', '/upload', '/uploads',
+        '/comment', '/comments', '/reply', '/replies', '/message', '/messages',
+        '/notice', '/notices', '/notification', '/notifications', '/alert', '/alerts',
+        '/news', '/article', '/articles', '/blog', '/post', '/posts',
+        '/product', '/products', '/goods', '/item', '/items', '/sku',
+        '/order', '/orders', '/cart', '/shop', '/payment', '/transaction',
+        '/invoice', '/refund', '/return', '/exchange',
+        '/workflow', '/process', '/task', '/tasks', '/approve', '/approval',
+        '/schedule', '/calendar', '/booking', '/appointment',
+        '/validate', '/validation', '/verify', '/verification',
+    ]
+
+    COMMON_API_PATHS = [
+        'add', 'ls', 'focus', 'calc', 'download', 'bind', 'execute',
+        'logininfo', 'create', 'decrypt', 'new', 'update', 'click',
+        'shell', 'export', 'menu', 'retrieve', 'on', 'message', 'admin',
+        'calculate', 'append', 'check', 'crypt', 'rename', 'exec', 'detail',
+        'clone', 'query', 'verify', 'is', 'authenticate', 'move', 'toggle',
+        'make', 'modify', 'upload', 'help', 'demo', 'with', 'alert', 'mode',
+        'gen', 'msg', 'edit', 'vrfy', 'enable', 'run', 'open', 'post',
+        'proxy', 'subtract', 'initiate', 'read', 'encrypt', 'auth', 'snd',
+        'view', 'save', 'config', 'get', 'alter', 'forceLogout', 'build',
+        'list', 'show', 'online', 'test', 'pull', 'notice', 'change',
+        'put', 'to', 'status', 'search', 'mod', '0', 'send', 'load',
+        'login', 'logout', 'register', 'info', 'detail', 'delete', 'remove',
+        'insert', 'select', 'update', 'user', 'users', 'order', 'orders',
+        'product', 'products', 'goods', 'item', 'items', 'category', 'cart',
+        'shop', 'payment', 'account', 'profile', 'setting', 'settings',
+        'dashboard', 'home', 'index', 'about', 'contact', 'service',
+        'news', 'article', 'blog', 'comment', 'file', 'files', 'upload',
+        'download', 'image', 'images', 'video', 'videos', 'audio',
     ]
     
     async def _probe_parent_paths(self, js_results: List) -> Dict[str, Set[str]]:
         """
-        探测父路径是否可访问，并进一步探测常见 RESTful 端点
+        探测父路径是否可访问，并进一步探测常见 RESTful 端点、业务后缀和JS路径模板
+        
+        探测策略:
+        1. 父路径 + RESTful 后缀 (/list, /add, /detail 等)
+        2. 父路径 + 业务API词 (/user, /order, /product 等)  
+        3. 父路径 + JS路径模板片段 (从JS提取的 /users/{id} -> /users)
+        4. 独立路径探测 (从JS模板提取独立资源名)
         
         Returns:
             {探测到的有效父路径: 该路径下探测到的额外端点}
@@ -512,25 +570,31 @@ class ScanEngine:
         base_url = self.config.target.rstrip('/')
         
         parent_paths_to_probe = set()
+        path_templates = set()
+        
         for js_result in js_results:
             if hasattr(js_result, 'parent_paths') and js_result.parent_paths:
                 for original_path, parents in js_result.parent_paths.items():
                     for parent in parents:
                         if parent not in parent_paths_to_probe:
                             parent_paths_to_probe.add(parent)
+            
+            if hasattr(js_result, 'path_templates') and js_result.path_templates:
+                for template in js_result.path_templates:
+                    path_templates.add(template)
         
         if not parent_paths_to_probe:
             return probed_results
         
-        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths...")
+        logger.info(f"Probing {len(parent_paths_to_probe)} parent paths + {len(path_templates)} path templates...")
         
         if self.config.concurrency_probe:
             probed_results = await self._probe_parent_paths_concurrent(
-                base_url, parent_paths_to_probe
+                base_url, parent_paths_to_probe, path_templates
             )
         else:
             probed_results = await self._probe_parent_paths_serial(
-                base_url, parent_paths_to_probe
+                base_url, parent_paths_to_probe, path_templates
             )
         
         return probed_results
@@ -538,10 +602,23 @@ class ScanEngine:
     async def _probe_parent_paths_serial(
         self, 
         base_url: str, 
-        parent_paths_to_probe: Set[str]
+        parent_paths_to_probe: Set[str],
+        path_templates: Set[str] = None
     ) -> Dict[str, Set[str]]:
         """串行探测父路径"""
+        if path_templates is None:
+            path_templates = set()
         probed_results = {}
+        
+        common_suffixes = self.COMMON_RESTFUL_SUFFIXES + [f'/{p}' for p in self.COMMON_API_PATHS]
+        
+        template_fragments = set()
+        for template in path_templates:
+            parts = template.strip('/').split('/')
+            for part in parts:
+                if part and not part.startswith('{') and len(part) > 1:
+                    template_fragments.add(part)
+        common_suffixes.extend([f'/{f}' for f in template_fragments])
         
         for parent_path in parent_paths_to_probe:
             full_url = base_url + parent_path
@@ -557,7 +634,7 @@ class ScanEngine:
                     logger.info(f"Parent path accessible: {parent_path} (status: {response.status_code})")
                     probed_results[parent_path] = set()
                     
-                    for suffix in self.COMMON_RESTFUL_SUFFIXES:
+                    for suffix in common_suffixes:
                         sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
                         sub_url = base_url + sub_path
                         
@@ -586,10 +663,23 @@ class ScanEngine:
     async def _probe_parent_paths_concurrent(
         self, 
         base_url: str, 
-        parent_paths_to_probe: Set[str]
+        parent_paths_to_probe: Set[str],
+        path_templates: Set[str] = None
     ) -> Dict[str, Set[str]]:
         """并发探测父路径"""
+        if path_templates is None:
+            path_templates = set()
         probed_results = {}
+        
+        common_suffixes = self.COMMON_RESTFUL_SUFFIXES + [f'/{p}' for p in self.COMMON_API_PATHS]
+        
+        template_fragments = set()
+        for template in path_templates:
+            parts = template.strip('/').split('/')
+            for part in parts:
+                if part and not part.startswith('{') and len(part) > 1:
+                    template_fragments.add(part)
+        common_suffixes.extend([f'/{f}' for f in template_fragments])
         
         async def probe_single_path(parent_path: str) -> Tuple[str, Set[str], int]:
             full_url = base_url + parent_path
@@ -624,7 +714,7 @@ class ScanEngine:
                             pass
                         return None
                     
-                    sub_tasks = [probe_sub_path(s) for s in self.COMMON_RESTFUL_SUFFIXES]
+                    sub_tasks = [probe_sub_path(s) for s in common_suffixes]
                     sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
                     
                     for result in sub_results:
