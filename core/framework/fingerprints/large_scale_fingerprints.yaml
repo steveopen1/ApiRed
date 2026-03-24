@@ -1,0 +1,1005 @@
+ai:
+- headers:
+  - X-Ollama
+  name: Ollama
+  patterns:
+  - ollama
+  - /api/tags
+- name: vLLM
+  patterns:
+  - vllm
+  - /v1/models
+- name: TGI (Triton Inference Server)
+  patterns:
+  - tgi
+  - tritonserver
+- name: Xinference
+  patterns:
+  - xinference
+  - /v1/models
+- name: Ray Serve
+  patterns:
+  - rayserve
+  - /api/serve
+- name: SGLang
+  patterns:
+  - sglang
+  - /v1/chat
+- name: TensorRT-LLM
+  patterns:
+  - tensorrt_llm
+  - /trtllm
+- name: DeepSpeed
+  patterns:
+  - deepspeed
+  - /v1/chat
+- name: Accelerate
+  patterns:
+  - accelerate
+  - /api
+- name: llama.cpp
+  patterns:
+  - llama.cpp
+  - /completion
+- name: ggml
+  patterns:
+  - ggml
+  - /predict
+- name: GPT4All
+  patterns:
+  - gpt4all
+  - /v1/chat
+- name: LocalAI
+  patterns:
+  - localai
+  - /v1/chat
+- name: Janus
+  patterns:
+  - janus
+  - /api/chat
+- name: Mistral.rs
+  patterns:
+  - mistralrs
+  - /v1/chat
+- name: n8n
+  patterns:
+  - n8n
+  - /webhook
+  - /rest/node
+- name: Dify
+  patterns:
+  - dify
+  - /api/providers
+  - /v1/workflows
+- name: Flowise
+  patterns:
+  - flowise
+  - /api/v1/prediction
+- name: LangFlow
+  patterns:
+  - langflow
+  - /api/v1/run
+- name: ComfyUI
+  patterns:
+  - comfyui
+  - /api/workflow
+- name: FastGPT
+  patterns:
+  - fastgpt
+  - /api/chat
+- name: MaxKB
+  patterns:
+  - maxkb
+  - /api/chat
+- name: RAGFlow
+  patterns:
+  - ragflow
+  - /api/v1/retrieval
+- name: ChatQA
+  patterns:
+  - chatqa
+  - /api/chat
+- name: Strolid
+  patterns:
+  - strolid
+  - /api/v1/chat
+- name: LibreChat
+  patterns:
+  - librechat
+  - /api/chat
+- name: NextChat
+  patterns:
+  - nextchat
+  - /api/chat
+- name: OpenChat
+  patterns:
+  - openchat
+  - /api/chat
+- name: AIKit
+  patterns:
+  - aikit
+  - /api/chat
+- name: AutoGPT
+  patterns:
+  - autogpt
+  - /api/tasks
+- name: AgentGPT
+  patterns:
+  - agentgpt
+  - /api/agent
+- name: Open Interpreter
+  patterns:
+  - open-interpreter
+  - /api/interpreter
+- name: Local AI Gateway
+  patterns:
+  - localai-gateway
+  - /api/v1/chat
+- name: Portkey
+  patterns:
+  - portkey
+  - /v1/chat
+- name: Weights & Biases W&B
+  patterns:
+  - wandb
+  - /wandb/
+- name: MLflow
+  patterns:
+  - mlflow
+  - /ajax-api
+- name: Arize Phoenix
+  patterns:
+  - arize-phoenix
+  - /api/v1/traces
+- name: Helicone
+  patterns:
+  - helicone
+  - /v1/chat
+- name: Braintrust
+  patterns:
+  - braintrust
+  - /v1/chat
+- name: LangSmith
+  patterns:
+  - langsmith
+  - /api/v1/chat
+- name: PromptLayer
+  patterns:
+  - promptlayer
+  - /api/v1/chat
+- name: Semantic Cache
+  patterns:
+  - semantic-cache
+  - /api/cache
+- name: Embedding Service
+  patterns:
+  - embedding
+  - /v1/embeddings
+- name: Sentence Transformers
+  patterns:
+  - sentence-transformers
+  - /encode
+- name: Cohere
+  patterns:
+  - cohere
+  - /v1/embed
+- name: Instructor Embedding
+  patterns:
+  - instructor
+  - /v1/embeddings
+- name: Pinecone
+  patterns:
+  - pinecone
+  - /vectors/upsert
+- name: Weaviate
+  patterns:
+  - weaviate
+  - /v1/objects
+- name: Qdrant
+  patterns:
+  - qdrant
+  - /collections
+- name: Milvus
+  patterns:
+  - milvus
+  - /api/v1/entities
+- name: Chroma
+  patterns:
+  - chromadb
+  - /api/v1/collections
+- name: pgvector
+  patterns:
+  - pgvector
+  - /api/v1/embeddings
+- name: OneAPI
+  patterns:
+  - oneapi
+  - /api/user
+- name: NewAPI
+  patterns:
+  - newapi
+  - /api/chat
+- name: Allor
+  patterns:
+  - allor
+  - /v1/chat
+- name: Venus
+  patterns:
+  - venus
+  - /api/chat
+- name: AutoAI Proxy
+  patterns:
+  - autoai-proxy
+  - /v1/chat
+cicd:
+- name: Jenkins
+  patterns:
+  - jenkins
+  - /job/
+- name: GitLab
+  patterns:
+  - gitlab
+  - /users/sign_in
+- name: GitHub Actions
+  patterns:
+  - github-actions
+  - /workflows
+- name: Travis CI
+  patterns:
+  - travis-ci
+  - /api/3/repos
+- name: CircleCI
+  patterns:
+  - circleci
+  - /api/v1.1/insights
+- name: Drone CI
+  patterns:
+  - drone-ci
+  - /api/repos
+- name: Azure Pipelines
+  patterns:
+  - azure-devops
+  - /_apis
+- name: TeamCity
+  patterns:
+  - teamcity
+  - /httpStat
+- name: Bamboo
+  patterns:
+  - bamboo
+  - /rest/api
+- name: GoCD
+  patterns:
+  - gocd
+  - /go/api
+- name: Spinnaker
+  patterns:
+  - spinnaker
+  - /api/v1
+- name: ArgoCD
+  patterns:
+  - argocd
+  - /api/v1/argocd
+- name: Tekton
+  patterns:
+  - tekton
+  - /v1/pipelineruns
+- name: Jenkins X
+  patterns:
+  - jenkins-x
+  - /jx
+- name: GitLab CI
+  patterns:
+  - gitlab-ci
+  - /api/4/projects
+cms:
+- name: WordPress
+  patterns:
+  - wordpress
+  - /wordpress
+- name: WordPress Plugin - yoast
+  patterns:
+  - /yoast
+- name: WordPress Plugin - woocommerce
+  patterns:
+  - /woocommerce
+- name: WordPress Plugin - akismet
+  patterns:
+  - /akismet
+- name: WordPress Plugin - contact-form-7
+  patterns:
+  - /contact-form-7
+- name: WordPress Plugin - jetpack
+  patterns:
+  - /jetpack
+- name: WordPress Plugin - elementor
+  patterns:
+  - /elementor
+- name: WordPress Plugin - wpbakery
+  patterns:
+  - /wpbakery
+- name: WordPress Plugin - slider-revolution
+  patterns:
+  - /slider-revolution
+- name: WordPress Plugin - all-in-one-seo
+  patterns:
+  - /all-in-one-seo
+- name: WordPress Plugin - wordfence
+  patterns:
+  - /wordfence
+- name: WordPress Plugin - updraftplus
+  patterns:
+  - /updraftplus
+- name: WordPress Plugin - wp-super-cache
+  patterns:
+  - /wp-super-cache
+- name: WordPress Plugin - w3-total-cache
+  patterns:
+  - /w3-total-cache
+- name: WordPress Plugin - redis-cache
+  patterns:
+  - /redis-cache
+- name: Drupal
+  patterns:
+  - drupal
+  - /drupal
+- name: Drupal Plugin - views
+  patterns:
+  - /views
+- name: Drupal Plugin - panels
+  patterns:
+  - /panels
+- name: Drupal Plugin - ctools
+  patterns:
+  - /ctools
+- name: Drupal Plugin - token
+  patterns:
+  - /token
+- name: Drupal Plugin - pathauto
+  patterns:
+  - /pathauto
+- name: Drupal Plugin - xmlsitemap
+  patterns:
+  - /xmlsitemap
+- name: Drupal Plugin - rules
+  patterns:
+  - /rules
+- name: Joomla
+  patterns:
+  - joomla
+  - /joomla
+- name: Joomla Plugin - k2
+  patterns:
+  - /k2
+- name: Joomla Plugin - virtuemart
+  patterns:
+  - /virtuemart
+- name: Joomla Plugin - joomshopping
+  patterns:
+  - /joomshopping
+- name: Joomla Plugin - hikashop
+  patterns:
+  - /hikashop
+- name: Joomla Plugin - akeeba
+  patterns:
+  - /akeeba
+- name: Joomla Plugin - aicontacts
+  patterns:
+  - /aicontacts
+- name: Joomla Plugin - phocamaps
+  patterns:
+  - /phocamaps
+- name: Magento
+  patterns:
+  - magento
+  - /magento
+- name: ShopNC
+  patterns:
+  - shopnc
+  - /shopnc
+- name: ECShop
+  patterns:
+  - ecshop
+  - /ecshop
+- name: Dedecms
+  patterns:
+  - dedecms
+  - /dedecms
+- name: PhpCMS
+  patterns:
+  - phpcms
+  - /phpcms
+- name: 帝国CMS
+  patterns:
+  - 帝国cms
+  - /帝国cms
+- name: Discuz
+  patterns:
+  - discuz
+  - /discuz
+- name: PhpOa
+  patterns:
+  - phpoa
+  - /phpoa
+- name: SiteServer
+  patterns:
+  - siteserver
+  - /siteserver
+- name: Z-Blog
+  patterns:
+  - z-blog
+  - /z-blog
+- name: Typecho
+  patterns:
+  - typecho
+  - /typecho
+- name: Emlog
+  patterns:
+  - emlog
+  - /emlog
+- name: PbootCMS
+  patterns:
+  - pbootcms
+  - /pbootcms
+- name: DcatAdmin
+  patterns:
+  - dcatadmin
+  - /dcatadmin
+- name: Laravel
+  patterns:
+  - laravel
+  - /laravel
+- name: ThinkPHP
+  patterns:
+  - thinkphp
+  - /thinkphp
+- name: Yii2
+  patterns:
+  - yii2
+  - /yii2
+- name: CodeIgniter
+  patterns:
+  - codeigniter
+  - /codeigniter
+- name: Symfony
+  patterns:
+  - symfony
+  - /symfony
+- name: CakePHP
+  patterns:
+  - cakephp
+  - /cakephp
+- name: FuelPHP
+  patterns:
+  - fuelphp
+  - /fuelphp
+- name: Phalcon
+  patterns:
+  - phalcon
+  - /phalcon
+- name: Slim
+  patterns:
+  - slim
+  - /slim
+- name: Swoole
+  patterns:
+  - swoole
+  - /swoole
+container:
+- name: Docker
+  patterns:
+  - docker
+  - /containers/json
+- name: Kubernetes
+  patterns:
+  - kubernetes
+  - /api/v1
+- name: Harbor
+  patterns:
+  - harbor
+  - /c/
+- name: ' Quay'
+  patterns:
+  - quay
+  - /v1/repositories
+- name: Nexus Repository
+  patterns:
+  - nexus
+  - /repository
+- name: JFrog Artifactory
+  patterns:
+  - jfrog
+  - /artifactory
+- name: Podman
+  patterns:
+  - podman
+  - /containers
+- name: Containerd
+  patterns:
+  - containerd
+  - /containers
+- name: CRI-O
+  patterns:
+  - cri-o
+  - /info
+- name: Portainer
+  patterns:
+  - portainer
+  - /api
+- name: Rancher
+  patterns:
+  - rancher
+  - /v3
+- name: K3s
+  patterns:
+  - k3s
+  - /api/k8s
+- name: Minikube
+  patterns:
+  - minikube
+  - /api
+- name: Docker Swarm
+  patterns:
+  - swarm
+  - /services
+database:
+- name: MySQL
+  patterns:
+  - mysql
+- name: PostgreSQL
+  patterns:
+  - postgresql
+- name: Oracle
+  patterns:
+  - oracle
+- name: MongoDB
+  patterns:
+  - mongodb
+- name: Redis
+  patterns:
+  - redis
+- name: Memcached
+  patterns:
+  - memcached
+- name: Elasticsearch
+  patterns:
+  - elasticsearch
+- name: SQL Server
+  patterns:
+  - sqlserver
+- name: SQLite
+  patterns:
+  - sqlite
+- name: Cassandra
+  patterns:
+  - cassandra
+- name: CouchDB
+  patterns:
+  - couchdb
+- name: DynamoDB
+  patterns:
+  - dynamodb
+- name: Neo4j
+  patterns:
+  - neo4j
+- name: InfluxDB
+  patterns:
+  - influxdb
+- name: TimescaleDB
+  patterns:
+  - timescaledb
+- name: CockroachDB
+  patterns:
+  - cockroachdb
+- name: SingleStore
+  patterns:
+  - singlestore
+- name: Vertica
+  patterns:
+  - vertica
+- name: Sybase
+  patterns:
+  - sybase
+- name: Informix
+  patterns:
+  - informix
+- name: Interbase
+  patterns:
+  - interbase
+- name: Firebird
+  patterns:
+  - firebird
+framework:
+- name: Spring Boot
+  patterns:
+  - spring-boot
+- name: Spring MVC
+  patterns:
+  - spring-mvc
+- name: Spring Security
+  patterns:
+  - spring-security
+- name: Struts2
+  patterns:
+  - struts2
+- name: Hibernate
+  patterns:
+  - hibernate
+- name: MyBatis
+  patterns:
+  - mybatis
+- name: JFinal
+  patterns:
+  - jfinal
+- name: Blade
+  patterns:
+  - blade
+- name: Solon
+  patterns:
+  - solon
+- name: Jboot
+  patterns:
+  - jboot
+- name: Django
+  patterns:
+  - django
+- name: Flask
+  patterns:
+  - flask
+- name: FastAPI
+  patterns:
+  - fastapi
+- name: Tornado
+  patterns:
+  - tornado
+- name: Pyramid
+  patterns:
+  - pyramid
+- name: Bottle
+  patterns:
+  - bottle
+- name: Web2py
+  patterns:
+  - web2py
+- name: Sanic
+  patterns:
+  - sanic
+- name: Express
+  patterns:
+  - express
+- name: Koa
+  patterns:
+  - koa
+- name: NestJS
+  patterns:
+  - nestjs
+- name: Egg
+  patterns:
+  - egg
+- name: Next.js
+  patterns:
+  - nextjs
+- name: Nuxt.js
+  patterns:
+  - nuxtjs
+- name: SvelteKit
+  patterns:
+  - sveltekit
+- name: Laravel
+  patterns:
+  - laravel
+- name: ThinkPHP
+  patterns:
+  - thinkphp
+- name: Yii2
+  patterns:
+  - yii2
+- name: CodeIgniter
+  patterns:
+  - codeigniter
+- name: Symfony
+  patterns:
+  - symfony
+- name: Zend
+  patterns:
+  - zend
+- name: Phalcon
+  patterns:
+  - phalcon
+- name: Slim
+  patterns:
+  - slim
+- name: Rails
+  patterns:
+  - rails
+- name: Sinatra
+  patterns:
+  - sinatra
+- name: Hanami
+  patterns:
+  - hanami
+- name: Gin
+  patterns:
+  - gin
+- name: Echo
+  patterns:
+  - echo
+- name: Fiber
+  patterns:
+  - fiber
+- name: Beego
+  patterns:
+  - beego
+- name: Iris
+  patterns:
+  - iris
+- name: Martini
+  patterns:
+  - martini
+- name: ASP.NET
+  patterns:
+  - aspnet
+- name: ASP.NET Core
+  patterns:
+  - aspnet-core
+- name: NancyFX
+  patterns:
+  - nancyfx
+- name: React
+  patterns:
+  - react
+- name: Vue
+  patterns:
+  - vue
+- name: Angular
+  patterns:
+  - angular
+- name: Svelte
+  patterns:
+  - svelte
+- name: jQuery
+  patterns:
+  - jquery
+- name: Bootstrap
+  patterns:
+  - bootstrap
+- name: TailwindCSS
+  patterns:
+  - tailwindcss
+kubernetes:
+- name: Kubernetes API Server
+  patterns:
+  - kubernetes
+  - /api/v1
+- name: etcd
+  patterns:
+  - etcd
+  - /v2/keys
+- name: kubelet
+  patterns:
+  - kubelet
+  - /stats/summary
+- name: kube-proxy
+  patterns:
+  - kube-proxy
+  - /api/v1/namespaces/kube-proxy
+- name: kube-scheduler
+  patterns:
+  - kube-scheduler
+  - /metrics
+- name: kube-controller-manager
+  patterns:
+  - kube-controller
+  - /metrics
+- name: coredns
+  patterns:
+  - coredns
+  - /api/v1/namespaces/kube-system/services/kube-dns
+- name: Prometheus
+  patterns:
+  - prometheus
+  - /api/v1/query
+- name: Grafana
+  patterns:
+  - grafana
+  - /api/ds/query
+- name: Alertmanager
+  patterns:
+  - alertmanager
+  - /api/v1/alerts
+- name: Thanos
+  patterns:
+  - thanos
+  - /api/v1/query
+- name: Kube-state-metrics
+  patterns:
+  - kube-state-metrics
+  - /metrics
+- name: Node-Exporter
+  patterns:
+  - node-exporter
+  - /metrics
+- name: Kube-Prometheus
+  patterns:
+  - k8s-prometheus
+  - /api/v1
+- name: Weave Scope
+  patterns:
+  - weave-scope
+  - /api/topology
+oa:
+- name: 泛微E-cology
+  patterns:
+  - 泛微e-cology
+- name: 泛微E-mobile
+  patterns:
+  - 泛微e-mobile
+- name: 泛微E-office
+  patterns:
+  - 泛微e-office
+- name: 致远OA
+  patterns:
+  - 致远oa
+- name: 蓝凌OA
+  patterns:
+  - 蓝凌oa
+- name: 通达OA
+  patterns:
+  - 通达oa
+- name: 飞致OA
+  patterns:
+  - 飞致oa
+- name: 华天动力OA
+  patterns:
+  - 华天动力oa
+- name: 久久OA
+  patterns:
+  - 久久oa
+- name: 用友NC
+  patterns:
+  - 用友nc
+- name: 用友U8
+  patterns:
+  - 用友u8
+- name: 金蝶EAS
+  patterns:
+  - 金蝶eas
+- name: 金蝶K3
+  patterns:
+  - 金蝶k3
+- name: 钉钉
+  patterns:
+  - 钉钉
+- name: 企业微信
+  patterns:
+  - 企业微信
+- name: 飞书
+  patterns:
+  - 飞书
+- name: Worktile
+  patterns:
+  - worktile
+- name: Teambition
+  patterns:
+  - teambition
+- name: TAPD
+  patterns:
+  - tapd
+- name: 禅道
+  patterns:
+  - 禅道
+- name: Redmine
+  patterns:
+  - redmine
+- name: Jira
+  patterns:
+  - jira
+- name: Confluence
+  patterns:
+  - confluence
+waf:
+- name: Cloudflare
+  patterns:
+  - cloudflare
+- name: AWS WAF
+  patterns:
+  - aws-waf
+- name: Akamai
+  patterns:
+  - akamai
+- name: Sucuri
+  patterns:
+  - sucuri
+- name: Incapsula
+  patterns:
+  - incapsula
+- name: ModSecurity
+  patterns:
+  - modsecurity
+- name: F5 ASM
+  patterns:
+  - f5-asm
+- name: Imperva
+  patterns:
+  - imperva
+- name: Barracuda
+  patterns:
+  - barracuda
+- name: Citrix NetScaler
+  patterns:
+  - citrix-netscaler
+- name: FortiWeb
+  patterns:
+  - fortiweb
+- name: Palo Alto WAF
+  patterns:
+  - palo-alto-waf
+- name: Radware
+  patterns:
+  - radware
+- name: Sophos
+  patterns:
+  - sophos
+- name: Wordfence
+  patterns:
+  - wordfence
+- name: SiteGround
+  patterns:
+  - siteground
+- name: StackPath
+  patterns:
+  - stackpath
+- name: CloudFront
+  patterns:
+  - cloudfront
+- name: Fastly
+  patterns:
+  - fastly
+- name: KeyCDN
+  patterns:
+  - keycdn
+- name: 阿里云盾
+  patterns:
+  - 阿里云盾
+- name: 腾讯云WAF
+  patterns:
+  - 腾讯云waf
+- name: 华为云WAF
+  patterns:
+  - 华为云waf
+- name: 安全狗
+  patterns:
+  - 安全狗
+- name: 360网站卫士
+  patterns:
+  - 360网站卫士
+- name: 知道创宇
+  patterns:
+  - 知道创宇
+- name: 安恒WAF
+  patterns:
+  - 安恒waf
+- name: 长亭雷池
+  patterns:
+  - 长亭雷池
+- name: 云锁
+  patterns:
+  - 云锁
+- name: WebRAY
+  patterns:
+  - webray
+- name: OneWAF
+  patterns:
+  - onewaf
+- name: 360云防护
+  patterns:
+  - 360云防护
+- name: 玄武盾
+  patterns:
+  - 玄武盾
+- name: 创宇盾
+  patterns:
+  - 创宇盾
+- name: T级防御
+  patterns:
+  - t级防御

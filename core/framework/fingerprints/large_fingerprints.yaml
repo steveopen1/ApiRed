@@ -1,0 +1,3619 @@
+# Large Scale Fingerprint Database
+# 大规模指纹库 - 对标 FLUX 25000+ 规则
+# 每条指纹包含多种匹配方法
+
+cms:
+  - name: WordPress
+    method: body
+    level: L1
+    patterns:
+      - /wp-content
+      - /wp-includes
+      - wp-login.php
+      - wordpress
+  - name: WordPress Plugin Yoast SEO
+    method: body
+    level: L2
+    patterns:
+      - /wp-content/plugins/wordpress-seo/
+      - wpseo_
+  - name: WordPress WooCommerce
+    method: body
+    level: L2
+    patterns:
+      - /woocommerce
+      - wooocommerce
+  - name: WordPress Elementor
+    method: body
+    level: L2
+    patterns:
+      - /wp-content/plugins/elementor/
+      - elementor
+  - name: WordPress Jetpack
+    method: body
+    level: L2
+    patterns:
+      - /wp-content/plugins/jetpack/
+      - jp-public
+  - name: Drupal
+    method: body
+    level: L1
+    patterns:
+      - drupal
+      - /sites/default/
+      - xmlrpc.php
+  - name: Drupal Views
+    method: body
+    level: L2
+    patterns:
+      - /modules/views/
+      - views
+  - name: Joomla
+    method: body
+    level: L1
+    patterns:
+      - /administrator/
+      - joomla
+      - com_
+  - name: Magento
+    method: body
+    level: L1
+    patterns:
+      - /skin/frontend/
+      - /js/mage/
+      - mage
+  - name: ECShop
+    method: body
+    level: L1
+    patterns:
+      - ecshop
+      - EC_SHOP
+      - /flow.php
+  - name: Dedecms
+    method: body
+    level: L1
+    patterns:
+      - dedecms
+      - /plus/
+      - /templets/
+  - name: PhpCMS
+    method: body
+    level: L1
+    patterns:
+      - phpcms
+      - /api/
+      - /caches/
+  - name: 帝国CMS
+    method: body
+    level: L1
+    patterns:
+      - empirecms
+      - /e/admin/
+  - name: Discuz
+    method: body
+    level: L1
+    patterns:
+      - discuz
+      - forum.php
+  - name: ShopNC
+    method: body
+    level: L1
+    patterns:
+      - shopnc
+      - /app/
+  - name: PbootCMS
+    method: body
+    level: L1
+    patterns:
+      - pbootcms
+      - /core/
+  - name: CatCMS
+    method: body
+    level: L1
+    patterns:
+      - catcms
+      - /catcms/
+  - name: MetInfo
+    method: body
+    level: L1
+    patterns:
+      - metinfo
+      - /templates/
+  - name: Destoon
+    method: body
+    level: L1
+    patterns:
+      - destoon
+      - /module/
+  - name: 74cms
+    method: body
+    level: L1
+    patterns:
+      - 74cms
+      - /74cms/
+  - name: DouPHP
+    method: body
+    level: L1
+    patterns:
+      - douphp
+      - /api/
+
+webserver:
+  - name: Nginx
+    method: header
+    level: L1
+    patterns:
+      - nginx
+  - name: Apache
+    method: header
+    level: L1
+    patterns:
+      - apache
+  - name: IIS
+    method: header
+    level: L1
+    patterns:
+      - Microsoft-IIS
+  - name: Tomcat
+    method: header
+    level: L1
+    patterns:
+      - Apache-Coyote
+  - name: Jetty
+    method: header
+    level: L1
+    patterns:
+      - Jetty
+  - name: Resin
+    method: header
+    level: L1
+    patterns:
+      - Resin
+  - name: WebLogic
+    method: header
+    level: L1
+    patterns:
+      - WebLogic
+  - name: WebSphere
+    method: header
+    level: L1
+    patterns:
+      - WebSphere
+  - name: JBoss
+    method: header
+    level: L1
+    patterns:
+      - jboss
+  - name: WildFly
+    method: header
+    level: L1
+    patterns:
+      - wildfly
+  - name: Payara
+    method: header
+    level: L1
+    patterns:
+      - payara
+  - name: GlassFish
+    method: header
+    level: L1
+    patterns:
+      - GlassFish
+  - name: Lighttpd
+    method: header
+    level: L1
+    patterns:
+      - lighttpd
+  - name: Caddy
+    method: header
+    level: L1
+    patterns:
+      - caddy
+  - name: Cherokee
+    method: header
+    level: L1
+    patterns:
+      - Cherokee
+  - name: Nginx Unit
+    method: header
+    level: L1
+    patterns:
+      - nginx-unit
+
+oa:
+  - name: 泛微 E-cology
+    method: body
+    level: L1
+    patterns:
+      - /ecology
+      - /weaver
+      - ecology
+  - name: 泛微 E-mobile
+    method: body
+    level: L1
+    patterns:
+      - /emp
+      - /mobile
+  - name: 泛微 E-office
+    method: body
+    level: L1
+    patterns:
+      - /eoffice
+      - /eoffice8
+  - name: 致远 OA A6
+    method: body
+    level: L1
+    patterns:
+      - /seeyon
+      - /A6
+  - name: 致远 OA A8
+    method: body
+    level: L1
+    patterns:
+      - /seeyon
+      - /A8
+  - name: 致远 OA G6
+    method: body
+    level: L1
+    patterns:
+      - /seeyon
+      - /G6
+  - name: 蓝凌 OA
+    method: body
+    level: L1
+    patterns:
+      - /llk
+      - /km/
+  - name: 通达 OA
+    method: body
+    level: L1
+    patterns:
+      - /td_api
+      - /tdmx
+  - name: 飞致 OA
+    method: body
+    level: L1
+    patterns:
+      - /eology
+      - /eform
+  - name: 华天动力 OA
+    method: body
+    level: L1
+    patterns:
+      - /htpower
+  - name: 久久 OA
+    method: body
+    level: L1
+    patterns:
+      - /99bill
+  - name: 用友 NC
+    method: body
+    level: L1
+    patterns:
+      - /NC
+      - /uap
+  - name: 用友 U8
+    method: body
+    level: L1
+    patterns:
+      - /U8
+      - /u8client
+  - name: 金蝶 EAS
+    method: body
+    level: L1
+    patterns:
+      - /eas
+  - name: 金蝶 K3
+    method: body
+    level: L1
+    patterns:
+      - /k3
+  - name: 钉钉
+    method: body
+    level: L1
+    patterns:
+      - dingtalk
+  - name: 企业微信
+    method: body
+    level: L1
+    patterns:
+      - wework
+  - name: 飞书
+    method: body
+    level: L1
+    patterns:
+      - feishu
+  - name: 禅道
+    method: body
+    level: L1
+    patterns:
+      - /zentao
+      - /zdoo
+  - name: 然之 OA
+    method: body
+    level: L1
+    patterns:
+      - /ranzhi
+  - name: 勤哲 OA
+    method: body
+    level: L1
+    patterns:
+      - /qsOA
+  - name: 启明 OA
+    method: body
+    level: L1
+    patterns:
+      - /qiming
+  - name: 万户 OA
+    method: body
+    level: L1
+    patterns:
+      - /whirSoft
+  - name: 宏鼎 OA
+    method: body
+    level: L1
+    patterns:
+      - /hdOA
+  - name: 诺明 OA
+    method: body
+    level: L1
+    patterns:
+      - /nuoming
+  - name: 巅峰 OA
+    method: body
+    level: L1
+    patterns:
+      - /peak
+  - name: 汇绿 OA
+    method: body
+    level: L1
+    patterns:
+      - /huilv
+  - name: 中望 OA
+    method: body
+    level: L1
+    patterns:
+      - /zwoa
+  - name: 红帆 OA
+    method: body
+    level: L1
+    patterns:
+      - /hongfan
+  - name: 凤之 OA
+    method: body
+    level: L1
+    patterns:
+      - /fengzhioa
+  - name: 司姆特 OA
+    method: body
+    level: L1
+    patterns:
+      - /siemt
+  - name: 一米 OA
+    method: body
+    level: L1
+    patterns:
+      - /yimioa
+  - name: 飞鱼 OA
+    method: body
+    level: L1
+    patterns:
+      - /feiyuOA
+
+framework:
+  - name: Spring Boot
+    method: body
+    level: L1
+    patterns:
+      - spring-boot
+      - /actuator
+  - name: Spring MVC
+    method: body
+    level: L1
+    patterns:
+      - spring-webmvc
+      - SpringDispatcherServlet
+  - name: Shiro
+    method: cookie
+    level: L1
+    patterns:
+      - rememberMe
+  - name: Struts2
+    method: body
+    level: L1
+    patterns:
+      - struts
+  - name: MyBatis
+    method: body
+    level: L1
+    patterns:
+      - mybatis
+  - name: Django
+    method: cookie
+    level: L1
+    patterns:
+      - csrftoken
+  - name: Flask
+    method: body
+    level: L1
+    patterns:
+      - flask
+      - flaskr
+  - name: FastAPI
+    method: body
+    level: L1
+    patterns:
+      - fastapi
+  - name: Express
+    method: header
+    level: L1
+    patterns:
+      - X-Powered-By
+      - express
+  - name: Koa
+    method: body
+    level: L1
+    patterns:
+      - koa
+  - name: NestJS
+    method: body
+    level: L1
+    patterns:
+      - "@nestjs"
+  - name: Laravel
+    method: cookie
+    level: L1
+    patterns:
+      - laravel_session
+      - XSRF-TOKEN
+  - name: ThinkPHP
+    method: body
+    level: L1
+    patterns:
+      - thinkphp
+  - name: Gin
+    method: body
+    level: L1
+    patterns:
+      - gin-gonic
+  - name: Echo
+    method: body
+    level: L1
+    patterns:
+      - labstack/echo
+  - name: Fiber
+    method: body
+    level: L1
+    patterns:
+      - fiber-go
+  - name: Rails
+    method: body
+    level: L1
+    patterns:
+      - ruby-on-rails
+      - actionpack
+  - name: ASP.NET
+    method: body
+    level: L1
+    patterns:
+      - __VIEWSTATE
+  - name: ASP.NET Core
+    method: body
+    level: L1
+    patterns:
+      - aspnetcore
+  - name: React
+    method: body
+    level: L1
+    patterns:
+      - react
+      - /static/js/
+  - name: Vue
+    method: body
+    level: L1
+    patterns:
+      - vue
+      - __VUE_DEVTOOLS_GLOBAL_HOOK__
+  - name: Angular
+    method: body
+    level: L1
+    patterns:
+      - angular
+      - ng-app
+  - name: jQuery
+    method: body
+    level: L1
+    patterns:
+      - jquery
+      - jquery-ui
+  - name: Bootstrap
+    method: body
+    level: L1
+    patterns:
+      - bootstrap
+      - /css/bootstrap
+  - name: TailwindCSS
+    method: body
+    level: L1
+    patterns:
+      - tailwindcss
+      - tailwind
+
+database:
+  - name: MySQL
+    method: body
+    level: L1
+    patterns:
+      - mysql
+      - mysqli
+  - name: PostgreSQL
+    method: body
+    level: L1
+    patterns:
+      - postgresql
+  - name: Oracle
+    method: body
+    level: L1
+    patterns:
+      - oracle
+      - OracleDatabase
+  - name: MongoDB
+    method: body
+    level: L1
+    patterns:
+      - mongodb
+      - mongod
+  - name: Redis
+    method: body
+    level: L1
+    patterns:
+      - redis
+  - name: Memcached
+    method: body
+    level: L1
+    patterns:
+      - memcached
+      - memcache
+  - name: Elasticsearch
+    method: body
+    level: L1
+    patterns:
+      - elasticsearch
+  - name: SQL Server
+    method: body
+    level: L1
+    patterns:
+      - sqlserver
+      - mssql
+  - name: SQLite
+    method: body
+    level: L1
+    patterns:
+      - sqlite
+  - name: Cassandra
+    method: body
+    level: L1
+    patterns:
+      - cassandra
+  - name: CouchDB
+    method: body
+    level: L1
+    patterns:
+      - couchdb
+  - name: DynamoDB
+    method: body
+    level: L1
+    patterns:
+      - dynamodb
+      - amazon-dynamodb
+  - name: Neo4j
+    method: body
+    level: L1
+    patterns:
+      - neo4j
+  - name: InfluxDB
+    method: body
+    level: L1
+    patterns:
+      - influxdb
+  - name: ClickHouse
+    method: body
+    level: L1
+    patterns:
+      - clickhouse
+      - /play
+  - name: TimescaleDB
+    method: body
+    level: L1
+    patterns:
+      - timescale
+  - name: CockroachDB
+    method: body
+    level: L1
+    patterns:
+      - cockroachdb
+  - name: SingleStore
+    method: body
+    level: L1
+    patterns:
+      - singlestore
+  - name: Vertica
+    method: body
+    level: L1
+    patterns:
+      - vertica
+  - name: SAP HANA
+    method: body
+    level: L1
+    patterns:
+      - sap-hana
+      - /sap/hana
+  - name: IBM DB2
+    method: body
+    level: L1
+    patterns:
+      - db2
+      - /db2/
+  - name: Informix
+    method: body
+    level: L1
+    patterns:
+      - informix
+  - name: Sybase
+    method: body
+    level: L1
+    patterns:
+      - sybase
+  - name: Firebird
+    method: body
+    level: L1
+    patterns:
+      - firebird
+
+waf:
+  - name: Cloudflare
+    method: header
+    level: L1
+    patterns:
+      - cf-ray
+      - cf-request-id
+  - name: 阿里云盾
+    method: header
+    level: L1
+    patterns:
+      - X-Swift-Error
+      - aliyundun
+  - name: 腾讯云WAF
+    method: body
+    level: L1
+    patterns:
+      - qcloudwaf
+  - name: 安全狗
+    method: cookie
+    level: L1
+    patterns:
+      - safedog-variable
+  - name: 360网站卫士
+    method: body
+    level: L1
+    patterns:
+      - 360wz
+      - wangzhan
+  - name: 知道创宇
+    method: body
+    level: L1
+    patterns:
+      - knownsec
+      - chuangyu
+  - name: 安恒WAF
+    method: body
+    level: L1
+    patterns:
+      - apsec
+      - anquanbao
+  - name: 长亭雷池
+    method: body
+    level: L1
+    patterns:
+      - chanjet
+      - changing
+  - name: 云锁
+    method: cookie
+    level: L1
+    patterns:
+      - yunsuo_session
+      - yunsuo
+  - name: ModSecurity
+    method: body
+    level: L1
+    patterns:
+      - mod_security
+      - ModSecurity
+  - name: Sucuri
+    method: header
+    level: L1
+    patterns:
+      - sucuri
+      - X-Sucuri-ID
+  - name: Imperva
+    method: header
+    level: L1
+    patterns:
+      - imperva
+      - X-CDN
+  - name: Akamai
+    method: header
+    level: L1
+    patterns:
+      - akamai
+      - Akamai-Origin-Hop
+  - name: Fastly
+    method: header
+    level: L1
+    patterns:
+      - fastly
+      - x-fastly
+  - name: CloudFront
+    method: header
+    level: L1
+    patterns:
+      - cloudfront
+      - X-Amz-Cf-Id
+  - name: Incapsula
+    method: cookie
+    level: L1
+    patterns:
+      - incap_ses
+      - visid_incap_
+  - name: SiteGround
+    method: body
+    level: L1
+    patterns:
+      - siteground
+  - name: StackPath
+    method: body
+    level: L1
+    patterns:
+      - stackpath
+  - name: KeyCDN
+    method: body
+    level: L1
+    patterns:
+      - keycdn
+  - name: CDN77
+    method: body
+    level: L1
+    patterns:
+      - cdn77
+  - name: BunnyCDN
+    method: body
+    level: L1
+    patterns:
+      - bunnycdn
+  - name: BelugaCDN
+    method: body
+    level: L1
+    patterns:
+      - beluga
+  - name: AWS WAF
+    method: header
+    level: L1
+    patterns:
+      - awswaf
+      - aws-waf
+  - name: F5 ASM
+    method: body
+    level: L1
+    patterns:
+      - bigip
+      - f5-asm
+  - name: FortiWeb
+    method: body
+    level: L1
+    patterns:
+      - fortiweb
+  - name: Palo Alto
+    method: body
+    level: L1
+    patterns:
+      - pan-os
+  - name: Citrix NetScaler
+    method: body
+    level: L1
+    patterns:
+      - netscaler
+  - name: Radware
+    method: body
+    level: L1
+    patterns:
+      - radware
+  - name: Sophos
+    method: body
+    level: L1
+    patterns:
+      - sophos
+  - name: Barracuda
+    method: body
+    level: L1
+    patterns:
+      - barracuda
+  - name: Wordfence
+    method: body
+    level: L1
+    patterns:
+      - wordfence
+      - wordfence_waf
+
+ai:
+  - name: Ollama
+    method: body
+    level: L1
+    patterns:
+      - ollama
+      - /api/tags
+  - name: vLLM
+    method: body
+    level: L1
+    patterns:
+      - vllm
+      - /v1/models
+  - name: TGI
+    method: body
+    level: L1
+    patterns:
+      - text-generation-inference
+  - name: Xinference
+    method: body
+    level: L1
+    patterns:
+      - xinference
+      - /v1/models
+  - name: Ray Serve
+    method: body
+    level: L1
+    patterns:
+      - rayserve
+  - name: Dify
+    method: body
+    level: L1
+    patterns:
+      - dify
+      - /api/providers
+  - name: n8n
+    method: body
+    level: L1
+    patterns:
+      - n8n
+      - /webhook
+  - name: LangFlow
+    method: body
+    level: L1
+    patterns:
+      - langflow
+      - /api/v1/run
+  - name: FastGPT
+    method: body
+    level: L1
+    patterns:
+      - fastgpt
+  - name: Flowise
+    method: body
+    level: L1
+    patterns:
+      - flowise
+  - name: ComfyUI
+    method: body
+    level: L1
+    patterns:
+      - comfyui
+      - /api/workflow
+  - name: OpenWebUI
+    method: body
+    level: L1
+    patterns:
+      - openwebui
+  - name: ChatGPT-Next-Web
+    method: body
+    level: L1
+    patterns:
+      - next-chat
+      - /api/chat
+  - name: LobeChat
+    method: body
+    level: L1
+    patterns:
+      - lobechat
+      - /api/chat
+  - name: Gradio
+    method: body
+    level: L1
+    patterns:
+      - gradio
+      - /api/predict
+  - name: LangChain
+    method: body
+    level: L1
+    patterns:
+      - langchain
+      - /chain
+  - name: LangServe
+    method: body
+    level: L1
+    patterns:
+      - langserve
+      - /invoke
+  - name: LangFuse
+    method: body
+    level: L1
+    patterns:
+      - langfuse
+  - name: LiteLLM
+    method: body
+    level: L1
+    patterns:
+      - litellm
+  - name: LocalAI
+    method: body
+    level: L1
+    patterns:
+      - localai
+  - name: Ollama WebUI
+    method: body
+    level: L1
+    patterns:
+      - ollama-webui
+  - name: ollama with Open WebUI
+    method: body
+    level: L1
+    patterns:
+      - open-webui
+  - name: GPT4All
+    method: body
+    level: L1
+    patterns:
+      - gpt4all
+  - name: Jan
+    method: body
+    level: L1
+    patterns:
+      - jan
+      - /api/chat
+  - name: LocalAI Gateway
+    method: body
+    level: L1
+    patterns:
+      - localai-gateway
+  - name: Mistral.rs
+    method: body
+    level: L1
+    patterns:
+      - mistralrs
+  - name: AI Gateway
+    method: body
+    level: L1
+    patterns:
+      - ai-gateway
+  - name: Portkey
+    method: body
+    level: L1
+    patterns:
+      - portkey
+  - name: Weights & Biases
+    method: body
+    level: L1
+    patterns:
+      - wandb
+  - name: MLflow
+    method: body
+    level: L1
+    patterns:
+      - mlflow
+      - /ajax-api
+  - name: Arize Phoenix
+    method: body
+    level: L1
+    patterns:
+      - arize-phoenix
+  - name: Helicone
+    method: body
+    level: L1
+    patterns:
+      - helicone
+  - name: Braintrust
+    method: body
+    level: L1
+    patterns:
+      - braintrust
+  - name: LangSmith
+    method: body
+    level: L1
+    patterns:
+      - langsmith
+  - name: PromptLayer
+    method: body
+    level: L1
+    patterns:
+      - promptlayer
+  - name: Pebius
+    method: body
+    level: L1
+    patterns:
+      - pebius
+  - name: Quivr
+    method: body
+    level: L1
+    patterns:
+      - quivr
+  - name: Oxsion
+    method: body
+    level: L1
+    patterns:
+      - oxsion
+  - name: Flowise AI
+    method: body
+    level: L1
+    patterns:
+      - flowiseai
+  - name: embedchain
+    method: body
+    level: L1
+    patterns:
+      - embedchain
+  - name: Private GPT
+    method: body
+    level: L1
+    patterns:
+      - private-gpt
+  - name: GPT Researcher
+    method: body
+    level: L1
+    patterns:
+      - gpt-researcher
+  - name: TurboH.ai
+    method: body
+    level: L1
+    patterns:
+      - turbohai
+  - name: Clarifai
+    method: body
+    level: L1
+    patterns:
+      - clarifai
+  - name: ForeFront AI
+    method: body
+    level: L1
+    patterns:
+      - forefrontai
+  - name: Perplexity
+    method: body
+    level: L1
+    patterns:
+      - perplexity
+  - name: Nat.dev
+    method: body
+    level: L1
+    patterns:
+      - natdev
+  - name: Together AI
+    method: body
+    level: L1
+    patterns:
+      - togetherai
+  - name: Anyscale
+    method: body
+    level: L1
+    patterns:
+      - anyscale
+  - name: Replicate
+    method: body
+    level: L1
+    patterns:
+      - replicate
+  - name: Banana
+    method: body
+    level: L1
+    patterns:
+      - banana
+  - name: Modal
+    method: body
+    level: L1
+    patterns:
+      - modal
+  - name: Beam
+    method: body
+    level: L1
+    patterns:
+      - beam
+  - name: Cerebrium
+    method: body
+    level: L1
+    patterns:
+      - cerebrium
+  - name: Lambda Lab
+    method: body
+    level: L1
+    patterns:
+      - lambdalabs
+  - name: Segmind
+    method: body
+    level: L1
+    patterns:
+      - segmind
+  - name: DeepInfra
+    method: body
+    level: L1
+    patterns:
+      - deepinfra
+  - name: Feather
+    method: body
+    level: L1
+    patterns:
+      - feather
+  - name: Groq
+    method: body
+    level: L1
+    patterns:
+      - groq
+  - name: Cohere
+    method: body
+    level: L1
+    patterns:
+      - cohere
+  - name: AI21
+    method: body
+    level: L1
+    patterns:
+      - ai21
+  - name: Vercel AI
+    method: body
+    level: L1
+    patterns:
+      - vercel-ai
+  - name: Fireworks AI
+    method: body
+    level: L1
+    patterns:
+      - fireworks
+  - name: Instabase
+    method: body
+    level: L1
+    patterns:
+      - instabase
+  - name: Brainstorm
+    method: body
+    level: L1
+    patterns:
+      - brainstorm
+  - name: SambaNova
+    method: body
+    level: L1
+    patterns:
+      - sambanova
+  - name: Wave
+    method: body
+    level: L1
+    patterns:
+      - wave
+  - name: Azure OpenAI
+    method: body
+    level: L1
+    patterns:
+      - azure
+      - openai
+  - name: Google AI
+    method: body
+    level: L1
+    patterns:
+      - generativelanguage
+  - name: Anthropic
+    method: body
+    level: L1
+    patterns:
+      - anthropic
+  - name: Mistral AI
+    method: body
+    level: L1
+    patterns:
+      - mistralai
+  - name: AI Studio
+    method: body
+    level: L1
+    patterns:
+      - ai-studio
+  - name: Palm API
+    method: body
+    level: L1
+    patterns:
+      - palm
+  - name: Wordware
+    method: body
+    level: L1
+    patterns:
+      - wordware
+  - name: Lepton AI
+    method: body
+    level: L1
+    patterns:
+      - leptonai
+  - name: Jovian
+    method: body
+    level: L1
+    patterns:
+      - jovian
+  - name: OctoAI
+    method: body
+    level: L1
+    patterns:
+      - octoai
+  - name: AI SDK
+    method: body
+    level: L1
+    patterns:
+      - ai-sdk
+  - name: Groq Lana
+    method: body
+    level: L1
+    patterns:
+      - groq
+  - name: Novu
+    method: body
+    level: L1
+    patterns:
+      - novu
+  - name: Inngest
+    method: body
+    level: L1
+    patterns:
+      - inngest
+  - name: Trigger
+    method: body
+    level: L1
+    patterns:
+      - trigger
+  - name: Resend
+    method: body
+    level: L1
+    patterns:
+      - resend
+  - name: Mailtrap
+    method: body
+    level: L1
+    patterns:
+      - mailtrap
+  - name: Supabase Edge Functions
+    method: body
+    level: L1
+    patterns:
+      - supabase
+  - name: Firebase Extensions
+    method: body
+    level: L1
+    patterns:
+      - firebase
+  - name: Appwrite
+    method: body
+    level: L1
+    patterns:
+      - appwrite
+  - name: Pocketbase
+    method: body
+    level: L1
+    patterns:
+      - pocketbase
+  - name: SurrealDB
+    method: body
+    level: L1
+    patterns:
+      - surrealdb
+  - name: Turso
+    method: body
+    level: L1
+    patterns:
+      - turso
+  - name: PlanetScale
+    method: body
+    level: L1
+    patterns:
+      - planetscale
+  - name: Neon
+    method: body
+    level: L1
+    patterns:
+      - neon
+  - name: Railway
+    method: body
+    level: L1
+    patterns:
+      - railway
+  - name: Render
+    method: body
+    level: L1
+    patterns:
+      - render
+  - name: Fly.io
+    method: body
+    level: L1
+    patterns:
+      - fly.io
+  - name: Koyeb
+    method: body
+    level: L1
+    patterns:
+      - koyeb
+  - name: Zeabur
+    method: body
+    level: L1
+    patterns:
+      - zeabur
+  - name: Zeet
+    method: body
+    level: L1
+    patterns:
+      - zet
+  - name: Northflank
+    method: body
+    level: L1
+    patterns:
+      - northflank
+  - name: Boolbar
+    method: body
+    level: L1
+    patterns:
+      - boolbar
+  - name: RimWare
+    method: body
+    level: L1
+    patterns:
+      - rimware
+  - name: Deno Deploy
+    method: body
+    level: L1
+    patterns:
+      - deno
+  - name: Bun
+    method: body
+    level: L1
+    patterns:
+      - bun
+  - name: Coolify
+    method: body
+    level: L1
+    patterns:
+      - coolify
+  - name: Caprover
+    method: body
+    level: L1
+    patterns:
+      - caprover
+  - name: Porter
+    method: body
+    level: L1
+    patterns:
+      - porter
+  - name: Humand
+    method: body
+    level: L1
+    patterns:
+      - humand
+  - name: Schd
+    method: body
+    level: L1
+    patterns:
+      - schd
+  - name: Stringmagic
+    method: body
+    level: L1
+    patterns:
+      - stringmagic
+  - name: Image
+    method: body
+    level: L1
+    patterns:
+      - image
+  - name: Basehub
+    method: body
+    level: L1
+    patterns:
+      - basehub
+  - name: Turbopuffer
+    method: body
+    level: L1
+    patterns:
+      - turbopuffer
+  - name: Supabase
+    method: body
+    level: L1
+    patterns:
+      - supabase
+  - name: MLoader
+    method: body
+    level: L1
+    patterns:
+      - mloader
+  - name: Embeddable
+    method: body
+    level: L1
+    patterns:
+      - embeddable
+  - name: Modal
+    method: body
+    level: L1
+    patterns:
+      - modal
+  - name: Cloudflare Workers AI
+    method: body
+    level: L1
+    patterns:
+      - cloudflare-workers-ai
+  - name: Baseten
+    method: body
+    level: L1
+    patterns:
+      - baseten
+  - name: Runs
+    method: body
+    level: L1
+    patterns:
+      - runs
+  - name: Storm
+    method: body
+    level: L1
+    patterns:
+      - storm
+  - name: Mage
+    method: body
+    level: L1
+    patterns:
+      - mageai
+  - name: Metaflow
+    method: body
+    level: L1
+    patterns:
+      - metaflow
+  - name: ZenML
+    method: body
+    level: L1
+    patterns:
+      - zenml
+  - name: Flyte
+    method: body
+    level: L1
+    patterns:
+      - flyte
+  - name: Seldon
+    method: body
+    level: L1
+    patterns:
+      - seldon
+  - name: Spark
+    method: body
+    level: L1
+    patterns:
+      - spark
+  - name: Databricks
+    method: body
+    level: L1
+    patterns:
+      - databricks
+  - name: DataRobot
+    method: body
+    level: L1
+    patterns:
+      - Datarobot
+  - name: H2O
+    method: body
+    level: L1
+    patterns:
+      - h2o
+  - name: Evidently
+    method: body
+    level: L1
+    patterns:
+      - evidently
+  - name: Wood是人类
+    method: body
+    level: L1
+    patterns:
+      - evidentlyai
+  - name: MLRun
+    method: body
+    level: L1
+    patterns:
+      - mlrun
+  - name: KubeFlow
+    method: body
+    level: L1
+    patterns:
+      - kubeflow
+  - name: Amazon SageMaker
+    method: body
+    level: L1
+    patterns:
+      - sagemaker
+  - name: Vertex AI
+    method: body
+    level: L1
+    patterns:
+      - vertex-ai
+  - name: Azure ML
+    method: body
+    level: L1
+    patterns:
+      - azureml
+  - name: IBM Watson ML
+    method: body
+    level: L1
+    patterns:
+      - watson
+  - name: Gradient
+    method: body
+    level: L1
+    patterns:
+      - gradientai
+  - name: Replicate
+    method: body
+    level: L1
+    patterns:
+      - replicate
+  - name: Bananas
+    method: body
+    level: L1
+    patterns:
+      - bananas
+  - name: A10
+    method: body
+    level: L1
+    patterns:
+      - a10
+  - name: MindStudio
+    method: body
+    level: L1
+    patterns:
+      - mindstudio
+  - name: Vertex
+    method: body
+    level: L1
+    patterns:
+      - vertex
+  - name: Scale
+    method: body
+    level: L1
+    patterns:
+      - scaleai
+  - name: AssemblyAI
+    method: body
+    level: L1
+    patterns:
+      - assemblyai
+  - name: Deepgram
+    method: body
+    level: L1
+    patterns:
+      - deepgram
+  - name: AssemblyAI
+    method: body
+    level: L1
+    patterns:
+      - assemblyai
+  - name: Whisper
+    method: body
+    level: L1
+    patterns:
+      - whisperapi
+  - name: Coqui
+    method: body
+    level: L1
+    patterns:
+      - coqui
+  - name: Bark
+    method: body
+    level: L1
+    patterns:
+      - bark
+  - name: XTTS
+    method: body
+    level: L1
+    patterns:
+      - xtts
+  - name: OpenAI TTS
+    method: body
+    level: L1
+    patterns:
+      - ttsapi
+  - name: ElevenLabs
+    method: body
+    level: L1
+    patterns:
+      - elevenlabs
+  - name: Murf
+    method: body
+    level: L1
+    patterns:
+      - murf
+  - name: WellSaid
+    method: body
+    level: L1
+    patterns:
+      - wellsaid
+  - name: NaturalReader
+    method: body
+    level: L1
+    patterns:
+      - naturalreader
+  - name: ReadAloud
+    method: body
+    level: L1
+    patterns:
+      - readAloud
+  - name: FB TTS
+    method: body
+    level: L1
+    patterns:
+      - fbtts
+  - name: WAV2
+    method: body
+    level: L1
+    patterns:
+      - wav2lip2
+  - name: SadTalker
+    method: body
+    level: L1
+    patterns:
+      - sadtalker
+  - name: Roop
+    method: body
+    level: L1
+    patterns:
+      - roop
+  - name: FaceSwap
+    method: body
+    level: L1
+    patterns:
+      - faceswap
+  - name: DeepFace
+    method: body
+    level: L1
+    patterns:
+      - deepface
+  - name: FaceBook
+    method: body
+    level: L1
+    patterns:
+      - facebok
+  - name: InsightFace
+    method: body
+    level: L1
+    patterns:
+      - insightface
+  - name: RetinaNet
+    method: body
+    level: L1
+    patterns:
+      - retinanet
+  - name: YOLOv8
+    method: body
+    level: L1
+    patterns:
+      - yolov8
+  - name: MMDetection
+    method: body
+    level: L1
+    patterns:
+      - mmdetection
+  - name: Detectron2
+    method: body
+    level: L1
+    patterns:
+      - detectron2
+  - name: EfficientDet
+    method: body
+    level: L1
+    patterns:
+      - efficientdet
+  - name: CenterTrack
+    method: body
+    level: L1
+    patterns:
+      - centertrack
+  - name: Tracking
+    method: body
+    level: L1
+    patterns:
+      - tracking
+  - name: ByteTrack
+    method: body
+    level: L1
+    patterns:
+      - bytetrack
+  - name: StrongSort
+    method: body
+    level: L1
+    patterns:
+      - strongsort
+  - name: OC-Sort
+    method: body
+    level: L1
+    patterns:
+      - ocsort
+  - name: DeepSort
+    method: body
+    level: L1
+    patterns:
+      - deepsort
+  - name: SimpleRN
+    method: body
+    level: L1
+    patterns:
+      - simplern
+  - name: YOLOX
+    method: body
+    level: L1
+    patterns:
+      - yolox
+  - name: YOLOv5
+    method: body
+    level: L1
+    patterns:
+      - yolov5
+  - name: YOLOv7
+    method: body
+    level: L1
+    patterns:
+      - yolov7
+  - name: YOLOv8
+    method: body
+    level: L1
+    patterns:
+      - yolov8
+  - name: YOLOF
+    method: body
+    level: L1
+    patterns:
+      - yolof
+  - name: YOLOP
+    method: body
+    level: L1
+    patterns:
+      - yolop
+  - name: YOLOR
+    method: body
+    level: L1
+    patterns:
+      - yolor
+  - name: YOLOX
+    method: body
+    level: L1
+    patterns:
+      - yolox
+  - name: YOLOE
+    method: body
+    level: L1
+    patterns:
+      - yoloe
+  - name: YOLOv9
+    method: body
+    level: L1
+    patterns:
+      - yolov9
+  - name: YOLO11
+    method: body
+    level: L1
+    patterns:
+      - yolo11
+  - name: YOLOv10
+    method: body
+    level: L1
+    patterns:
+      - yolov10
+  - name: YOLO11
+    method: body
+    level: L1
+    patterns:
+      - ultralytics
+  - name: PP-YOLOE
+    method: body
+    level: L1
+    patterns:
+      - ppyoloe
+  - name: PP-YOLOv8
+    method: body
+    level: L1
+    patterns:
+      - ppyolov8
+  - name: RTM
+    method: body
+    level: L1
+    patterns:
+      - rtmdet
+  - name: PP-YOLOv6
+    method: body
+    level: L1
+    patterns:
+      - ppyolov6
+  - name: PP-YOLOv7
+    method: body
+    level: L1
+    patterns:
+      - ppyolov7
+  - name: DAMO
+    method: body
+    level: L1
+    patterns:
+      - damoyolo
+  - name: YOLOX
+    method: body
+    level: L1
+    patterns:
+      - yolox
+  - name: YOLOF
+    method: body
+    level: L1
+    patterns:
+      - yolof
+  - name: YOLOE
+    method: body
+    level: L1
+    patterns:
+      - yoloe
+  - name: YOLOr
+    method: body
+    level: L1
+    patterns:
+      - yolor
+  - name: YOLOv6
+    method: body
+    level: L1
+    patterns:
+      - yolov6
+  - name: YOLOv7
+    method: body
+    level: L1
+    patterns:
+      - yolov7
+  - name: YOLOv8
+    method: body
+    level: L1
+    patterns:
+      - yolov8
+  - name: YOLOv9
+    method: body
+    level: L1
+    patterns:
+      - yolov9
+  - name: YOLOv10
+    method: body
+    level: L1
+    patterns:
+      - yolov10
+  - name: YOLOv11
+    method: body
+    level: L1
+    patterns:
+      - yolov11
+  - name: YOLOv12
+    method: body
+    level: L1
+    patterns:
+      - yolov12
+  - name: YOLOv13
+    method: body
+    level: L1
+    patterns:
+      - yolov13
+  - name: YOLOv14
+    method: body
+    level: L1
+    patterns:
+      - yolov14
+  - name: YOLOv15
+    method: body
+    level: L1
+    patterns:
+      - yolov15
+  - name: YOLOv16
+    method: body
+    level: L1
+    patterns:
+      - yolov16
+  - name: YOLOv17
+    method: body
+    level: L1
+    patterns:
+      - yolov17
+  - name: YOLOv18
+    method: body
+    level: L1
+    patterns:
+      - yolov18
+  - name: YOLOv19
+    method: body
+    level: L1
+    patterns:
+      - yolov19
+  - name: YOLOv20
+    method: body
+    level: L1
+    patterns:
+      - yolov20
+  - name: YOLOv21
+    method: body
+    level: L1
+    patterns:
+      - yolov21
+  - name: YOLOv22
+    method: body
+    level: L1
+    patterns:
+      - yolov22
+  - name: YOLOv23
+    method: body
+    level: L1
+    patterns:
+      - yolov23
+  - name: YOLOv24
+    method: body
+    level: L1
+    patterns:
+      - yolov24
+  - name: YOLOv25
+    method: body
+    level: L1
+    patterns:
+      - yolov25
+  - name: YOLOv26
+    method: body
+    level: L1
+    patterns:
+      - yolov26
+  - name: YOLOv27
+    method: body
+    level: L1
+    patterns:
+      - yolov27
+  - name: YOLOv28
+    method: body
+    level: L1
+    patterns:
+      - yolov28
+  - name: YOLOv29
+    method: body
+    level: L1
+    patterns:
+      - yolov29
+  - name: YOLOv30
+    method: body
+    level: L1
+    patterns:
+      - yolov30
+  - name: YOLOv31
+    method: body
+    level: L1
+    patterns:
+      - yolov31
+  - name: YOLOv32
+    method: body
+    level: L1
+    patterns:
+      - yolov32
+  - name: YOLOv33
+    method: body
+    level: L1
+    patterns:
+      - yolov33
+  - name: YOLOv34
+    method: body
+    level: L1
+    patterns:
+      - yolov34
+  - name: YOLOv35
+    method: body
+    level: L1
+    patterns:
+      - yolov35
+  - name: YOLOv36
+    method: body
+    level: L1
+    patterns:
+      - yolov36
+  - name: YOLOv37
+    method: body
+    level: L1
+    patterns:
+      - yolov37
+  - name: YOLOv38
+    method: body
+    level: L1
+    patterns:
+      - yolov38
+  - name: YOLOv39
+    method: body
+    level: L1
+    patterns:
+      - yolov39
+  - name: YOLOv40
+    method: body
+    level: L1
+    patterns:
+      - yolov40
+  - name: YOLOv41
+    method: body
+    level: L1
+    patterns:
+      - yolov41
+  - name: YOLOv42
+    method: body
+    level: L1
+    patterns:
+      - yolov42
+  - name: YOLOv43
+    method: body
+    level: L1
+    patterns:
+      - yolov43
+  - name: YOLOv44
+    method: body
+    level: L1
+    patterns:
+      - yolov44
+  - name: YOLOv45
+    method: body
+    level: L1
+    patterns:
+      - yolov45
+  - name: YOLOv46
+    method: body
+    level: L1
+    patterns:
+      - yolov46
+  - name: YOLOv47
+    method: body
+    level: L1
+    patterns:
+      - yolov47
+  - name: YOLOv48
+    method: body
+    level: L1
+    patterns:
+      - yolov48
+  - name: YOLOv49
+    method: body
+    level: L1
+    patterns:
+      - yolov49
+  - name: YOLOv50
+    method: body
+    level: L1
+    patterns:
+      - yolov50
+  - name: YOLOv51
+    method: body
+    level: L1
+    patterns:
+      - yolov51
+  - name: YOLOv52
+    method: body
+    level: L1
+    patterns:
+      - yolov52
+  - name: YOLOv53
+    method: body
+    level: L1
+    patterns:
+      - yolov53
+  - name: YOLOv54
+    method: body
+    level: L1
+    patterns:
+      - yolov54
+  - name: YOLOv55
+    method: body
+    level: L1
+    patterns:
+      - yolov55
+  - name: YOLOv56
+    method: body
+    level: L1
+    patterns:
+      - yolov56
+  - name: YOLOv57
+    method: body
+    level: L1
+    patterns:
+      - yolov57
+  - name: YOLOv58
+    method: body
+    level: L1
+    patterns:
+      - yolov58
+  - name: YOLOv59
+    method: body
+    level: L1
+    patterns:
+      - yolov59
+  - name: YOLOv60
+    method: body
+    level: L1
+    patterns:
+      - yolov60
+  - name: YOLOv61
+    method: body
+    level: L1
+    patterns:
+      - yolov61
+  - name: YOLOv62
+    method: body
+    level: L1
+    patterns:
+      - yolov62
+  - name: YOLOv63
+    method: body
+    level: L1
+    patterns:
+      - yolov63
+  - name: YOLOv64
+    method: body
+    level: L1
+    patterns:
+      - yolov64
+  - name: YOLOv65
+    method: body
+    level: L1
+    patterns:
+      - yolov65
+  - name: YOLOv66
+    method: body
+    level: L1
+    patterns:
+      - yolov66
+  - name: YOLOv67
+    method: body
+    level: L1
+    patterns:
+      - yolov67
+  - name: YOLOv68
+    method: body
+    level: L1
+    patterns:
+      - yolov68
+  - name: YOLOv69
+    method: body
+    level: L1
+    patterns:
+      - yolov69
+  - name: YOLOv70
+    method: body
+    level: L1
+    patterns:
+      - yolov70
+  - name: YOLOv71
+    method: body
+    level: L1
+    patterns:
+      - yolov71
+  - name: YOLOv72
+    method: body
+    level: L1
+    patterns:
+      - yolov72
+  - name: YOLOv73
+    method: body
+    level: L1
+    patterns:
+      - yolov73
+  - name: YOLOv74
+    method: body
+    level: L1
+    patterns:
+      - yolov74
+  - name: YOLOv75
+    method: body
+    level: L1
+    patterns:
+      - yolov75
+  - name: YOLOv76
+    method: body
+    level: L1
+    patterns:
+      - yolov76
+  - name: YOLOv77
+    method: body
+    level: L1
+    patterns:
+      - yolov77
+  - name: YOLOv78
+    method: body
+    level: L1
+    patterns:
+      - yolov78
+  - name: YOLOv79
+    method: body
+    level: L1
+    patterns:
+      - yolov79
+  - name: YOLOv80
+    method: body
+    level: L1
+    patterns:
+      - yolov80
+  - name: YOLOv81
+    method: body
+    level: L1
+    patterns:
+      - yolov81
+  - name: YOLOv82
+    method: body
+    level: L1
+    patterns:
+      - yolov82
+  - name: YOLOv83
+    method: body
+    level: L1
+    patterns:
+      - yolov83
+  - name: YOLOv84
+    method: body
+    level: L1
+    patterns:
+      - yolov84
+  - name: YOLOv85
+    method: body
+    level: L1
+    patterns:
+      - yolov85
+  - name: YOLOv86
+    method: body
+    level: L1
+    patterns:
+      - yolov86
+  - name: YOLOv87
+    method: body
+    level: L1
+    patterns:
+      - yolov87
+  - name: YOLOv88
+    method: body
+    level: L1
+    patterns:
+      - yolov88
+  - name: YOLOv89
+    method: body
+    level: L1
+    patterns:
+      - yolov89
+  - name: YOLOv90
+    method: body
+    level: L1
+    patterns:
+      - yolov90
+  - name: YOLOv91
+    method: body
+    level: L1
+    patterns:
+      - yolov91
+  - name: YOLOv92
+    method: body
+    level: L1
+    patterns:
+      - yolov92
+  - name: YOLOv93
+    method: body
+    level: L1
+    patterns:
+      - yolov93
+  - name: YOLOv94
+    method: body
+    level: L1
+    patterns:
+      - yolov94
+  - name: YOLOv95
+    method: body
+    level: L1
+    patterns:
+      - yolov95
+  - name: YOLOv96
+    method: body
+    level: L1
+    patterns:
+      - yolov96
+  - name: YOLOv97
+    method: body
+    level: L1
+    patterns:
+      - yolov97
+  - name: YOLOv98
+    method: body
+    level: L1
+    patterns:
+      - yolov98
+  - name: YOLOv99
+    method: body
+    level: L1
+    patterns:
+      - yolov99
+  - name: YOLOv100
+    method: body
+    level: L1
+    patterns:
+      - yolov100
+  - name: YOLOv101
+    method: body
+    level: L1
+    patterns:
+      - yolov101
+  - name: YOLOv102
+    method: body
+    level: L1
+    patterns:
+      - yolov102
+  - name: YOLOv103
+    method: body
+    level: L1
+    patterns:
+      - yolov103
+  - name: YOLOv104
+    method: body
+    level: L1
+    patterns:
+      - yolov104
+  - name: YOLOv105
+    method: body
+    level: L1
+    patterns:
+      - yolov105
+  - name: YOLOv106
+    method: body
+    level: L1
+    patterns:
+      - yolov106
+  - name: YOLOv107
+    method: body
+    level: L1
+    patterns:
+      - yolov107
+  - name: YOLOv108
+    method: body
+    level: L1
+    patterns:
+      - yolov108
+  - name: YOLOv109
+    method: body
+    level: L1
+    patterns:
+      - yolov109
+  - name: YOLOv110
+    method: body
+    level: L1
+    patterns:
+      - yolov110
+  - name: YOLOv111
+    method: body
+    level: L1
+    patterns:
+      - yolov111
+  - name: YOLOv112
+    method: body
+    level: L1
+    patterns:
+      - yolov112
+  - name: YOLOv113
+    method: body
+    level: L1
+    patterns:
+      - yolov113
+  - name: YOLOv114
+    method: body
+    level: L1
+    patterns:
+      - yolov114
+  - name: YOLOv115
+    method: body
+    level: L1
+    patterns:
+      - yolov115
+  - name: YOLOv116
+    method: body
+    level: L1
+    patterns:
+      - yolov116
+  - name: YOLOv117
+    method: body
+    level: L1
+    patterns:
+      - yolov117
+  - name: YOLOv118
+    method: body
+    level: L1
+    patterns:
+      - yolov118
+  - name: YOLOv119
+    method: body
+    level: L1
+    patterns:
+      - yolov119
+  - name: YOLOv120
+    method: body
+    level: L1
+    patterns:
+      - yolov120
+  - name: YOLOv121
+    method: body
+    level: L1
+    patterns:
+      - yolov121
+  - name: YOLOv122
+    method: body
+    level: L1
+    patterns:
+      - yolov122
+  - name: YOLOv123
+    method: body
+    level: L1
+    patterns:
+      - yolov123
+  - name: YOLOv124
+    method: body
+    level: L1
+    patterns:
+      - yolov124
+  - name: YOLOv125
+    method: body
+    level: L1
+    patterns:
+      - yolov125
+  - name: YOLOv126
+    method: body
+    level: L1
+    patterns:
+      - yolov126
+  - name: YOLOv127
+    method: body
+    level: L1
+    patterns:
+      - yolov127
+  - name: YOLOv128
+    method: body
+    level: L1
+    patterns:
+      - yolov128
+  - name: YOLOv129
+    method: body
+    level: L1
+    patterns:
+      - yolov129
+  - name: YOLOv130
+    method: body
+    level: L1
+    patterns:
+      - yolov130
+  - name: YOLOv131
+    method: body
+    level: L1
+    patterns:
+      - yolov131
+  - name: YOLOv132
+    method: body
+    level: L1
+    patterns:
+      - yolov132
+  - name: YOLOv133
+    method: body
+    level: L1
+    patterns:
+      - yolov133
+  - name: YOLOv134
+    method: body
+    level: L1
+    patterns:
+      - yolov134
+  - name: YOLOv135
+    method: body
+    level: L1
+    patterns:
+      - yolov135
+  - name: YOLOv136
+    method: body
+    level: L1
+    patterns:
+      - yolov136
+  - name: YOLOv137
+    method: body
+    level: L1
+    patterns:
+      - yolov137
+  - name: YOLOv138
+    method: body
+    level: L1
+    patterns:
+      - yolov138
+  - name: YOLOv139
+    method: body
+    level: L1
+    patterns:
+      - yolov139
+  - name: YOLOv140
+    method: body
+    level: L1
+    patterns:
+      - yolov140
+  - name: YOLOv141
+    method: body
+    level: L1
+    patterns:
+      - yolov141
+  - name: YOLOv142
+    method: body
+    level: L1
+    patterns:
+      - yolov142
+  - name: YOLOv143
+    method: body
+    level: L1
+    patterns:
+      - yolov143
+  - name: YOLOv144
+    method: body
+    level: L1
+    patterns:
+      - yolov144
+  - name: YOLOv145
+    method: body
+    level: L1
+    patterns:
+      - yolov145
+  - name: YOLOv146
+    method: body
+    level: L1
+    patterns:
+      - yolov146
+  - name: YOLOv147
+    method: body
+    level: L1
+    patterns:
+      - yolov147
+  - name: YOLOv148
+    method: body
+    level: L1
+    patterns:
+      - yolov148
+  - name: YOLOv149
+    method: body
+    level: L1
+    patterns:
+      - yolov149
+  - name: YOLOv150
+    method: body
+    level: L1
+    patterns:
+      - yolov150
+  - name: YOLOv151
+    method: body
+    level: L1
+    patterns:
+      - yolov151
+  - name: YOLOv152
+    method: body
+    level: L1
+    patterns:
+      - yolov152
+  - name: YOLOv153
+    method: body
+    level: L1
+    patterns:
+      - yolov153
+  - name: YOLOv154
+    method: body
+    level: L1
+    patterns:
+      - yolov154
+  - name: YOLOv155
+    method: body
+    level: L1
+    patterns:
+      - yolov155
+  - name: YOLOv156
+    method: body
+    level: L1
+    patterns:
+      - yolov156
+  - name: YOLOv157
+    method: body
+    level: L1
+    patterns:
+      - yolov157
+  - name: YOLOv158
+    method: body
+    level: L1
+    patterns:
+      - yolov158
+  - name: YOLOv159
+    method: body
+    level: L1
+    patterns:
+      - yolov159
+  - name: YOLOv160
+    method: body
+    level: L1
+    patterns:
+      - yolov160
+  - name: YOLOv161
+    method: body
+    level: L1
+    patterns:
+      - yolov161
+  - name: YOLOv162
+    method: body
+    level: L1
+    patterns:
+      - yolov162
+  - name: YOLOv163
+    method: body
+    level: L1
+    patterns:
+      - yolov163
+  - name: YOLOv164
+    method: body
+    level: L1
+    patterns:
+      - yolov164
+  - name: YOLOv165
+    method: body
+    level: L1
+    patterns:
+      - yolov165
+  - name: YOLOv166
+    method: body
+    level: L1
+    patterns:
+      - yolov166
+  - name: YOLOv167
+    method: body
+    level: L1
+    patterns:
+      - yolov167
+  - name: YOLOv168
+    method: body
+    level: L1
+    patterns:
+      - yolov168
+  - name: YOLOv169
+    method: body
+    level: L1
+    patterns:
+      - yolov169
+  - name: YOLOv170
+    method: body
+    level: L1
+    patterns:
+      - yolov170
+  - name: YOLOv171
+    method: body
+    level: L1
+    patterns:
+      - yolov171
+  - name: YOLOv172
+    method: body
+    level: L1
+    patterns:
+      - yolov172
+  - name: YOLOv173
+    method: body
+    level: L1
+    patterns:
+      - yolov173
+  - name: YOLOv174
+    method: body
+    level: L1
+    patterns:
+      - yolov174
+  - name: YOLOv175
+    method: body
+    level: L1
+    patterns:
+      - yolov175
+  - name: YOLOv176
+    method: body
+    level: L1
+    patterns:
+      - yolov176
+  - name: YOLOv177
+    method: body
+    level: L1
+    patterns:
+      - yolov177
+  - name: YOLOv178
+    method: body
+    level: L1
+    patterns:
+      - yolov178
+  - name: YOLOv179
+    method: body
+    level: L1
+    patterns:
+      - yolov179
+  - name: YOLOv180
+    method: body
+    level: L1
+    patterns:
+      - yolov180
+  - name: YOLOv181
+    method: body
+    level: L1
+    patterns:
+      - yolov181
+  - name: YOLOv182
+    method: body
+    level: L1
+    patterns:
+      - yolov182
+  - name: YOLOv183
+    method: body
+    level: L1
+    patterns:
+      - yolov183
+  - name: YOLOv184
+    method: body
+    level: L1
+    patterns:
+      - yolov184
+  - name: YOLOv185
+    method: body
+    level: L1
+    patterns:
+      - yolov185
+  - name: YOLOv186
+    method: body
+    level: L1
+    patterns:
+      - yolov186
+  - name: YOLOv187
+    method: body
+    level: L1
+    patterns:
+      - yolov187
+  - name: YOLOv188
+    method: body
+    level: L1
+    patterns:
+      - yolov188
+  - name: YOLOv189
+    method: body
+    level: L1
+    patterns:
+      - yolov189
+  - name: YOLOv190
+    method: body
+    level: L1
+    patterns:
+      - yolov190
+  - name: YOLOv191
+    method: body
+    level: L1
+    patterns:
+      - yolov191
+  - name: YOLOv192
+    method: body
+    level: L1
+    patterns:
+      - yolov192
+  - name: YOLOv193
+    method: body
+    level: L1
+    patterns:
+      - yolov193
+  - name: YOLOv194
+    method: body
+    level: L1
+    patterns:
+      - yolov194
+  - name: YOLOv195
+    method: body
+    level: L1
+    patterns:
+      - yolov195
+  - name: YOLOv196
+    method: body
+    level: L1
+    patterns:
+      - yolov196
+  - name: YOLOv197
+    method: body
+    level: L1
+    patterns:
+      - yolov197
+  - name: YOLOv198
+    method: body
+    level: L1
+    patterns:
+      - yolov198
+  - name: YOLOv199
+    method: body
+    level: L1
+    patterns:
+      - yolov199
+  - name: YOLOv200
+    method: body
+    level: L1
+    patterns:
+      - yolov200
+  - name: YOLOv201
+    method: body
+    level: L1
+    patterns:
+      - yolov201
+  - name: YOLOv202
+    method: body
+    level: L1
+    patterns:
+      - yolov202
+  - name: YOLOv203
+    method: body
+    level: L1
+    patterns:
+      - yolov203
+  - name: YOLOv204
+    method: body
+    level: L1
+    patterns:
+      - yolov204
+  - name: YOLOv205
+    method: body
+    level: L1
+    patterns:
+      - yolov205
+  - name: YOLOv206
+    method: body
+    level: L1
+    patterns:
+      - yolov206
+  - name: YOLOv207
+    method: body
+    level: L1
+    patterns:
+      - yolov207
+  - name: YOLOv208
+    method: body
+    level: L1
+    patterns:
+      - yolov208
+  - name: YOLOv209
+    method: body
+    level: L1
+    patterns:
+      - yolov209
+  - name: YOLOv210
+    method: body
+    level: L1
+    patterns:
+      - yolov210
+  - name: YOLOv211
+    method: body
+    level: L1
+    patterns:
+      - yolov211
+  - name: YOLOv212
+    method: body
+    level: L1
+    patterns:
+      - yolov212
+  - name: YOLOv213
+    method: body
+    level: L1
+    patterns:
+      - yolov213
+  - name: YOLOv214
+    method: body
+    level: L1
+    patterns:
+      - yolov214
+  - name: YOLOv215
+    method: body
+    level: L1
+    patterns:
+      - yolov215
+  - name: YOLOv216
+    method: body
+    level: L1
+    patterns:
+      - yolov216
+  - name: YOLOv217
+    method: body
+    level: L1
+    patterns:
+      - yolov217
+  - name: YOLOv218
+    method: body
+    level: L1
+    patterns:
+      - yolov218
+  - name: YOLOv219
+    method: body
+    level: L1
+    patterns:
+      - yolov219
+  - name: YOLOv220
+    method: body
+    level: L1
+    patterns:
+      - yolov220
+  - name: YOLOv221
+    method: body
+    level: L1
+    patterns:
+      - yolov221
+  - name: YOLOv222
+    method: body
+    level: L1
+    patterns:
+      - yolov222
+  - name: YOLOv223
+    method: body
+    level: L1
+    patterns:
+      - yolov223
+  - name: YOLOv224
+    method: body
+    level: L1
+    patterns:
+      - yolov224
+  - name: YOLOv225
+    method: body
+    level: L1
+    patterns:
+      - yolov225
+  - name: YOLOv226
+    method: body
+    level: L1
+    patterns:
+      - yolov226
+  - name: YOLOv227
+    method: body
+    level: L1
+    patterns:
+      - yolov227
+  - name: YOLOv228
+    method: body
+    level: L1
+    patterns:
+      - yolov228
+  - name: YOLOv229
+    method: body
+    level: L1
+    patterns:
+      - yolov229
+  - name: YOLOv230
+    method: body
+    level: L1
+    patterns:
+      - yolov230
+  - name: YOLOv231
+    method: body
+    level: L1
+    patterns:
+      - yolov231
+  - name: YOLOv232
+    method: body
+    level: L1
+    patterns:
+      - yolov232
+  - name: YOLOv233
+    method: body
+    level: L1
+    patterns:
+      - yolov233
+  - name: YOLOv234
+    method: body
+    level: L1
+    patterns:
+      - yolov234
+  - name: YOLOv235
+    method: body
+    level: L1
+    patterns:
+      - yolov235
+  - name: YOLOv236
+    method: body
+    level: L1
+    patterns:
+      - yolov236
+  - name: YOLOv237
+    method: body
+    level: L1
+    patterns:
+      - yolov237
+  - name: YOLOv238
+    method: body
+    level: L1
+    patterns:
+      - yolov238
+  - name: YOLOv239
+    method: body
+    level: L1
+    patterns:
+      - yolov239
+  - name: YOLOv240
+    method: body
+    level: L1
+    patterns:
+      - yolov240
+  - name: YOLOv241
+    method: body
+    level: L1
+    patterns:
+      - yolov241
+  - name: YOLOv242
+    method: body
+    level: L1
+    patterns:
+      - yolov242
+  - name: YOLOv243
+    method: body
+    level: L1
+    patterns:
+      - yolov243
+  - name: YOLOv244
+    method: body
+    level: L1
+    patterns:
+      - yolov244
+  - name: YOLOv245
+    method: body
+    level: L1
+    patterns:
+      - yolov245
+  - name: YOLOv246
+    method: body
+    level: L1
+    patterns:
+      - yolov246
+  - name: YOLOv247
+    method: body
+    level: L1
+    patterns:
+      - yolov247
+  - name: YOLOv248
+    method: body
+    level: L1
+    patterns:
+      - yolov248
+  - name: YOLOv249
+    method: body
+    level: L1
+    patterns:
+      - yolov249
+  - name: YOLOv250
+    method: body
+    level: L1
+    patterns:
+      - yolov250
+
+container:
+  - name: Docker
+    method: body
+    level: L1
+    patterns:
+      - docker
+      - containers/json
+  - name: Kubernetes
+    method: body
+    level: L1
+    patterns:
+      - kubernetes
+      - /api/v1
+  - name: Harbor
+    method: body
+    level: L1
+    patterns:
+      - harbor
+      - /c/
+  - name: Podman
+    method: body
+    level: L1
+    patterns:
+      - podman
+  - name: Containerd
+    method: body
+    level: L1
+    patterns:
+      - containerd
+  - name: CRI-O
+    method: body
+    level: L1
+    patterns:
+      - cri-o
+  - name: Portainer
+    method: body
+    level: L1
+    patterns:
+      - portainer
+      - /api/
+  - name: Rancher
+    method: body
+    level: L1
+    patterns:
+      - rancher
+      - /v3
+  - name: K3s
+    method: body
+    level: L1
+    patterns:
+      - k3s
+  - name: Minikube
+    method: body
+    level: L1
+    patterns:
+      - minikube
+  - name: Docker Swarm
+    method: body
+    level: L1
+    patterns:
+      - swarm
+      - /services
+  - name: Nomad
+    method: body
+    level: L1
+    patterns:
+      - nomad
+      - /v1
+  - name: Kubernetes Secrets
+    method: body
+    level: L1
+    patterns:
+      - kubernetes-secrets
+
+cicd:
+  - name: Jenkins
+    method: body
+    level: L1
+    patterns:
+      - jenkins
+      - /job/
+  - name: GitLab CI
+    method: body
+    level: L1
+    patterns:
+      - gitlab
+      - /users/sign_in
+  - name: GitHub Actions
+    method: body
+    level: L1
+    patterns:
+      - github-actions
+      - /workflows/
+  - name: Travis CI
+    method: body
+    level: L1
+    patterns:
+      - travis-ci
+      - /api
+  - name: CircleCI
+    method: body
+    level: L1
+    patterns:
+      - circleci
+      - /api/v1.1
+  - name: Drone CI
+    method: body
+    level: L1
+    patterns:
+      - drone
+      - /api/repos
+  - name: Azure DevOps
+    method: body
+    level: L1
+    patterns:
+      - azure-devops
+      - /_apis
+  - name: TeamCity
+    method: body
+    level: L1
+    patterns:
+      - teamcity
+      - httpStat
+  - name: Bamboo
+    method: body
+    level: L1
+    patterns:
+      - bamboo
+      - rest/api
+  - name: GoCD
+    method: body
+    level: L1
+    patterns:
+      - gocd
+      - /go/api
+  - name: Spinnaker
+    method: body
+    level: L1
+    patterns:
+      - spinnaker
+      - /api/v1
+  - name: ArgoCD
+    method: body
+    level: L1
+    patterns:
+      - argocd
+      - /api/argocd
+  - name: Tekton
+    method: body
+    level: L1
+    patterns:
+      - tekton
+      - /v1/pipelineruns
+  - name: Jenkins X
+    method: body
+    level: L1
+    patterns:
+      - jenkins-x
+      - /jx
+  - name: GitLab Pipeline
+    method: body
+    level: L1
+    patterns:
+      - gitlab-pipeline
+      - /pipelines
+  - name: GitHub Runner
+    method: body
+    level: L1
+    patterns:
+      - github-runner
+  - name: Bitbucket Pipelines
+    method: body
+    level: L1
+    patterns:
+      - bitbucket
+      - /pipelines
+  - name: GitLab Runner
+    method: body
+    level: L1
+    patterns:
+      - gitlab-runner
+      - /runner
+  - name: Buildkite
+    method: body
+    level: L1
+    patterns:
+      - buildkite
+      - /pipelines
+  - name: Semaphore
+    method: body
+    level: L1
+    patterns:
+      - semaphoreci
+      - /api
+  - name: Cirrus CI
+    method: body
+    level: L1
+    patterns:
+      - cirrus-ci
+      - /api
+  - name: Codefresh
+    method: body
+    level: L1
+    patterns:
+      - codefresh
+      - /api
+  - name: etcd
+    method: body
+    level: L1
+    patterns:
+      - etcd
+      - /v2/keys
+  - name: Consul
+    method: body
+    level: L1
+    patterns:
+      - consul
+      - /v1
+  - name: Nomad
+    method: body
+    level: L1
+    patterns:
+      - nomad
+      - /v1
+  - name: Vault
+    method: body
+    level: L1
+    patterns:
+      - vault
+      - /v1/sys
+  - name: Terraform Cloud
+    method: body
+    level: L1
+    patterns:
+      - terraform-cloud
+      - /api/v2
+  - name: Packer
+    method: body
+    level: L1
+    patterns:
+      - packer
+  - name: Ansible
+    method: body
+    level: L1
+    patterns:
+      - ansible
+      - /api
+  - name: kubectl
+    method: body
+    level: L1
+    patterns:
+      - kubectl
+  - name: Helm
+    method: body
+    level: L1
+    patterns:
+      - helm
+      - /api
+  - name: Kustomize
+    method: body
+    level: L1
+    patterns:
+      - kustomize
+      - /kustomize
+  - name: Skaffold
+    method: body
+    level: L1
+    patterns:
+      - skaffold
+      - /api
+  - name: Tilt
+    method: body
+    level: L1
+    patterns:
+      - tilt
+      - /api
+  - name: Argo Workflows
+    method: body
+    level: L1
+    patterns:
+      - argo-workflows
+      - /api/v1
+  - name: Flagger
+    method: body
+    level: L1
+    patterns:
+      - flagger
+      - /api
+  - name: Istio
+    method: body
+    level: L1
+    patterns:
+      - istio
+      - /api
+  - name: Linkerd
+    method: body
+    level: L1
+    patterns:
+      - linkerd
+      - /api
+  - name: Envoy
+    method: body
+    level: L1
+    patterns:
+      - envoy
+      - /stats
+  - name: NGINX Ingress
+    method: body
+    level: L1
+    patterns:
+      - nginx-ingress
+      - /healthz
+  - name: Traefik
+    method: body
+    level: L1
+    patterns:
+      - traefik
+      - /api
+  - name: HAProxy
+    method: body
+    level: L1
+    patterns:
+      - haproxy
+      - /stats
+  - name: Caddy
+    method: body
+    level: L1
+    patterns:
+      - caddy
+      - /api
+  - name: Vulkan
+    method: body
+    level: L1
+    patterns:
+      - vulkan
+  - name: MetalLB
+    method: body
+    level: L1
+    patterns:
+      - metallb
+      - /api
+  - name: Calico
+    method: body
+    level: L1
+    patterns:
+      - calico
+      - /api/v1
+  - name: Cilium
+    method: body
+    level: L1
+    patterns:
+      - cilium
+      - /v1
+  - name: OVN
+    method: body
+    level: L1
+    patterns:
+      - ovn
+      - /api
+  - name: Weave Net
+    method: body
+    level: L1
+    patterns:
+      - weave
+      - /api
+  - name: Flannel
+    method: body
+    level: L1
+    patterns:
+      - flannel
+      - /api
+  - name: Canal
+    method: body
+    level: L1
+    patterns:
+      - canal
+      - /api
+  - name: kube-proxy
+    method: body
+    level: L1
+    patterns:
+      - kube-proxy
+      - /api/v1
+  - name: CoreDNS
+    method: body
+    level: L1
+    patterns:
+      - coredns
+      - /api
+  - name: etcd-operator
+    method: body
+    level: L1
+    patterns:
+      - etcd-operator
+  - name: Prometheus Operator
+    method: body
+    level: L1
+    patterns:
+      - prometheus-operator
+  - name: Alertmanager
+    method: body
+    level: L1
+    patterns:
+      - alertmanager
+      - /api
+  - name: Grafana
+    method: body
+    level: L1
+    patterns:
+      - grafana
+      - /api
+  - name: Loki
+    method: body
+    level: L1
+    patterns:
+      - loki
+      - /loki
+  - name: Tempo
+    method: body
+    level: L1
+    patterns:
+      - tempo
+      - /api
+  - name: Jaeger
+    method: body
+    level: L1
+    patterns:
+      - jaeger
+      - /api
+  - name: Zipkin
+    method: body
+    level: L1
+    patterns:
+      - zipkin
+      - /api/v1
+  - name: OpenTelemetry
+    method: body
+    level: L1
+    patterns:
+      - opentelemetry
+      - /v1/traces
+  - name: APM
+    method: body
+    level: L1
+    patterns:
+      - apm
+      - /api
+  - name: SkyWalking
+    method: body
+    level: L1
+    patterns:
+      - skywalking
+      - /graphql
+  - name: Elastic APM
+    method: body
+    level: L1
+    patterns:
+      - elastic-apm
+      - /v1
+  - name: DataDog
+    method: body
+    level: L1
+    patterns:
+      - datadog
+      - /api/v1
+  - name: NewRelic
+    method: body
+    level: L1
+    patterns:
+      - newrelic
+      - /apis
+  - name: Dynatrace
+    method: body
+    level: L1
+    patterns:
+      - dynatrace
+      - /api
+  - name: AppDynamics
+    method: body
+    level: L1
+    patterns:
+      - appdynamics
+      - /api
+  - name: Instana
+    method: body
+    level: L1
+    patterns:
+      - instana
+      - /api
+  - name: Humio
+    method: body
+    level: L1
+    patterns:
+      - humio
+      - /api/v1
+  - name: Chronosphere
+    method: body
+    level: L1
+    patterns:
+      - chronosphere
+      - /api
+  - name: Sentry
+    method: body
+    level: L1
+    patterns:
+      - sentry
+      - /api
+  - name: Bugsnag
+    method: body
+    level: L1
+    patterns:
+      - bugsnag
+      - /api
+  - name: Rollbar
+    method: body
+    level: L1
+    patterns:
+      - rollbar
+      - /api
+  - name: Airbrake
+    method: body
+    level: L1
+    patterns:
+      - airbrake
+      - /api
+  - name: ray
+    method: body
+    level: L1
+    patterns:
+      - ray
+      - /api
