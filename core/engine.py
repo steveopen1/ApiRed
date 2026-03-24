@@ -1818,6 +1818,18 @@ class ScanEngine:
             self.result.api_endpoints = final_endpoints
             self.result.total_apis = len(final_endpoints)
         
+        if self._incremental_scanner:
+            try:
+                js_urls = list(self._js_cache.get_all_urls()) if self._js_cache else []
+                snapshot_id = self._incremental_scanner.save_snapshot(
+                    target=self.config.target,
+                    apis=[{'path': e.path, 'method': e.method, 'status': getattr(e, 'status', '')} for e in final_endpoints],
+                    js_urls=js_urls
+                )
+                logger.info(f"Saved incremental snapshot: {snapshot_id}")
+            except Exception as e:
+                logger.debug(f"Failed to save incremental snapshot: {e}")
+        
         return {
             'total_endpoints': len(final_endpoints),
             'endpoints': [e.to_dict() for e in final_endpoints]

@@ -376,3 +376,119 @@ class ResponseDeduplicator:
     def reset(self):
         """重置"""
         self.response_hashes.clear()
+
+
+class SimHashDeduplicator:
+    """
+    SimHash 语义去重器
+    用于检测语义相似的 API 端点（如 /api/users/1 和 /api/users/2）
+    """
+    
+    def __init__(self, hash_bits: int = 64, threshold: int = 3):
+        self.hash_bits = hash_bits
+        self.threshold = threshold
+        self._hashes: Dict[str, int] = {}
+    
+    def _tokenize(self, text: str) -> List[str]:
+        """分词"""
+        import re
+        tokens = re.findall(r'\w+', text.lower())
+        return [t for t in tokens if len(t) > 2]
+    
+    def _compute_hash(self, token: str) -> int:
+        """计算单个 token 的哈希"""
+        h = 0
+        for i, c in enumerate(token):
+            h = (h * 31 + ord(c)) & ((1 << 64) - 1)
+        return h
+    
+    def compute_simhash(self, text: str) -> int:
+        """
+        计算 SimHash
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            64位 SimHash 值
+        """
+        tokens = self._tokenize(text)
+        if not tokens:
+            return 0
+        
+        v = [0] * self.hash_bits
+        
+        for token in tokens:
+            h = self._compute_hash(token)
+            for i in range(self.hash_bits):
+                bit = (h >> i) & 1
+                if bit:
+                    v[i] += 1
+                else:
+                    v[i] -= 1
+        
+        fingerprint = 0
+        for i in range(self.hash_bits):
+            if v[i] > 0:
+                fingerprint |= (1 << i)
+        
+        return fingerprint
+    
+    def hamming_distance(self, hash1: int, hash2: int) -> int:
+        """计算两个哈希之间的汉明距离"""
+        xor = hash1 ^ hash2
+        distance = 0
+        while xor:
+            distance += 1
+            xor &= xor - 1
+        return distance
+    
+    def is_duplicate(self, key: str, text: str) -> bool:
+        """
+        检查是否重复
+        
+        Args:
+            key: 唯一标识符
+            text: 要检查的文本
+            
+        Returns:
+            True 如果与已有条目相似（汉明距离 <= threshold）
+        """
+        new_hash = self.compute_simhash(text)
+        
+        for existing_key, existing_hash in self._hashes.items():
+            if existing_key == key:
+                continue
+            
+            distance = self.hamming_distance(new_hash, existing_hash)
+            if distance <= self.threshold:
+                return True
+        
+        self._hashes[key] = new_hash
+        return False
+    
+    def get_similar(self, text: str, max_results: int = 10) -> List[Tuple[str, int]]:
+        """
+        获取相似的条目
+        
+        Args:
+            text: 要检查的文本
+            max_results: 最大返回数量
+            
+        Returns:
+            List of (key, hamming_distance) tuples
+        """
+        new_hash = self.compute_simhash(text)
+        results = []
+        
+        for key, existing_hash in self._hashes.items():
+            distance = self.hamming_distance(new_hash, existing_hash)
+            if distance <= self.threshold:
+                results.append((key, distance))
+        
+        results.sort(key=lambda x: x[1])
+        return results[:max_results]
+    
+    def reset(self):
+        """重置"""
+        self._hashes.clear()

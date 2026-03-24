@@ -37,16 +37,14 @@ class Pattern:
     category: str = "general"
     tags: List[str] = field(default_factory=list)
     false_positive: Optional[str] = None
-    _compiled_regex: Optional[re.Pattern] = field(default_factory=None, repr=False)
-    _compiled_fp_regex: Optional[re.Pattern] = field(default_factory=None, repr=False)
     
     def __post_init__(self):
-        if self._compiled_regex is None:
+        if not hasattr(self, '_compiled_regex') or self._compiled_regex is None:
             try:
                 self._compiled_regex = re.compile(self.pattern, re.IGNORECASE | re.DOTALL)
             except re.error:
                 self._compiled_regex = None
-        if self.false_positive and self._compiled_fp_regex is None:
+        if self.false_positive and (not hasattr(self, '_compiled_fp_regex') or self._compiled_fp_regex is None):
             try:
                 self._compiled_fp_regex = re.compile(self.false_positive, re.IGNORECASE)
             except re.error:
@@ -366,6 +364,69 @@ class GFLibrary:
             self._cache[cache_key] = result
         
         return result
+    
+    def scan_text_batch(
+        self,
+        text: str,
+        pattern_names: List[str],
+        source: str = "text"
+    ) -> Dict[str, List[Match]]:
+        """
+        批量扫描文本，使用合并的正则表达式一次匹配多个模式
+        
+        Args:
+            text: 待扫描文本
+            pattern_names: 要使用的模式名称列表
+            source: 源标识
+            
+        Returns:
+            Dict[str, List[Match]] - 每个模式名称对应的匹配结果
+        """
+        pattern_list = self._get_pattern_list(pattern_names, None)
+        
+        if not pattern_list:
+            return {}
+        
+        combined_pattern = "|".join(p.pattern for p in pattern_list)
+        pattern_map = {i: p for i, p in enumerate(pattern_list)}
+        
+        try:
+            combined_regex = re.compile(combined_pattern, re.IGNORECASE | re.DOTALL)
+        except re.error:
+            return {}
+        
+        results: Dict[str, List[Match]] = {p.name: [] for p in pattern_list}
+        
+        lines = text.splitlines()
+        
+        for i, line in enumerate(lines, 1):
+            matches = combined_regex.finditer(line)
+            for match in matches:
+                matched_text = match.group(0)
+                matched_pattern_idx = None
+                for idx, p in enumerate(pattern_list):
+                    try:
+                        if re.search(p.pattern, matched_text, re.IGNORECASE):
+                            matched_pattern_idx = idx
+                            break
+                    except re.error:
+                        continue
+                
+                if matched_pattern_idx is not None:
+                    pattern = pattern_map[matched_pattern_idx]
+                    if not pattern.is_false_positive(line):
+                        match_obj = Match(
+                            pattern_name=pattern.name,
+                            matched_text=matched_text,
+                            line_number=i,
+                            line_content=line.strip(),
+                            severity=pattern.severity,
+                            category=pattern.category,
+                            context=f"{i}: {line.strip()}"
+                        )
+                        results[pattern.name].append(match_obj)
+        
+        return results
     
     def _scan_lines(
         self,
