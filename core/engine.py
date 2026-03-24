@@ -203,9 +203,6 @@ class ScanEngine:
         )
         
         self._fuzz_tester = FuzzTester(self._http_client)
-        self._vulnerability_tester = VulnerabilityTester(self._http_client)
-        self._idor_tester = IDORTester(self._http_client)
-        self._url_greper = URLGreper()
         
         patterns_dir = os.path.join(os.path.dirname(__file__), 'utils', 'patterns')
         if os.path.exists(patterns_dir):
@@ -214,6 +211,10 @@ class ScanEngine:
         else:
             self._gf_library = GFLibrary()
             logger.info("GF Library initialized with default patterns")
+        
+        self._vulnerability_tester = VulnerabilityTester(self._http_client, self._gf_library)
+        self._idor_tester = IDORTester(self._http_client)
+        self._url_greper = URLGreper()
         
         self._plugins_initialized = False
         self._plugin_registry = None
