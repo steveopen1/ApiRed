@@ -2156,6 +2156,132 @@ class ScanEngine:
                                 vuln_count += 1
                     except Exception as e:
                         logger.debug(f"IDOR test error for {endpoint.full_url}: {e}")
+                
+                # CORS配置错误测试
+                if getattr(cfg, 'enable_cors_test', True):
+                    try:
+                        cors_result = await self._vulnerability_tester.test_cors_misconfiguration(endpoint.full_url)
+                        if cors_result and cors_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=cors_result.vuln_type.value,
+                                severity=Severity[cors_result.severity.upper()] if isinstance(cors_result.severity, str) else cors_result.severity,
+                                evidence=cors_result.evidence,
+                                payload=cors_result.payload,
+                                remediation=cors_result.remediation,
+                                cwe_id=cors_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"CORS test error for {endpoint.full_url}: {e}")
+                
+                # CRLF注入测试
+                if getattr(cfg, 'enable_crlf_test', True):
+                    try:
+                        crlf_result = await self._vulnerability_tester.test_crlf_injection(endpoint.full_url)
+                        if crlf_result and crlf_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=crlf_result.vuln_type.value,
+                                severity=Severity[crlf_result.severity.upper()] if isinstance(crlf_result.severity, str) else crlf_result.severity,
+                                evidence=crlf_result.evidence,
+                                payload=crlf_result.payload,
+                                remediation=crlf_result.remediation,
+                                cwe_id=crlf_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"CRLF test error for {endpoint.full_url}: {e}")
+                
+                # LFI测试
+                if getattr(cfg, 'enable_lfi_test', True):
+                    try:
+                        lfi_result = await self._vulnerability_tester.test_lfi(endpoint.full_url)
+                        if lfi_result and lfi_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=lfi_result.vuln_type.value,
+                                severity=Severity[lfi_result.severity.upper()] if isinstance(lfi_result.severity, str) else lfi_result.severity,
+                                evidence=lfi_result.evidence,
+                                payload=lfi_result.payload,
+                                remediation=lfi_result.remediation,
+                                cwe_id=lfi_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"LFI test error for {endpoint.full_url}: {e}")
+                
+                # SSTI测试
+                if getattr(cfg, 'enable_ssti_test', True):
+                    try:
+                        ssti_result = await self._vulnerability_tester.test_ssti(endpoint.full_url)
+                        if ssti_result and ssti_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=ssti_result.vuln_type.value,
+                                severity=Severity[ssti_result.severity.upper()] if isinstance(ssti_result.severity, str) else ssti_result.severity,
+                                evidence=ssti_result.evidence,
+                                payload=ssti_result.payload,
+                                remediation=ssti_result.remediation,
+                                cwe_id=ssti_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"SSTI test error for {endpoint.full_url}: {e}")
+                
+                # 详细错误信息测试
+                if getattr(cfg, 'enable_verbose_error_test', True):
+                    try:
+                        verbose_result = await self._vulnerability_tester.test_verbose_error(endpoint.full_url)
+                        if verbose_result and verbose_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=verbose_result.vuln_type.value,
+                                severity=Severity[verbose_result.severity.upper()] if isinstance(verbose_result.severity, str) else verbose_result.severity,
+                                evidence=verbose_result.evidence,
+                                payload=verbose_result.payload,
+                                remediation=verbose_result.remediation,
+                                cwe_id=verbose_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"Verbose error test error for {endpoint.full_url}: {e}")
+                
+                # 命令注入测试
+                if getattr(cfg, 'enable_command_injection_test', True):
+                    try:
+                        cmd_result = await self._vulnerability_tester.test_command_injection(endpoint.full_url)
+                        if cmd_result and cmd_result.is_vulnerable:
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type=cmd_result.vuln_type.value,
+                                severity=Severity[cmd_result.severity.upper()] if isinstance(cmd_result.severity, str) else cmd_result.severity,
+                                evidence=cmd_result.evidence,
+                                payload=cmd_result.payload,
+                                remediation=cmd_result.remediation,
+                                cwe_id=cmd_result.cwe_id
+                            )
+                            if self.result:
+                                self.result.vulnerabilities.append(vuln)
+                            vuln_count += 1
+                    except Exception as e:
+                        logger.debug(f"Command injection test error for {endpoint.full_url}: {e}")
                         
             except Exception as e:
                 logger.warning(f"Vulnerability test error for endpoint {endpoint.api_id}: {e}")

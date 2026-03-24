@@ -1,0 +1,184 @@
+# BrokenAuth - Broken Authentication Tests
+# Reference: OWASP API2-2023, CWE-287
+
+api_version: "1.0"
+category: BrokenAuth
+
+test_cases:
+
+  - id: BROKEN-001
+    name: JWT none algorithm vulnerability
+    severity: CRITICAL
+    category: BrokenAuth
+    cwe_id: CWE-287
+    owasp_ref: API2-2023
+    description: |
+      Test for JWT 'none' algorithm vulnerability.
+      Attackers can modify JWT algorithm to 'none' to forge tokens.
+    vuln_type: JWT_WEAK
+    method: POST
+    path: /api/auth/login
+    attack_vectors:
+      - name: none_algorithm
+        payload: '{"alg":"none","typ":"JWT"}'
+      - name: algorithm_confusion
+        payload: '{"alg":"HS256","typ":"JWT","kid":"../../etc/passwd"}'
+    expected_response:
+      status_code: 200
+    validation:
+      type: token_validation
+      indicators:
+        - "authentication"
+        - "login"
+        - "token"
+    remediation: |
+      Specify expected algorithm explicitly.
+      Verify algorithm matches expected.
+      Use HMAC verification with strong secrets.
+
+  - id: BROKEN-002
+    name: Weak JWT secret
+    severity: HIGH
+    category: BrokenAuth
+    cwe_id: CWE-287
+    description: |
+      Test for weak JWT secret that can be brute-forced.
+    vuln_type: JWT_WEAK
+    method: POST
+    path: /api/auth/login
+    attack_vectors:
+      - name: weak_secret_bruteforce
+        payloads:
+          - "secret"
+          - "key"
+          - "password"
+          - "1234"
+          - "admin"
+    expected_response:
+      status_code: 200
+    validation:
+      type: token_validation
+      indicators:
+        - "login"
+        - "welcome"
+        - "token"
+    remediation: |
+      Use strong, random secrets for HMAC.
+      Implement rate limiting on authentication.
+      Use RS256 or ES256 instead of HS256.
+
+  - id: BROKEN-003
+    name: Missing authentication on sensitive endpoint
+    severity: HIGH
+    category: BrokenAuth
+    cwe_id: CWE-287
+    description: |
+      Test for sensitive endpoints accessible without authentication.
+    vuln_type: AUTH_BYPASS
+    method: GET
+    path: /api/user/profile
+    expected_response:
+      status_code: 200
+    validation:
+      type: auth_required
+      indicators:
+        - "admin"
+        - "dashboard"
+        - "password"
+    remediation: |
+      Implement proper authentication on all endpoints.
+      Use middleware to enforce authentication.
+      Test endpoints for auth requirements.
+
+  - id: BROKEN-004
+    name: Authentication bypass via SQL injection
+    severity: CRITICAL
+    category: BrokenAuth
+    cwe_id: CWE-287
+    description: |
+      Test for SQL injection in login to bypass authentication.
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - "admin'--"
+      - "' OR '1'='1"
+      - "admin' OR '1'='1"
+      - "' OR 1=1--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: auth_bypass
+      indicators:
+        - "login"
+        - "welcome"
+        - "token"
+        - "dashboard"
+    remediation: |
+      Use parameterized queries.
+      Implement proper input validation.
+      Use multi-factor authentication.
+
+  - id: BROKEN-005
+    name: Credential stuffing - weak password
+    severity: MEDIUM
+    category: BrokenAuth
+    cwe_id: CWE-287
+    description: |
+      Test for weak passwords that can be easily brute-forced.
+    vuln_type: AUTH_BYPASS
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - "123456"
+      - "password"
+      - "admin"
+      - "12345678"
+      - "qwerty"
+    expected_response:
+      status_code: 200
+    validation:
+      type: credential_strength
+      indicators:
+        - "login success"
+    remediation: |
+      Enforce strong password policies.
+      Implement account lockout mechanisms.
+      Use multi-factor authentication.
+      Implement rate limiting.
+
+  - id: BROKEN-006
+    name: Missing rate limiting on authentication
+    severity: MEDIUM
+    category: BrokenAuth
+    cwe_id: CWE-307
+    description: |
+      Test for missing rate limiting on authentication endpoints.
+    vuln_type: RATE_LIMIT_BYPASS
+    method: POST
+    path: /api/auth/login
+    bypass_techniques:
+      - header_injection: "X-Forwarded-For: 1.1.1.1"
+    expected_response:
+      status_code: 429
+    validation:
+      type: rate_limit_check
+      indicators:
+        - "rate limit"
+        - "too many"
+        - "quota"
+    remediation: |
+      Implement rate limiting on authentication.
+      Use account lockout after failed attempts.
+      Monitor for brute force patterns.

