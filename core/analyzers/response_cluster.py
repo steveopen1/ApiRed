@@ -165,13 +165,18 @@ class ResponseCluster:
                 return bucket
         return "huge"
     
-    def _extract_template_hash(self, content: str) -> str:
+    def _extract_template_hash(self, content: bytes) -> str:
         """提取模板哈希"""
-        cleaned = self._remove_dynamic_content(content[:2000])
+        if isinstance(content, bytes):
+            content_str = content[:2000].decode('utf-8', errors='ignore')
+        else:
+            content_str = str(content[:2000])
+        
+        cleaned = self._remove_dynamic_content(content_str)
         
         template_type = 'unknown'
         for pattern, ptype in self.TEMPLATE_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE):
+            if re.search(pattern, content_str, re.IGNORECASE):
                 template_type = ptype
                 break
         
@@ -187,12 +192,17 @@ class ResponseCluster:
         
         return cleaned
     
-    def _extract_preview(self, content: str, max_len: int = 100) -> str:
+    def _extract_preview(self, content: bytes, max_len: int = 100) -> str:
         """提取预览"""
         if not content:
             return ""
         
-        lines = content.split('\n')
+        if isinstance(content, bytes):
+            content_str = content.decode('utf-8', errors='ignore')
+        else:
+            content_str = str(content)
+        
+        lines = content_str.split('\n')
         preview_lines = []
         
         for line in lines[:5]:

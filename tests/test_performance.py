@@ -70,22 +70,20 @@ async def test_api_scorer_performance():
 @pytest.mark.asyncio
 async def test_response_cluster_performance():
     """测试响应聚类性能"""
-    from core.analyzers.response_cluster import ResponseCluster, ResponseFingerprint
+    from core.analyzers.response_cluster import ResponseCluster, TaskResult
     
     cluster = ResponseCluster()
     
     start_time = time.time()
     
     for i in range(500):
-        fingerprint = ResponseFingerprint(
+        content = b'{"data": "test content for endpoint %d"}' % i
+        response = TaskResult(
             status_code=200 if i % 10 != 0 else 404,
-            length_bucket="small",
-            template_hash=f"hash_{i % 10}",
-            raw_hash=f"raw_{i}",
-            content_preview="test content",
-            url=f"endpoint_{i}"
+            content=content,
+            content_hash=f"hash_{i % 10}"
         )
-        cluster.add_response(fingerprint)
+        cluster.add_response(f"endpoint_{i}", response)
     
     cluster.analyze_clusters()
     

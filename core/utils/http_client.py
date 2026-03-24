@@ -1,10 +1,12 @@
 """
 Async HTTP Client Module
 异步并发HTTP客户端
+支持同步requests作为aiohttp失败时的备选方案
 """
 
 import asyncio
 import aiohttp
+import requests
 from typing import List, Dict, Any, Callable, Optional, Tuple
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -109,13 +111,13 @@ class AsyncHttpClient:
         timeout: Optional[int] = None,
         verify_ssl: Optional[bool] = None
     ) -> TaskResult:
-        """发起异步请求"""
+        """发起异步请求，aiohttp失败时自动降级到同步requests"""
         if verify_ssl is not None:
             self.verify_ssl = verify_ssl
         await self._ensure_session(verify_ssl)
         
         retry = retry if retry is not None else self.max_retries
-        timeout = int(timeout) if timeout is not None else int(self.default_timeout.total)
+        timeout_sec = int(timeout) if timeout is not None else int(self.default_timeout.total)
         
         result = TaskResult(url=url, method=method)
         start_time = time.time()
@@ -129,7 +131,7 @@ class AsyncHttpClient:
                         headers=headers,
                         data=data,
                         proxy=self.proxy,
-                        timeout=aiohttp.ClientTimeout(total=timeout)
+                        timeout=aiohttp.ClientTimeout(total=timeout_sec)
                     ) as response:
                         result.status_code = response.status
                         result.headers = dict(response.headers)
@@ -147,14 +149,98 @@ class AsyncHttpClient:
                         return result
                         
                 except asyncio.TimeoutError:
-                    result.error = f'Timeout after {timeout}s'
+                    result.error = f'Timeout after {timeout_sec}s'
                 except aiohttp.ClientError as e:
                     result.error = f'ClientError: {str(e)}'
+                except ssl.SSLError as e:
+                    result.error = f'SSLError: {str(e)}'
                 except Exception as e:
                     result.error = f'Error: {str(e)}'
                 
                 if attempt < retry - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
+        
+        result.duration = time.time() - start_time
+        
+        if result.error and ('SSL' in result.error or 'ClientError' in result.error or 'sslv3' in result.error.lower() if result.error else False):
+            return await self._fallback_request(url, method, headers, data, timeout_sec, verify_ssl)
+        
+        return result
+    
+    async def _fallback_request(
+        self,
+        url: str,
+        method: str = 'GET',
+        headers: Optional[Dict[str, str]] = None,
+        data: Any = None,
+        timeout: int = 30,
+        verify_ssl: Optional[bool] = None
+    ) -> TaskResult:
+        """同步requests降级方案，处理SSL问题"""
+        result = TaskResult(url=url, method=method)
+        start_time = time.time()
+        
+        try:
+            verify = verify_ssl if verify_ssl is not None else self.verify_ssl
+            
+            if method == 'GET':
+                resp = requests.get(
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
+                )
+            elif method == 'POST_DATA':
+                resp = requests.post(
+                    url,
+                    data=data,
+                    headers=headers,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
+                )
+            elif method == 'POST_JSON':
+                resp = requests.post(
+                    url,
+                    json=data,
+                    headers=headers,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
+                )
+            else:
+                resp = requests.request(
+                    method,
+                    url,
+                    headers=headers,
+                    data=data,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
+                )
+            
+            result.status_code = resp.status_code
+            result.headers = dict(resp.headers)
+            result.content = resp.text
+            result.content_bytes = resp.content
+            result.content_hash = hashlib.sha256(resp.content).hexdigest()[:16]
+            result.duration = time.time() - start_time
+            
+            self._request_count += 1
+            
+        except requests.exceptions.SSLError as e:
+            result.error = f'SSLError (fallback): {str(e)}'
+            result.status_code = 0
+        except requests.exceptions.Timeout as e:
+            result.error = f'Timeout (fallback): {str(e)}'
+            result.status_code = 0
+        except requests.exceptions.RequestException as e:
+            result.error = f'RequestException (fallback): {str(e)}'
+            result.status_code = 0
+        except Exception as e:
+            result.error = f'Fallback error: {str(e)}'
+            result.status_code = 0
         
         result.duration = time.time() - start_time
         return result
