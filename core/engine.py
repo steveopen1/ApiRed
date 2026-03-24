@@ -1970,7 +1970,20 @@ class ScanEngine:
         }
     
     async def _run_vuln_test(self) -> Dict[str, Any]:
-        """漏洞测试"""
+        """
+        基于 Akto 风格的智能漏洞测试
+        
+        改进：
+        1. 使用 EndpointAnalyzer 分析端点特征
+        2. 使用 TestSelector 基于端点特征智能选择测试
+        3. 只执行匹配的测试，减少误报
+        4. 使用 TrafficAnalyzer 学习API行为模式
+        """
+        from .analyzers import (
+            EndpointAnalyzer, TestSelector, TestCategory, TestSelection,
+            TrafficAnalyzer, create_traffic_analyzer_from_endpoints
+        )
+        
         high_value_apis = [e for e in self.result.api_endpoints if e.is_high_value] if self.result else []
         
         if self._url_greper and high_value_apis:
@@ -1990,306 +2003,233 @@ class ScanEngine:
             except Exception as e:
                 logger.debug(f"URL greper error: {e}")
         
+        analyzer = EndpointAnalyzer()
+        selector = TestSelector()
+        traffic_analyzer = create_traffic_analyzer_from_endpoints(high_value_apis)
+        
+        enabled_categories = set()
+        cfg = self.config
+        
+        if getattr(cfg, 'enable_ssrf_test', True):
+            enabled_categories.add(TestCategory.SSRF)
+        if getattr(cfg, 'enable_sql_test', True):
+            enabled_categories.add(TestCategory.SQL_INJECTION)
+        if getattr(cfg, 'enable_xss_test', True):
+            enabled_categories.add(TestCategory.XSS)
+        if getattr(cfg, 'enable_bypass_test', True):
+            enabled_categories.add(TestCategory.RATE_LIMIT)
+        if getattr(cfg, 'enable_jwt_test', True):
+            enabled_categories.add(TestCategory.JWT_SECURITY)
+        if getattr(cfg, 'enable_unauthorized_test', True):
+            enabled_categories.add(TestCategory.AUTH_BYPASS)
+        if getattr(cfg, 'enable_idor_test', True):
+            enabled_categories.add(TestCategory.IDOR)
+            enabled_categories.add(TestCategory.BOLA)
+        if getattr(cfg, 'enable_cors_test', True):
+            enabled_categories.add(TestCategory.CORS)
+        if getattr(cfg, 'enable_crlf_test', True):
+            enabled_categories.add(TestCategory.CRLF)
+        if getattr(cfg, 'enable_lfi_test', True):
+            enabled_categories.add(TestCategory.LFI)
+        if getattr(cfg, 'enable_ssti_test', True):
+            enabled_categories.add(TestCategory.SSTI)
+        if getattr(cfg, 'enable_verbose_error_test', True):
+            enabled_categories.add(TestCategory.VERBOSE_ERROR)
+        if getattr(cfg, 'enable_command_injection_test', True):
+            enabled_categories.add(TestCategory.COMMAND_INJECTION)
+        if getattr(cfg, 'enable_info_disclosure_test', True):
+            enabled_categories.add(TestCategory.INFORMATION_DISCLOSURE)
+        
         vuln_count = 0
+        test_stats = {
+            'total_tests': 0,
+            'skipped_tests': 0,
+            'vulnerabilities_found': 0,
+            'by_category': {}
+        }
+        
         from .models import Severity
         
-        cfg = self.config
+        method_mapping = {
+            TestCategory.SQL_INJECTION: 'test_sql_injection',
+            TestCategory.XSS: 'test_xss',
+            TestCategory.COMMAND_INJECTION: 'test_command_injection',
+            TestCategory.SSRF: 'test_ssrf',
+            TestCategory.IDOR: '_test_idor_endpoint',
+            TestCategory.BOLA: '_test_idor_endpoint',
+            TestCategory.CORS: 'test_cors_misconfiguration',
+            TestCategory.CRLF: 'test_crlf_injection',
+            TestCategory.LFI: 'test_lfi',
+            TestCategory.SSTI: 'test_ssti',
+            TestCategory.VERBOSE_ERROR: 'test_verbose_error',
+            TestCategory.AUTH_BYPASS: 'test_unauthorized_access',
+            TestCategory.JWT_SECURITY: 'test_jwt_security',
+            TestCategory.RATE_LIMIT: 'test_bypass_techniques',
+            TestCategory.INFORMATION_DISCLOSURE: 'test_information_disclosure',
+        }
         
         for endpoint in high_value_apis:
             try:
-                # SSRF 测试
-                if getattr(cfg, 'enable_ssrf_test', True):
-                    ssrf_result = await self._vulnerability_tester.test_ssrf(endpoint.full_url)
-                    if ssrf_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=ssrf_result.vuln_type.value,
-                            severity=Severity[ssrf_result.severity.upper()] if isinstance(ssrf_result.severity, str) else ssrf_result.severity,
-                            evidence=ssrf_result.evidence,
-                            payload=ssrf_result.payload,
-                            remediation=ssrf_result.remediation,
-                            cwe_id=ssrf_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
+                features = analyzer.analyze(
+                    path=endpoint.path,
+                    method=endpoint.method,
+                    parameters=endpoint.parameters if hasattr(endpoint, 'parameters') else None
+                )
                 
-                # 信息泄露测试
-                if getattr(cfg, 'enable_info_disclosure_test', True):
-                    info_disclosure = await self._vulnerability_tester.test_information_disclosure(endpoint.full_url)
-                    if info_disclosure.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=info_disclosure.vuln_type.value,
-                            severity=Severity[info_disclosure.severity.upper()] if isinstance(info_disclosure.severity, str) else info_disclosure.severity,
-                            evidence=info_disclosure.evidence,
-                            payload=info_disclosure.payload,
-                            remediation=info_disclosure.remediation,
-                            cwe_id=info_disclosure.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
+                should_test, reason = traffic_analyzer.should_test_endpoint(
+                    endpoint.path, endpoint.method
+                )
                 
-                # SQL 注入测试
-                if getattr(cfg, 'enable_sql_test', True):
-                    sql_result = await self._vulnerability_tester.test_sql_injection(endpoint.full_url, endpoint.method)
-                    if sql_result and sql_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=sql_result.vuln_type.value,
-                            severity=Severity[sql_result.severity.upper()] if isinstance(sql_result.severity, str) else sql_result.severity,
-                            evidence=sql_result.evidence,
-                            payload=sql_result.payload,
-                            remediation=sql_result.remediation,
-                            cwe_id=sql_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
+                if not should_test:
+                    logger.debug(f"Skipping {endpoint.path}: {reason}")
+                    continue
                 
-                # XSS 测试
-                if getattr(cfg, 'enable_xss_test', True):
-                    xss_result = await self._vulnerability_tester.test_xss(endpoint.full_url, endpoint.method)
-                    if xss_result and xss_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=xss_result.vuln_type.value,
-                            severity=Severity[xss_result.severity.upper()] if isinstance(xss_result.severity, str) else xss_result.severity,
-                            evidence=xss_result.evidence,
-                            payload=xss_result.payload,
-                            remediation=xss_result.remediation,
-                            cwe_id=xss_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
+                selections = selector.select_tests(features, enabled_categories)
                 
-                # Bypass 技术测试
-                if getattr(cfg, 'enable_bypass_test', True):
-                    bypass_result = await self._vulnerability_tester.test_bypass_techniques(endpoint.full_url, endpoint.method)
-                    if bypass_result and bypass_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=bypass_result.vuln_type.value,
-                            severity=Severity[bypass_result.severity.upper()] if isinstance(bypass_result.severity, str) else bypass_result.severity,
-                            evidence=bypass_result.evidence,
-                            payload=bypass_result.payload,
-                            remediation=bypass_result.remediation,
-                            cwe_id=bypass_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
+                logger.debug(f"Endpoint {endpoint.path}: selected {len(selections)} tests")
                 
-                # JWT 弱密钥测试
-                if getattr(cfg, 'enable_jwt_test', True):
-                    jwt_result = await self._vulnerability_tester.test_jwt_weak(endpoint.full_url)
-                    if jwt_result and jwt_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=jwt_result.vuln_type.value,
-                            severity=Severity[jwt_result.severity.upper()] if isinstance(jwt_result.severity, str) else jwt_result.severity,
-                            evidence=jwt_result.evidence,
-                            payload=jwt_result.payload,
-                            remediation=jwt_result.remediation,
-                            cwe_id=jwt_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
-                
-                # 未授权访问测试
-                if getattr(cfg, 'enable_unauthorized_test', True):
-                    auth_result = await self._vulnerability_tester.test_unauthorized_access(endpoint.full_url, endpoint.method)
-                    if auth_result and auth_result.is_vulnerable:
-                        from .models import Vulnerability
-                        vuln = Vulnerability(
-                            api_id=endpoint.api_id,
-                            vuln_type=auth_result.vuln_type.value,
-                            severity=Severity[auth_result.severity.upper()] if isinstance(auth_result.severity, str) else auth_result.severity,
-                            evidence=auth_result.evidence,
-                            payload=auth_result.payload,
-                            remediation=auth_result.remediation,
-                            cwe_id=auth_result.cwe_id
-                        )
-                        if self.result:
-                            self.result.vulnerabilities.append(vuln)
-                        vuln_count += 1
-                
-                # IDOR 专项测试
-                if getattr(cfg, 'enable_idor_test', True):
+                for selection in selections:
+                    test_stats['total_tests'] += 1
+                    category = selection.test_category
+                    
+                    if category not in test_stats['by_category']:
+                        test_stats['by_category'][category.value] = {
+                            'tests': 0,
+                            'vulnerabilities': 0
+                        }
+                    test_stats['by_category'][category.value]['tests'] += 1
+                    
                     try:
-                        idor_params = {}
-                        if endpoint.parameters:
-                            for param in endpoint.parameters:
-                                if param.get('name'):
-                                    idor_params[param['name']] = param.get('default', param.get('example', 'test'))
-                        
-                        idor_results = await self._idor_tester.test_idor(
-                            url=endpoint.full_url,
-                            method=endpoint.method,
-                            params=idor_params if idor_params else None,
-                            headers={'Cookie': self.config.cookies} if self.config.cookies else None
+                        result = await self._execute_smart_test(
+                            endpoint, selection, features
                         )
                         
-                        for idor_result in idor_results:
-                            if idor_result.is_vulnerable:
-                                from .models import Vulnerability
-                                vuln = Vulnerability(
-                                    api_id=endpoint.api_id,
-                                    vuln_type='IDOR',
-                                    severity=Severity.HIGH if idor_result.severity == 'high' else Severity.MEDIUM,
-                                    evidence=idor_result.evidence,
-                                    payload=f"technique={idor_result.bypass_technique}",
-                                    remediation="实施对象级访问控制，验证用户是否有权访问请求的资源",
-                                    cwe_id="CWE-639"
-                                )
-                                if self.result:
-                                    self.result.vulnerabilities.append(vuln)
-                                vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"IDOR test error for {endpoint.full_url}: {e}")
-                
-                # CORS配置错误测试
-                if getattr(cfg, 'enable_cors_test', True):
-                    try:
-                        cors_result = await self._vulnerability_tester.test_cors_misconfiguration(endpoint.full_url)
-                        if cors_result and cors_result.is_vulnerable:
+                        if result and result.is_vulnerable:
+                            vuln_count += 1
+                            test_stats['vulnerabilities_found'] += 1
+                            test_stats['by_category'][category.value]['vulnerabilities'] += 1
+                            
                             from .models import Vulnerability
                             vuln = Vulnerability(
                                 api_id=endpoint.api_id,
-                                vuln_type=cors_result.vuln_type.value,
-                                severity=Severity[cors_result.severity.upper()] if isinstance(cors_result.severity, str) else cors_result.severity,
-                                evidence=cors_result.evidence,
-                                payload=cors_result.payload,
-                                remediation=cors_result.remediation,
-                                cwe_id=cors_result.cwe_id
+                                vuln_type=result.vuln_type.value if hasattr(result.vuln_type, 'value') else str(result.vuln_type),
+                                severity=Severity[result.severity.upper()] if isinstance(result.severity, str) else result.severity,
+                                evidence=result.evidence,
+                                payload=result.payload,
+                                remediation=result.remediation,
+                                cwe_id=result.cwe_id
                             )
                             if self.result:
                                 self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
                     except Exception as e:
-                        logger.debug(f"CORS test error for {endpoint.full_url}: {e}")
-                
-                # CRLF注入测试
-                if getattr(cfg, 'enable_crlf_test', True):
-                    try:
-                        crlf_result = await self._vulnerability_tester.test_crlf_injection(endpoint.full_url)
-                        if crlf_result and crlf_result.is_vulnerable:
-                            from .models import Vulnerability
-                            vuln = Vulnerability(
-                                api_id=endpoint.api_id,
-                                vuln_type=crlf_result.vuln_type.value,
-                                severity=Severity[crlf_result.severity.upper()] if isinstance(crlf_result.severity, str) else crlf_result.severity,
-                                evidence=crlf_result.evidence,
-                                payload=crlf_result.payload,
-                                remediation=crlf_result.remediation,
-                                cwe_id=crlf_result.cwe_id
-                            )
-                            if self.result:
-                                self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"CRLF test error for {endpoint.full_url}: {e}")
-                
-                # LFI测试
-                if getattr(cfg, 'enable_lfi_test', True):
-                    try:
-                        lfi_result = await self._vulnerability_tester.test_lfi(endpoint.full_url)
-                        if lfi_result and lfi_result.is_vulnerable:
-                            from .models import Vulnerability
-                            vuln = Vulnerability(
-                                api_id=endpoint.api_id,
-                                vuln_type=lfi_result.vuln_type.value,
-                                severity=Severity[lfi_result.severity.upper()] if isinstance(lfi_result.severity, str) else lfi_result.severity,
-                                evidence=lfi_result.evidence,
-                                payload=lfi_result.payload,
-                                remediation=lfi_result.remediation,
-                                cwe_id=lfi_result.cwe_id
-                            )
-                            if self.result:
-                                self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"LFI test error for {endpoint.full_url}: {e}")
-                
-                # SSTI测试
-                if getattr(cfg, 'enable_ssti_test', True):
-                    try:
-                        ssti_result = await self._vulnerability_tester.test_ssti(endpoint.full_url)
-                        if ssti_result and ssti_result.is_vulnerable:
-                            from .models import Vulnerability
-                            vuln = Vulnerability(
-                                api_id=endpoint.api_id,
-                                vuln_type=ssti_result.vuln_type.value,
-                                severity=Severity[ssti_result.severity.upper()] if isinstance(ssti_result.severity, str) else ssti_result.severity,
-                                evidence=ssti_result.evidence,
-                                payload=ssti_result.payload,
-                                remediation=ssti_result.remediation,
-                                cwe_id=ssti_result.cwe_id
-                            )
-                            if self.result:
-                                self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"SSTI test error for {endpoint.full_url}: {e}")
-                
-                # 详细错误信息测试
-                if getattr(cfg, 'enable_verbose_error_test', True):
-                    try:
-                        verbose_result = await self._vulnerability_tester.test_verbose_error(endpoint.full_url)
-                        if verbose_result and verbose_result.is_vulnerable:
-                            from .models import Vulnerability
-                            vuln = Vulnerability(
-                                api_id=endpoint.api_id,
-                                vuln_type=verbose_result.vuln_type.value,
-                                severity=Severity[verbose_result.severity.upper()] if isinstance(verbose_result.severity, str) else verbose_result.severity,
-                                evidence=verbose_result.evidence,
-                                payload=verbose_result.payload,
-                                remediation=verbose_result.remediation,
-                                cwe_id=verbose_result.cwe_id
-                            )
-                            if self.result:
-                                self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"Verbose error test error for {endpoint.full_url}: {e}")
-                
-                # 命令注入测试
-                if getattr(cfg, 'enable_command_injection_test', True):
-                    try:
-                        cmd_result = await self._vulnerability_tester.test_command_injection(endpoint.full_url)
-                        if cmd_result and cmd_result.is_vulnerable:
-                            from .models import Vulnerability
-                            vuln = Vulnerability(
-                                api_id=endpoint.api_id,
-                                vuln_type=cmd_result.vuln_type.value,
-                                severity=Severity[cmd_result.severity.upper()] if isinstance(cmd_result.severity, str) else cmd_result.severity,
-                                evidence=cmd_result.evidence,
-                                payload=cmd_result.payload,
-                                remediation=cmd_result.remediation,
-                                cwe_id=cmd_result.cwe_id
-                            )
-                            if self.result:
-                                self.result.vulnerabilities.append(vuln)
-                            vuln_count += 1
-                    except Exception as e:
-                        logger.debug(f"Command injection test error for {endpoint.full_url}: {e}")
-                        
+                        logger.debug(f"Test {selection.test_name} failed for {endpoint.path}: {e}")
             except Exception as e:
                 logger.warning(f"Vulnerability test error for endpoint {endpoint.api_id}: {e}")
         
+        logger.info(f"Smart vulnerability testing completed: {test_stats['total_tests']} tests executed, {vuln_count} vulnerabilities found")
+        
         return {
             'vuln_count': vuln_count,
-            'vulnerabilities': [v.to_dict() for v in self.result.vulnerabilities] if self.result else []
+            'vulnerabilities': [v.to_dict() for v in self.result.vulnerabilities] if self.result else [],
+            'test_stats': test_stats
         }
+    
+    async def _execute_smart_test(self, endpoint, selection, features):
+        """执行智能选择的测试"""
+        from .analyzers import TestCategory
+        
+        category = selection.test_category
+        param_name = selection.param_name
+        
+        if category == TestCategory.SQL_INJECTION:
+            return await self._vulnerability_tester.test_sql_injection(
+                endpoint.full_url, 
+                endpoint.method,
+                param_name or 'q'
+            )
+        elif category == TestCategory.XSS:
+            return await self._vulnerability_tester.test_xss(
+                endpoint.full_url,
+                endpoint.method,
+                param_name or 'q'
+            )
+        elif category == TestCategory.COMMAND_INJECTION:
+            return await self._vulnerability_tester.test_command_injection(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.SSRF:
+            return await self._vulnerability_tester.test_ssrf(endpoint.full_url)
+        elif category in [TestCategory.IDOR, TestCategory.BOLA]:
+            return await self._test_idor_smart(endpoint, features)
+        elif category == TestCategory.CORS:
+            return await self._vulnerability_tester.test_cors_misconfiguration(endpoint.full_url)
+        elif category == TestCategory.CRLF:
+            return await self._vulnerability_tester.test_crlf_injection(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.LFI:
+            return await self._vulnerability_tester.test_lfi(
+                endpoint.full_url,
+                param_name or 'file'
+            )
+        elif category == TestCategory.SSTI:
+            return await self._vulnerability_tester.test_ssti(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.VERBOSE_ERROR:
+            return await self._vulnerability_tester.test_verbose_error(
+                endpoint.full_url,
+                param_name or 'q'
+            )
+        elif category == TestCategory.AUTH_BYPASS:
+            return await self._vulnerability_tester.test_unauthorized_access(
+                endpoint.full_url,
+                endpoint.method
+            )
+        elif category == TestCategory.JWT_SECURITY:
+            return await self._vulnerability_tester.test_jwt_security(endpoint.full_url)
+        elif category == TestCategory.RATE_LIMIT:
+            return await self._vulnerability_tester.test_bypass_techniques(
+                endpoint.full_url,
+                endpoint.method
+            )
+        elif category == TestCategory.INFORMATION_DISCLOSURE:
+            return await self._vulnerability_tester.test_information_disclosure(endpoint.full_url)
+        
+        return None
+    
+    async def _test_idor_smart(self, endpoint, features):
+        """智能IDOR测试"""
+        from .analyzers import EndpointFeature
+        
+        idor_params = {}
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            if isinstance(endpoint.parameters, list):
+                for param in endpoint.parameters:
+                    if isinstance(param, dict) and param.get('name'):
+                        idor_params[param['name']] = param.get('default', param.get('example', 'test'))
+                    elif isinstance(param, str):
+                        idor_params[param] = 'test'
+            elif isinstance(endpoint.parameters, dict):
+                for k, v in endpoint.parameters.items():
+                    idor_params[k] = v
+        
+        if features.has_feature(EndpointFeature.HAS_ID_PARAM):
+            for param in features.param_names:
+                if 'id' in param.lower():
+                    if param not in idor_params:
+                        idor_params[param] = '999999'
+                    break
+        
+        return await self._idor_tester.test_idor(
+            url=endpoint.full_url,
+            method=endpoint.method,
+            params=idor_params if idor_params else None,
+            headers={'Cookie': self.config.cookies} if self.config.cookies else None
+        )
     
     async def _stage_reporting(self):
         """报告生成阶段"""
