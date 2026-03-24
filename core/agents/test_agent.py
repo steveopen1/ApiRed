@@ -267,7 +267,7 @@ class TestAgent(AgentInterface):
 
                     sensitive_detector = self._get_sensitive_detector()
                     try:
-                        sensitive_results = sensitive_detector.scan(content)
+                        sensitive_results = sensitive_detector.detect(content)
                         for sr in sensitive_results:
                             result['sensitive_data'].append({
                                 'type': sr.get('rule_name', 'unknown'),
