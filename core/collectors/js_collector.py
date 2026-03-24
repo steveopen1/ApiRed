@@ -306,6 +306,43 @@ class JSParser:
         re.compile(r'<[^>]+>'),
     ]
     
+    _SUFFIX_PATTERNS = [
+        re.compile(r'["\']((?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)[A-Z][a-zA-Z]*)["\']'),
+        re.compile(r'["\'](/(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)(?:/[^"\']*)?)["\']'),
+        re.compile(r'["\']((?:List|Add|Create|Delete|Detail|Info|Update|Edit|Remove|Get|Set|Save|Submit)[A-Za-z]*)["\']'),
+        re.compile(r'\.(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)\s*\('),
+    ]
+    
+    _RESOURCE_PATTERNS = [
+        re.compile(r'["\'](?:/(?:admin|user|order|product|role|menu|category|config|system|auth|api|v\d+(?:\.\d+)?)/[a-z][a-zA-Z]*(?:/[a-z][a-zA-Z]*)?)["\']', re.IGNORECASE),
+        re.compile(r'["\'](#{(?:/[a-z][a-zA-Z]*)+})["\']'),
+        re.compile(r'(?:url|path|api|endpoint|route)\s*[:=]\s*["\']([^"\']+)["\']'),
+    ]
+    
+    _COMMON_SUFFIXES_SET = frozenset([
+        'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+        'get', 'set', 'save', 'submit', 'query', 'search', 'filter', 'sort', 'page',
+        'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+        'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+        'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+        'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
+        'approve', 'reject', 'submit', 'cancel', 'close', 'open', 'check',
+        'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
+    ])
+    
+    _COMMON_RESOURCES_SET = frozenset([
+        'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+        'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+        'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
+        'department', 'dept', 'organization', 'org', 'employee', 'employee',
+        'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+        'profile', 'permission', 'permissions', 'resource', 'resources',
+        'article', 'articles', 'news', 'category', 'tag', 'tags', 'comment', 'comments',
+        'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
+        'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
+        'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
+    ])
+    
     FILE_EXTENSIONS = {
         '.js', '.css', '.html', '.htm', '.json', '.xml',
         '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
@@ -786,68 +823,34 @@ class JSParser:
         suffixes: Set[str] = set()
         resources: Set[str] = set()
         
-        suffix_patterns = [
-            r'["\']((?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)[A-Z][a-zA-Z]*)["\']',
-            r'["\'](/(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)(?:/[^"\']*)?)["\']',
-            r'["\']((?:List|Add|Create|Delete|Detail|Info|Update|Edit|Remove|Get|Set|Save|Submit)[A-Za-z]*)["\']',
-            r'\.(?:list|add|create|delete|detail|info|update|edit|remove|get|set|save|submit)\s*\(',
-        ]
-        
-        for pattern in suffix_patterns:
-            for match in re.finditer(pattern, js_content):
+        for pattern in self._SUFFIX_PATTERNS:
+            for match in pattern.finditer(js_content):
                 word = match.group(1) if match.lastindex else match.group(0)
                 if word:
                     clean_word = word.strip('/').lower()
-                    if len(clean_word) > 2 and len(clean_word) < 30:
+                    if 2 < len(clean_word) < 30:
                         suffixes.add(clean_word)
         
-        resource_patterns = [
-            r'["\'](?:/(?:admin|user|order|product|role|menu|category|config|system|auth|api|v\d+(?:\.\d+)?)/[a-z][a-zA-Z]*(?:/[a-z][a-zA-Z]*)?)["\']',
-            r'["\'](#{(?:/[a-z][a-zA-Z]*)+})["\']',
-            r'(?:url|path|api|endpoint|route)\s*[:=]\s*["\']([^"\']+)["\']',
-        ]
-        
-        for pattern in resource_patterns:
-            for match in re.finditer(pattern, js_content, re.IGNORECASE):
+        for pattern in self._RESOURCE_PATTERNS:
+            for match in pattern.finditer(js_content):
                 path = match.group(1) if match.lastindex else match.group(0)
                 if path:
                     parts = path.strip('/').split('/')
                     for part in parts:
-                        if part and len(part) > 2 and len(part) < 30:
+                        if part and 2 < len(part) < 30:
                             if not part.startswith('{') and not part.endswith('}'):
-                                if not part[0].isupper() and part.lower() not in ('api', 'admin', 'rest', 'http', 'https', 'www') and not part.lower().startswith('v'):
-                                    resources.add(part.lower())
+                                part_lower = part.lower()
+                                if part_lower not in ('api', 'admin', 'rest', 'http', 'https', 'www') and not part_lower.startswith('v'):
+                                    resources.add(part_lower)
         
-        common_suffixes = [
-            'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
-            'get', 'set', 'save', 'submit', 'query', 'search', 'filter', 'sort', 'page',
-            'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
-            'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
-            'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
-            'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
-            'approve', 'reject', 'submit', 'cancel', 'close', 'open', 'check',
-            'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
-        ]
+        js_lower = js_content.lower()
         
-        for suffix in common_suffixes:
-            if suffix in js_content.lower():
+        for suffix in self._COMMON_SUFFIXES_SET:
+            if suffix in js_lower:
                 suffixes.add(suffix)
         
-        common_resources = [
-            'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
-            'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
-            'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
-            'department', 'dept', 'organization', 'org', 'employee', 'employee',
-            'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
-            'profile', 'permission', 'permissions', 'resource', 'resources',
-            'article', 'articles', 'news', 'category', 'tag', 'tags', 'comment', 'comments',
-            'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
-            'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
-            'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
-        ]
-        
-        for resource in common_resources:
-            if resource in js_content.lower():
+        for resource in self._COMMON_RESOURCES_SET:
+            if resource in js_lower:
                 resources.add(resource)
         
         return (list(suffixes), list(resources))
