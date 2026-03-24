@@ -39,6 +39,8 @@ PATH_BLACK_KEYWORDS = [
     'blots/', 'modules/syntax', 'element-ui@',
     'alicdn.com', 'cdnjs.cloudflare.com', 'unpkg.com', 'jsdelivr.net',
     'github.com', 'github.io', 'googleapis.com',
+    'zloirock/core-js', 'ElemeFE/element',
+    'ruoyi-vue', 'y_project/',
 ]
 
 PATH_BLACK_PATTERNS = [
@@ -48,11 +50,27 @@ PATH_BLACK_PATTERNS = [
     r'^/#',  # /#
     r'^[a-z],$',  # 单字母逗号 g,
     r'^[a-z]=[a-z]$',  # 单字母等于 g=u
+    r'^/[a-z]/[a-z]$',  # /a/b, /a/i
     r't\.ttl$',  # TTL类文件
+    r'/blob/',  # GitHub blob
+    r'/tree/',  # GitHub tree
 ]
 
 API_PATH_MIN_LENGTH = 2
 API_PATH_MAX_LENGTH = 200
+
+VUE_ROUTER_DIRS = [
+    'components', 'views', 'pages', 'layouts', 'modules',
+    'dashboard', 'error', 'mixins', 'utils', 'directives',
+    'filters', 'assets', 'store', 'router', 'plugins',
+    'locales', 'styles', 'icons', 'svg', 'images', 'fonts',
+    'gameMoney', 'hotel', 'ticket', 'yearCard', 'monitor',
+    'tool', 'system', 'scenicSpots', 'museumExplain', 'opinion',
+]
+
+VUE_ROUTE_PATTERN = r'return\s+(?:{[^}]*)?\[["\u0027]([^\["\u0027]+)["\]]'
+REACT_ROUTE_PATTERN = r'Route\s+path=["\u0027]([^["\']+)["\u0027]'
+ROUTER_PATH_PATTERN = r'(?:router|Route)[.\s]*path[:\s]*["\u0027]([^["\']+)["\u0027]'
 
 COMMON_API_PATHS = [
     'add', 'ls', 'focus', 'calc', 'download', 'bind', 'execute',
@@ -235,6 +253,12 @@ class ApiPathFinder:
         r'(?i)(?<=base_url\s:)\s?["\'][^\s\'""<>\:\)\(]{1,250}?["\']',
         r'(?i)(?<=base_url=)\s?["\'][^\s\'""<>\:\)\(]{1,250}?["\']',
         r'(?:"|\'|`)(/[^""`<>\s]+)(?:"|\'|`)',
+        r"(?i)router\.push\(['\"]([^'\"]+)['\"]\)",
+        r"(?i)router\.replace\(['\"]([^'\"]+)['\"]\)",
+        r"(?i)\$router\.push\(['\"]([^'\"]+)['\"]\)",
+        r"(?i)<Route\s+path=['\"]([^'\"]+)['\"]",
+        r"(?i)<Link\s+to=['\"]([^'\"]+)['\"]",
+        r"(?i)Navigate\s+to=['\"]([^'\"]+)['\"]",
     ]
     
     def __init__(self):
@@ -300,6 +324,10 @@ class ApiPathFinder:
                 continue
             
             path_lower = clean_line.lower()
+            
+            if clean_line.startswith('./'):
+                clean_line = '/' + clean_line[2:]
+                path_lower = clean_line.lower()
             
             if path_lower.startswith('/node_modules/') or '/node_modules/' in path_lower:
                 continue
