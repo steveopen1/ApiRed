@@ -370,6 +370,76 @@ class HeadlessBrowserCollector:
             'screenshots': self.screenshots
         }
     
+    async def sync_storage_to_headers(self) -> Dict[str, str]:
+        """
+        同步 localStorage/sessionStorage 到请求头
+        
+        Returns:
+            Dict[str, str]: 可用于请求头的键值对
+        """
+        headers = {}
+        
+        if not self.page:
+            return headers
+        
+        js_code = """
+        () => {
+            const storage = {};
+            
+            // localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                storage['ls_' + key] = localStorage.getItem(key);
+            }
+            
+            // sessionStorage
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                storage['ss_' + key] = sessionStorage.getItem(key);
+            }
+            
+            // Cookies
+            const cookies = document.cookie;
+            if (cookies) {
+                storage['cookies'] = cookies;
+            }
+            
+            return storage;
+        }
+        """
+        
+        try:
+            result = await self.execute_js(js_code)
+            if result:
+                headers.update(result)
+        except Exception as e:
+            logger.warning(f"Storage sync failed: {e}")
+        
+        return headers
+    
+    async def get_auth_headers(self) -> Dict[str, str]:
+        """
+        获取认证相关的请求头
+        
+        Returns:
+            Dict[str, str]: 认证头
+        """
+        auth_headers = {}
+        
+        storage = await self.sync_storage_to_headers()
+        
+        for key, value in storage.items():
+            key_lower = key.lower()
+            if any(x in key_lower for x in ['token', 'auth', 'bearer', 'jwt', 'session', 'cookie', 'apikey', 'api_key']):
+                if key.startswith('ls_'):
+                    auth_headers[f'X-Storage-{key[3:]}'] = value
+                elif key.startswith('ss_'):
+                    auth_headers[f'X-Session-{key[3:]}'] = value
+                elif key == 'cookies':
+                    auth_headers['Cookie'] = value
+        
+        return auth_headers
+    
     async def close(self):
         """关闭浏览器"""
         try:
