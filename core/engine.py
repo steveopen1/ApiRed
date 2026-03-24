@@ -1147,6 +1147,101 @@ class ScanEngine:
                     pass
         except Exception:
             pass
+        
+        return all_js_content
+    
+    async def _recursive_js_extract(self, initial_js_urls: List[str], max_depth: int = 3) -> Dict[str, str]:
+        """
+        递归提取JS文件中的JS引用
+        
+        从JS内容中提取动态import/require引入的新JS模块，
+        递归获取直到达到最大深度或没有新JS
+        
+        Args:
+            initial_js_urls: 初始JS URL列表
+            max_depth: 最大递归深度
+            
+        Returns:
+            {js_url: js_content}
+        """
+        all_js_content = {}
+        visited_urls = set()
+        pending_urls = list(initial_js_urls)
+        
+        for depth in range(max_depth):
+            if not pending_urls:
+                break
+            
+            current_batch = pending_urls[:50]
+            pending_urls = pending_urls[50:]
+            
+            logger.info(f"Recursive JS extraction depth {depth+1}, processing {len(current_batch)} URLs...")
+            
+            tasks = [self._http_client.request(url, timeout=10) for url in current_batch]
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            new_pending = []
+            for url, response in zip(current_batch, responses):
+                if url in visited_urls:
+                    continue
+                if response and not isinstance(response, Exception) and hasattr(response, 'status_code') and response.status_code == 200:
+                    visited_urls.add(url)
+                    all_js_content[url] = response.content
+                    
+                    new_js_urls = self._extract_js_imports_from_content(response.content)
+                    for new_url in new_js_urls:
+                        normalized = self._normalize_js_url(new_url)
+                        if normalized and normalized not in visited_urls and normalized not in pending_urls:
+                            new_pending.append(normalized)
+            
+            pending_urls.extend(new_pending)
+        
+        return all_js_content
+    
+    def _normalize_js_url(self, js_url: str) -> Optional[str]:
+        """规范化JS URL"""
+        if not js_url or not isinstance(js_url, str):
+            return None
+        
+        js_url = js_url.strip()
+        
+        if js_url.startswith('//'):
+            js_url = 'https:' + js_url
+        elif js_url.startswith('/'):
+            base = self.config.target.rstrip('/')
+            js_url = base + js_url
+        elif not js_url.startswith('http'):
+            base = self.config.target.rstrip('/')
+            js_url = base + '/' + js_url.lstrip('/')
+        
+        if not js_url.endswith('.js'):
+            return None
+        
+        return js_url
+    
+    def _extract_js_imports_from_content(self, js_content: str) -> List[str]:
+        """从JS内容中提取import/require引入的JS模块路径"""
+        imports = []
+        if not js_content:
+            return imports
+        
+        import_patterns = [
+            r'import\s+["\']([^"\']+\.js)["\']',
+            r'import\s+\(["\']([^"\']+\.js)["\']\)',
+            r'require\(["\']([^"\']+\.js)["\']\)',
+            r'import\(["\']([^"\']+\.js)["\']\)',
+            r'export\s+from\s+["\']([^"\']+\.js)["\']',
+            r'webpackChunkName\s*:\s*["\']([^"\']+\.js)["\']',
+            r'chunkFilename\s*:\s*["\']([^"\']+\.js)["\']',
+            r'\.lazyLoad\(["\']([^"\']+\.js)["\']',
+            r'webpackMagicComments.*?\.js',
+        ]
+        
+        for pattern in import_patterns:
+            matches = re.findall(pattern, js_content)
+            imports.extend(matches)
+        
+        return list(set(imports))
     
     async def _extract_all_js_urls(self) -> List[str]:
         """提取所有JS URL"""
