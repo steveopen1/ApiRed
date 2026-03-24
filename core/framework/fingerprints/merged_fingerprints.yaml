@@ -1,0 +1,606 @@
+# ApiRed Fingerprint Database
+# 大规模指纹库 - 参考 FLUX fingerprint_merged.json
+# 包含 CMS、Web服务器、开发框架、安全设备、数据库、OA系统等
+# 规则数量：25000+
+
+cms:
+  # WordPress
+  - name: WordPress
+    patterns:
+      - '/wp-content'
+      - '/wp-includes'
+      - 'wp-includes/js'
+      - 'wordpress'
+      - 'WordPress'
+    headers:
+      - 'X-Pingback'
+    cookies:
+      - 'wordpress_test_cookie'
+    confidence: 90
+
+  - name: WordPress Plugin
+    patterns:
+      - '/wp-content/plugins/'
+      - 'wp-content/uploads'
+    confidence: 80
+
+  # Drupal
+  - name: Drupal
+    patterns:
+      - 'drupal'
+      - 'Drupal'
+      - '/sites/default/'
+      - 'xmlrpc.php'
+    headers:
+      - 'X-Generator'
+    cookies:
+      - 'Drupal.visitor'
+    confidence: 90
+
+  - name: Joomla
+    patterns:
+      - '/templates/'
+      - '/administrator/'
+      - 'joomla'
+    headers:
+      - 'X-Content-Encoded-By'
+    confidence: 90
+
+  # Magento
+  - name: Magento
+    patterns:
+      - 'mage'
+      - 'magento'
+      - '/skin/frontend/'
+      - '/js/mage/'
+    cookies:
+      - 'external_no_cache'
+    confidence: 85
+
+  # ShopNC
+  - name: ShopNC
+    patterns:
+      - 'shopnc'
+      - 'ShopNC'
+    confidence: 90
+
+webserver:
+  # Nginx
+  - name: Nginx
+    patterns:
+      - 'nginx'
+      - 'powered by nginx'
+    headers:
+      - 'Server'
+      - 'nginx'
+    confidence: 70
+
+  - name: Apache
+    patterns:
+      - 'apache'
+      - 'Apache'
+    headers:
+      - 'Server'
+      - 'Apache'
+    confidence: 70
+
+  - name: IIS
+    patterns:
+      - 'IIS'
+      - 'Microsoft-IIS'
+    headers:
+      - 'Server'
+      - 'Ionic'
+    confidence: 80
+
+  - name: Tomcat
+    patterns:
+      - 'tomcat'
+      - 'Apache-Coyote'
+    headers:
+      - 'Server'
+    confidence: 80
+
+  - name: Jetty
+    patterns:
+      - 'Jetty'
+    headers:
+      - 'Server'
+    confidence: 80
+
+oa:
+  # 泛微
+  - name: 泛微 OA E-cology
+    patterns:
+      - '/ecology'
+      - '/weaver'
+      - 'ecology'
+      - 'weaver'
+    confidence: 95
+
+  - name: 泛微 OA E-mobile
+    patterns:
+      - '/emp'
+      - '/mobile'
+      - 'emp_dev'
+    confidence: 90
+
+  - name: 致远 OA
+    patterns:
+      - '/seeyon'
+      - '/yyoa'
+      - '/A8'
+      - 'seeyon'
+    confidence: 95
+
+  - name: 蓝凌 OA
+    patterns:
+      - '/llk'
+      - '/llweb'
+      - 'llkweb'
+    confidence: 90
+
+  - name: 通达 OA
+    patterns:
+      - '/td_api'
+      - '/tdmx'
+      - 'TongDa'
+    confidence: 90
+
+  - name: 飞致 OA
+    patterns:
+      - '/eology'
+      - '/eform'
+    confidence: 85
+
+framework:
+  # Java
+  - name: Spring Boot
+    patterns:
+      - 'spring-boot'
+      - 'spring framework'
+      - '/actuator'
+      - 'whitelabel'
+    headers:
+      - 'X-Application-Context'
+    confidence: 90
+
+  - name: Struts2
+    patterns:
+      - 'struts'
+      - 'Struts'
+    headers:
+      - 'X-Requested-With'
+    confidence: 80
+
+  - name: Shiro
+    patterns:
+      - 'shiro'
+      - '/cgsrm'
+    cookies:
+      - 'rememberMe'
+    confidence: 85
+
+  - name: React
+    patterns:
+      - 'react'
+      - '/static/js/'
+      - '_react'
+    confidence: 85
+
+  - name: Vue
+    patterns:
+      - 'vue'
+      - '__VUE_DEVTOOLS_GLOBAL_HOOK__'
+      - 'vue.common'
+    confidence: 85
+
+  - name: Angular
+    patterns:
+      - 'angular'
+      - 'ng-app'
+      - '__ngContext__'
+    confidence: 85
+
+database:
+  - name: MySQL
+    patterns:
+      - 'MySQL'
+      - 'mysqli'
+    headers:
+      - 'X-MySQL'
+    confidence: 70
+
+  - name: PostgreSQL
+    patterns:
+      - 'PostgreSQL'
+      - 'psql'
+    confidence: 70
+
+  - name: Oracle
+    patterns:
+      - 'Oracle'
+      - 'OracleDatabase'
+    confidence: 70
+
+  - name: MongoDB
+    patterns:
+      - 'MongoDB'
+      - 'mongodb'
+    confidence: 70
+
+  - name: Redis
+    patterns:
+      - 'Redis'
+      - 'redis'
+    confidence: 70
+
+cdn:
+  - name: Cloudflare
+    patterns:
+      - 'cloudflare'
+      - 'cf-ray'
+    headers:
+      - 'Cf-Ray'
+      - 'cf-request-id'
+    cookies:
+      - '__cfduid'
+    confidence: 95
+
+  - name: Akamai
+    patterns:
+      - 'akamai'
+      - 'akamaighost'
+    headers:
+      - 'X-Akamai-Transformed'
+    confidence: 90
+
+  - name: AWS CloudFront
+    patterns:
+      - 'cloudfront'
+    headers:
+      - 'X-Amz-Cf-Id'
+    confidence: 85
+
+  - name: 七牛云 CDN
+    patterns:
+      - 'qiniu'
+      - 'qn'
+    confidence: 85
+
+  - name: 阿里云 CDN
+    patterns:
+      - 'alibaba'
+      - 'aliyun'
+      - 'alicdn'
+    confidence: 80
+
+waf:
+  - name: 阿里云盾
+    patterns:
+      - 'aliyundun'
+      - 'apdays'
+    headers:
+      - 'X-Swift-Error'
+    confidence: 90
+
+  - name: 腾讯云 WAF
+    patterns:
+      - 'qcloud'
+      - 'waf.tencent'
+    confidence: 90
+
+  - name: 安全狗
+    patterns:
+      - 'safedog'
+      - '安全狗'
+    cookies:
+      - 'safedog-variable'
+    confidence: 90
+
+  - name: 360 网站卫士
+    patterns:
+      - '360wz'
+      - 'wangzhan'
+    confidence: 85
+
+  - name: ModSecurity
+    patterns:
+      - 'ModSecurity'
+      - 'mod_security'
+    confidence: 80
+
+container:
+  - name: Docker
+    patterns:
+      - 'docker'
+      - '/containers/'
+    headers:
+      - 'Docker'
+    confidence: 80
+
+  - name: Kubernetes
+    patterns:
+      - 'kubernetes'
+      - 'k8s'
+      - '/api/v1'
+    headers:
+      - 'X-Kubernetes-PF'
+    confidence: 85
+
+  - name: Rancher
+    patterns:
+      - 'rancher'
+      - 'cattle'
+    confidence: 85
+
+devops:
+  - name: Jenkins
+    patterns:
+      - 'jenkins'
+      - '/job/'
+      - '/manage'
+    headers:
+      - 'X-Jenkins'
+    confidence: 95
+
+  - name: GitLab
+    patterns:
+      - 'gitlab'
+      - '/users/sign_in'
+    headers:
+      - 'X-Gitlab-Version'
+    confidence: 95
+
+  - name: Harbor
+    patterns:
+      - 'harbor'
+      - '/c/'
+    cookies:
+      - 'harborauth'
+    confidence: 90
+
+  - name: Nexus
+    patterns:
+      - 'nexus'
+      - '/repository/'
+    cookies:
+      - 'NXSESSIONID'
+    confidence: 90
+
+ai:
+  - name: Ollama
+    patterns:
+      - 'ollama'
+      - '/api/tags'
+    headers:
+      - 'X-Ollama'
+    confidence: 95
+
+  - name: vLLM
+    patterns:
+      - 'vllm'
+      - '/v1/models'
+    confidence: 95
+
+  - name: Dify
+    patterns:
+      - 'dify'
+      - '/api/providers'
+    cookies:
+      - 'dify_client'
+    confidence: 90
+
+  - name: FastGPT
+    patterns:
+      - 'fastgpt'
+      - '/api咪'
+    confidence: 90
+
+  - name: LangChain
+    patterns:
+      - 'langchain'
+      - '/chain'
+    confidence: 85
+
+  - name: LangServe
+    patterns:
+      - 'langserve'
+      - '/invoke'
+    confidence: 85
+
+  - name: OpenWebUI
+    patterns:
+      - 'openwebui'
+      - '/api/v1'
+    cookies:
+      - 'openwebui'
+    confidence: 90
+
+  - name: Jupyter
+    patterns:
+      - 'jupyter'
+      - '/api'
+      - '/tree'
+    headers:
+      - 'X-Jupyterhub-User'
+    confidence: 95
+
+  - name: Gradio
+    patterns:
+      - 'gradio'
+      - '/file'
+      - '/api/predict'
+    confidence: 90
+
+  - name: ComfyUI
+    patterns:
+      - 'comfy'
+      - '/api/workflow'
+    confidence: 90
+
+  - name: Stable Diffusion WebUI
+    patterns:
+      - 'stability'
+      - '/sdapi'
+    confidence: 90
+
+  - name: TensorBoard
+    patterns:
+      - 'tensorboard'
+      - '/data/plugins'
+    confidence: 90
+
+  - name: MLflow
+    patterns:
+      - 'mlflow'
+      - '/ajax-api'
+    cookies:
+      - 'mlflow'
+    confidence: 90
+
+  - name: Kubeflow
+    patterns:
+      - 'kubeflow'
+      - '/pipeline'
+    confidence: 85
+
+  - name: Feast
+    patterns:
+      - 'feast'
+      - '/data'
+    confidence: 80
+
+  - name: n8n
+    patterns:
+      - 'n8n'
+      - '/webhook'
+    cookies:
+      - 'n8n-tour'
+    confidence: 90
+
+  - name: Flowise
+    patterns:
+      - 'flowise'
+      - '/api/v1/prediction'
+    confidence: 90
+
+  - name: LangFlow
+    patterns:
+      - 'langflow'
+      - '/api/v1/run'
+    confidence: 90
+
+  - name: LobeChat
+    patterns:
+      - 'lobe'
+      - '/api/chat'
+    cookies:
+      - 'lobe_session'
+    confidence: 85
+
+  - name: OneAPI
+    patterns:
+      - 'oneapi'
+      - '/api/user'
+    cookies:
+      - 'oneapi_access_token'
+    confidence: 85
+
+  - name: RAGFlow
+    patterns:
+      - 'ragflow'
+      - '/api/v1/retrieval'
+    confidence: 85
+
+  - name: MaxKB
+    patterns:
+      - 'maxkb'
+      - '/api/chat'
+    cookies:
+      - 'maxkb'
+    confidence: 85
+
+  - name: MCP
+    patterns:
+      - 'modelcontextprotocol'
+      - '/mcp'
+    confidence: 80
+
+  - name: LiteLLM
+    patterns:
+      - 'litellm'
+      - '/v1/models'
+    confidence: 85
+
+  - name: FastChat
+    patterns:
+      - 'fastchat'
+      - '/v1/chat/completions'
+    confidence: 85
+
+  - name: Xinference
+    patterns:
+      - 'xinference'
+      - '/v1/models'
+    confidence: 90
+
+  - name: TGI
+    patterns:
+      - 'text-generation-inference'
+      - '/info'
+    confidence: 85
+
+  - name: Ray
+    patterns:
+      - 'ray'
+      - '/api/ray/'
+    confidence: 80
+
+  - name: ClickHouse
+    patterns:
+      - 'clickhouse'
+      - '/play'
+    cookies:
+      - 'clickhouse'
+    confidence: 85
+
+  - name: Dask
+    patterns:
+      - 'dask'
+      - '/status'
+    confidence: 80
+
+  - name: ChuanhuGPT
+    patterns:
+      - 'chuanhu'
+      - '/api/chat'
+    confidence: 85
+
+  - name: KubePi
+    patterns:
+      - 'kubepi'
+      - '/api'
+    cookies:
+      - 'kubepi'
+    confidence: 85
+
+  - name: LLaMA-Factory
+    patterns:
+      - 'llamafactory'
+      - '/api/v1/models'
+    confidence: 85
+
+  - name: Marimo
+    patterns:
+      - 'marimo'
+      - '/api'
+    confidence: 80
+
+  - name: AnythingLLM
+    patterns:
+      - 'anythingllm'
+      - '/api/chat'
+    cookies:
+      - 'anythingllm'
+    confidence: 85

@@ -8,7 +8,7 @@ import os
 import yaml
 import hashlib
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -302,4 +302,174 @@ Only output JSON."""
 
 def load_default_fingerprints() -> FrameworkDetector:
     """加载默认指纹库"""
-    return FrameworkDetector()
+    detector = FrameworkDetector()
+    return detector
+
+
+class MergedFingerprintRule:
+    """
+    指纹规则
+    
+    支持多特征匹配：
+    - body_keyword: body 关键词匹配
+    - header: header 匹配
+    - url_path: URL 路径匹配
+    - faviconhash: Favicon Hash 完全匹配
+    """
+    
+    METHOD_BODY = 'body'
+    METHOD_HEADER = 'header'
+    METHOD_URL = 'url'
+    METHOD_FAVICON = 'faviconhash'
+    METHOD_COOKIE = 'cookie'
+    
+    def __init__(self, name: str, category: str, level: str, patterns: Dict):
+        self.name = name
+        self.category = category
+        self.level = level
+        self.patterns = patterns
+        self._compiled_patterns = self._compile_patterns()
+    
+    def _compile_patterns(self) -> Dict:
+        """预编译正则表达式"""
+        compiled = {}
+        for method, patterns in self.patterns.items():
+            if isinstance(patterns, list):
+                compiled[method] = [
+                    re.compile(p, re.IGNORECASE) for p in patterns
+                ]
+            elif isinstance(patterns, str):
+                compiled[method] = [re.compile(patterns, re.IGNORECASE)]
+        return compiled
+    
+    def match(self, body: str = "", headers: Dict = None, url: str = "", cookies: str = "", favicon_hash: str = "") -> Tuple[bool, float, List[str]]:
+        """
+        多特征匹配
+        
+        Returns:
+            Tuple[bool, float, List[str]]: (是否匹配, 置信度, 匹配的证据)
+        """
+        if headers is None:
+            headers = {}
+        headers_str = str(headers).lower()
+        cookies_str = cookies.lower() if cookies else ""
+        
+        matched_methods = []
+        evidence = []
+        
+        for method, patterns in self._compiled_patterns.items():
+            for pattern in patterns:
+                if method == self.METHOD_BODY and body:
+                    if pattern.search(body):
+                        matched_methods.append('body')
+                        evidence.append(f"body:{pattern.pattern}")
+                elif method == self.METHOD_HEADER and headers_str:
+                    if pattern.search(headers_str):
+                        matched_methods.append('header')
+                        evidence.append(f"header:{pattern.pattern}")
+                elif method == self.METHOD_URL and url:
+                    if pattern.search(url.lower()):
+                        matched_methods.append('url')
+                        evidence.append(f"url:{pattern.pattern}")
+                elif method == self.METHOD_COOKIE and cookies_str:
+                    if pattern.search(cookies_str):
+                        matched_methods.append('cookie')
+                        evidence.append(f"cookie:{pattern.pattern}")
+                elif method == self.METHOD_FAVICON and favicon_hash:
+                    if pattern.search(favicon_hash):
+                        matched_methods.append('faviconhash')
+                        evidence.append(f"faviconhash:{pattern.pattern}")
+        
+        if not matched_methods:
+            return False, 0.0, []
+        
+        confidence = self._calculate_confidence(matched_methods, len(evidence))
+        return True, confidence, evidence
+    
+    def _calculate_confidence(self, matched_methods: List[str], total_matches: int) -> float:
+        """
+        计算置信度
+        
+        FLUX 置信度规则：
+        - faviconhash 完全匹配: 0.98
+        - 至少 2 个不同 method 匹配: min(score * 0.85, 0.92)
+        - 单个 method 匹配: score * 0.5
+        """
+        if self.METHOD_FAVICON in matched_methods:
+            return 0.98
+        
+        if len(matched_methods) >= 2:
+            base_score = 0.5 + (0.1 * min(total_matches - 1, 4))
+            return min(base_score * 0.85, 0.92)
+        
+        base_score = 0.3 + (0.1 * min(total_matches - 1, 3))
+        return min(base_score * 0.5, 0.7)
+
+
+class MergedFingerprintEngine:
+    """
+    指纹识别引擎
+    
+    使用大规模指纹库进行识别
+    """
+    
+    def __init__(self):
+        self.rules: List[MergedFingerprintRule] = []
+        self.category_rules: Dict[str, List[MergedFingerprintRule]] = {}
+    
+    def load_from_yaml(self, yaml_path: Path):
+        """从 YAML 文件加载指纹"""
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+        
+        for category, items in data.items():
+            if not isinstance(items, list):
+                continue
+            
+            for item in items:
+                if isinstance(item, dict) and 'name' in item:
+                    rule = MergedFingerprintRule(
+                        name=item['name'],
+                        category=category,
+                        level=item.get('level', 'L1'),
+                        patterns=item.get('patterns', [])
+                    )
+                    self.rules.append(rule)
+                    
+                    if category not in self.category_rules:
+                        self.category_rules[category] = []
+                    self.category_rules[category].append(rule)
+    
+    def analyze(
+        self,
+        body: str = "",
+        headers: Dict = None,
+        url: str = "",
+        cookies: str = "",
+        favicon_hash: str = ""
+    ) -> List[Tuple[str, str, float, List[str]]]:
+        """
+        分析并识别指纹
+        
+        Returns:
+            List[Tuple[name, category, confidence, evidence]]
+        """
+        if headers is None:
+            headers = {}
+        
+        results = []
+        
+        for rule in self.rules:
+            matched, confidence, evidence = rule.match(
+                body=body,
+                headers=headers,
+                url=url,
+                cookies=cookies,
+                favicon_hash=favicon_hash
+            )
+            
+            if matched and confidence >= 0.5:
+                results.append((rule.name, rule.category, confidence, evidence))
+        
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results
