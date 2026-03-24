@@ -738,24 +738,15 @@ class ScanEngine:
                     template_fragments.add(part)
         all_suffixes.update([f'/{f}' for f in template_fragments])
         
-        combined_targets: List[Tuple[str, str]] = []
-        for parent_path in parent_paths_to_probe:
-            parent_base = parent_path.rstrip('/')
-            for suffix in list(all_suffixes)[:100]:
-                if suffix.startswith('/'):
-                    combined_targets.append((parent_base, suffix))
-                else:
-                    combined_targets.append((parent_base, f'/{suffix}'))
-            
-            for resource in list(js_resources)[:30]:
-                for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                    if suffix:
-                        combined_targets.append((parent_base, f'/{resource}{suffix}'))
-                    else:
-                        combined_targets.append((parent_base, f'/{resource}'))
+        template_fragments = set()
+        for template in path_templates:
+            parts = template.strip('/').split('/')
+            for part in parts:
+                if part and not part.startswith('{') and len(part) > 1:
+                    template_fragments.add(part)
+        all_suffixes.update([f'/{f}' for f in template_fragments])
         
-        probed = 0
-        for parent_path in parent_paths_to_probe:
+        async def probe_single_path(parent_path: str) -> Tuple[str, Set[str], int]:
             full_url = base_url + parent_path
             
             try:
@@ -785,6 +776,24 @@ class ScanEngine:
                                 logger.debug(f"  Found: {sub_path} (status: {sub_response.status_code})")
                         except Exception:
                             pass
+                    
+                    for resource in list(js_resources)[:30]:
+                        for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
+                            if suffix:
+                                combined = f'/{resource}{suffix}'
+                            else:
+                                combined = f'/{resource}'
+                            sub_url = base_url + parent_path.rstrip('/') + combined
+                            try:
+                                sub_response = await self._http_client.request(
+                                    sub_url,
+                                    method='HEAD',
+                                    timeout=3
+                                )
+                                if 200 <= sub_response.status_code < 400:
+                                    probed_results[parent_path].add(parent_path.rstrip('/') + combined)
+                            except Exception:
+                                pass
                 
                 elif response.status_code == 401 or response.status_code == 403:
                     probed_results[parent_path] = set()

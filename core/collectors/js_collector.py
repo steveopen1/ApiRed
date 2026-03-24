@@ -59,10 +59,10 @@ class JSFingerprintCache:
                 base_urls=cached.get('regex', {}).get('base_urls', []),
                 content_hash=cache_key,
                 file_size=len(content),
-                parent_paths=cached.get('parent_paths', {}),
-                path_templates=cached.get('path_templates', []),
-                extracted_suffixes=cached.get('extracted_suffixes', []),
-                resource_fragments=cached.get('resource_fragments', [])
+                parent_paths=ast_cache.get('parent_paths', {}),
+                path_templates=ast_cache.get('path_templates', []),
+                extracted_suffixes=ast_cache.get('extracted_suffixes', []),
+                resource_fragments=ast_cache.get('resource_fragments', [])
             )
             
             self._add_to_memory(cache_key, result)
@@ -815,7 +815,7 @@ class JSParser:
                     for part in parts:
                         if part and len(part) > 2 and len(part) < 30:
                             if not part.startswith('{') and not part.endswith('}'):
-                                if not part[0].isupper() and part.lower() not in ('api', 'v1', 'v2', 'v3', 'admin'):
+                                if not part[0].isupper() and part.lower() not in ('api', 'admin', 'rest', 'http', 'https', 'www') and not part.lower().startswith('v'):
                                     resources.add(part.lower())
         
         common_suffixes = [
