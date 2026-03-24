@@ -297,7 +297,7 @@ class JSParser:
                        'profile', 'account', 'user', 'role', 'permission', 'menu',
                        'log', 'monitor', 'statistics', 'report', 'analytics']
     
-    _UUID_PATTERN = re.compile(r'^[a-f0-9-]{8,}$')
+    _UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', re.IGNORECASE)
     _ALPHANUM_DASH_UNDERSCORE_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
     _LOWERCASE_ALPHANUM_PATTERN = re.compile(r'^[a-z0-9]+$')
     _DYNAMIC_PARAM_PATTERNS = [
