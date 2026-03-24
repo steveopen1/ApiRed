@@ -1896,23 +1896,6 @@ class ScanEngine:
             except Exception as e:
                 logger.debug(f"Baseline learning error: {e}")
         
-        if self._evidence_aggregator and self._collector_results:
-            try:
-                js_regex_apis = self._collector_results.get('js_regex', [])
-                js_ast_apis = self._collector_results.get('js_ast', [])
-                http_log_apis = self._collector_results.get('http', [])
-                ai_apis = []
-                self._evidence_aggregator.aggregate_from_sources(
-                    js_regex_apis=js_regex_apis,
-                    js_ast_apis=js_ast_apis,
-                    http_log_apis=http_log_apis,
-                    ai_apis=ai_apis
-                )
-                stats = self._evidence_aggregator.get_statistics()
-                logger.info(f"APIEvidenceAggregator: aggregated {stats['total_apis']} APIs from {len(stats['sources_breakdown'])} sources")
-            except Exception as e:
-                logger.debug(f"Evidence aggregation error: {e}")
-        
         high_value_evidence = self._api_scorer.get_high_value() if self._api_scorer else []
         
         for evidence in high_value_evidence:
