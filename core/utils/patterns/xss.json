@@ -1,0 +1,43 @@
+{
+  "name": "xss",
+  "description": "Cross-Site Scripting Patterns",
+  "severity": "high",
+  "patterns": [
+    {
+      "name": "xss_script",
+      "pattern": "<script[^>]*>.*?<\\/script>",
+      "description": "Script Tag XSS",
+      "severity": "high"
+    },
+    {
+      "name": "xss_img_onerror",
+      "pattern": "<img[^>]+onerror\\s*=",
+      "description": "Image onerror XSS",
+      "severity": "high"
+    },
+    {
+      "name": "xss_svg_onload",
+      "pattern": "<svg[^>]+onload\\s*=",
+      "description": "SVG onload XSS",
+      "severity": "high"
+    },
+    {
+      "name": "xss_event_handler",
+      "pattern": "on\\w+\\s*=\\s*[\"']?[\\s\\S]*?[\"'?]?",
+      "description": "Event Handler XSS",
+      "severity": "medium"
+    },
+    {
+      "name": "xss_javascript_uri",
+      "pattern": "javascript:\\s*[\\w\\W]+",
+      "description": "JavaScript URI XSS",
+      "severity": "high"
+    },
+    {
+      "name": "xss_reflected_param",
+      "pattern": "reflected|parameter.* echoed",
+      "description": "Reflected XSS Indicator",
+      "severity": "medium"
+    }
+  ]
+}

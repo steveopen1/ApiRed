@@ -120,6 +120,9 @@ class PatternLoader:
             if filename.endswith('.yaml') or filename.endswith('.yml'):
                 category = filename.rsplit('.', 1)[0]
                 self._load_yaml_patterns(category, os.path.join(self.patterns_dir, filename))
+            elif filename.endswith('.json'):
+                category = filename.rsplit('.', 1)[0]
+                self._load_json_patterns(category, os.path.join(self.patterns_dir, filename))
     
     def _load_yaml_patterns(self, category: str, filepath: str):
         """从 YAML 加载模式"""
@@ -140,6 +143,29 @@ class PatternLoader:
                 ))
             
             self._patterns[category] = patterns
+        except Exception as e:
+            logger.exception(f"Failed to load {filepath}: {e}")
+    
+    def _load_json_patterns(self, category: str, filepath: str):
+        """从 JSON 加载模式"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            patterns = []
+            for p in data.get('patterns', []):
+                patterns.append(Pattern(
+                    name=p.get('name', 'unnamed'),
+                    pattern=p.get('pattern', ''),
+                    severity=p.get('severity', 'medium'),
+                    description=p.get('description', ''),
+                    category=category,
+                    tags=p.get('tags', []),
+                    false_positive=p.get('false_positive')
+                ))
+            
+            self._patterns[category] = patterns
+            logger.debug(f"Loaded {len(patterns)} patterns from {filepath}")
         except Exception as e:
             logger.exception(f"Failed to load {filepath}: {e}")
     

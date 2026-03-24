@@ -1,0 +1,37 @@
+{
+  "name": "lfi",
+  "description": "Local File Inclusion Patterns",
+  "severity": "high",
+  "patterns": [
+    {
+      "name": "lfi_path_traversal",
+      "pattern": "\\.\\.\\/|[?&](file|path|doc|download|include|require|load|source)\\s*=\\s*[^&\\s]+",
+      "description": "Path Traversal with LFI",
+      "severity": "high"
+    },
+    {
+      "name": "lfi_windows",
+      "pattern": "\\.\\.\\\\\\\\|\\.\\.%5C",
+      "description": "Windows Path Traversal",
+      "severity": "medium"
+    },
+    {
+      "name": "lfi_null_byte",
+      "pattern": "%00|\\x00",
+      "description": "Null Byte Injection",
+      "severity": "high"
+    },
+    {
+      "name": "lfi_proc",
+      "pattern": "\\/proc\\/self|\\/proc\\/\\d+\\/fd",
+      "description": "/proc File Inclusion",
+      "severity": "medium"
+    },
+    {
+      "name": "lfi_log",
+      "pattern": "\\/var\\/log|\\/tmp|\\/etc\\/passwd",
+      "description": "Sensitive File Paths",
+      "severity": "high"
+    }
+  ]
+}

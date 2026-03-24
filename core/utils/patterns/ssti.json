@@ -1,0 +1,31 @@
+{
+  "name": "ssti",
+  "description": "Server-Side Template Injection Patterns",
+  "severity": "critical",
+  "patterns": [
+    {
+      "name": "ssti_jinja",
+      "pattern": "\\{\\{.*?\\}\\}|\\{%.*?%\\}",
+      "description": "Jinja2 Template Syntax",
+      "severity": "high"
+    },
+    {
+      "name": "ssti_twig",
+      "pattern": "\\{\\{.*?\\}\\}|\\{%.*?%\\}",
+      "description": "Twig Template Syntax",
+      "severity": "high"
+    },
+    {
+      "name": "ssti_erb",
+      "pattern": "<%.*?%>",
+      "description": "ERB Template Syntax",
+      "severity": "high"
+    },
+    {
+      "name": "ssti_handlebars",
+      "pattern": "\\{\\{.*?\\}\\}",
+      "description": "Handlebars Template Syntax",
+      "severity": "medium"
+    }
+  ]
+}

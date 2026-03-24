@@ -1,0 +1,37 @@
+{
+  "name": "info",
+  "description": "Information Disclosure Patterns",
+  "severity": "medium",
+  "patterns": [
+    {
+      "name": "info_stack_trace",
+      "pattern": "stack\\s*trace|traceback|at\\s+[a-zA-Z0-9_]+\\.[a-zA-Z0-9_]+\\.[a-zA-Z0-9_]+\\(",
+      "description": "Stack Trace Disclosure",
+      "severity": "medium"
+    },
+    {
+      "name": "info_debug",
+      "pattern": "debug|DEBUG|debugging|DEBUG_MODE",
+      "description": "Debug Mode Enabled",
+      "severity": "medium"
+    },
+    {
+      "name": "info_version",
+      "pattern": "version\\s*[:=]\\s*[0-9]+\\.[0-9]+|v[0-9]+\\.[0-9]+",
+      "description": "Version Disclosure",
+      "severity": "low"
+    },
+    {
+      "name": "info_internal_path",
+      "pattern": "\\/var\\/www|\\/home\\/[^\\/]+\\/|C:\\\\[^\\\\]+\\\\",
+      "description": "Internal Path Disclosure",
+      "severity": "medium"
+    },
+    {
+      "name": "info_cloud_config",
+      "pattern": "AKIA[0-9A-Z]{16}|aws_access_key|aws_secret",
+      "description": "Cloud Credentials",
+      "severity": "critical"
+    }
+  ]
+}

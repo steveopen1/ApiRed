@@ -1,0 +1,37 @@
+{
+  "name": "sqli",
+  "description": "SQL Injection Patterns",
+  "severity": "critical",
+  "patterns": [
+    {
+      "name": "sqli_union",
+      "pattern": "(?i)(union.*select|union.*all.*select)",
+      "description": "SQL Union Injection",
+      "severity": "critical"
+    },
+    {
+      "name": "sqli_error",
+      "pattern": "(?i)(mysql|postgresql|sqlite|oracle|sqlserver).*error",
+      "description": "SQL Error Based Injection",
+      "severity": "high"
+    },
+    {
+      "name": "sqli_boolean",
+      "pattern": "(?i)(and|or)\\s+\\d+\\s*[=<>]+\\s*\\d+",
+      "description": "SQL Boolean Injection",
+      "severity": "high"
+    },
+    {
+      "name": "sqli_comment",
+      "pattern": "(--|#|\\/\\*)",
+      "description": "SQL Comment Injection",
+      "severity": "medium"
+    },
+    {
+      "name": "sqli_timeblind",
+      "pattern": "(?i)(sleep\\(|waitfor|benchmark\\()",
+      "description": "SQL Time-based Blind Injection",
+      "severity": "high"
+    }
+  ]
+}

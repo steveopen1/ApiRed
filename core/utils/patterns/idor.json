@@ -1,0 +1,37 @@
+{
+  "name": "idor",
+  "description": "Insecure Direct Object Reference Patterns",
+  "severity": "high",
+  "patterns": [
+    {
+      "name": "idor_user_id",
+      "pattern": "[?&]?(user|account|profile|client|customer)[_-]?(id|uuid|uid)\\s*=\\s*\\d+",
+      "description": "User ID Parameter",
+      "severity": "high"
+    },
+    {
+      "name": "idor_numeric_id",
+      "pattern": "[?&]?id\\s*=\\s*\\d+",
+      "description": "Numeric ID Parameter",
+      "severity": "medium"
+    },
+    {
+      "name": "idor_order_id",
+      "pattern": "[?&]?(order|transaction|payment|invoice)[_-]?id\\s*=\\s*\\d+",
+      "description": "Order/Transaction ID",
+      "severity": "high"
+    },
+    {
+      "name": "idor_path_reference",
+      "pattern": "\\/users?\\/\\d+|\\/(profile|account|settings)\\/\\d+",
+      "description": "Path-based Object Reference",
+      "severity": "medium"
+    },
+    {
+      "name": "idor_admin_path",
+      "pattern": "\\/(admin|manage|backend|moderator|root)\\/",
+      "description": "Admin Path Access",
+      "severity": "high"
+    }
+  ]
+}

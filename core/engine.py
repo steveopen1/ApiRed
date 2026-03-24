@@ -25,6 +25,7 @@ from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester
 from .testers.idor_tester import IDORTester
 from .utils.url_greper import URLGreper
+from .utils.gf import GFLibrary
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
 from .agents.orchestrator import ScanContext
@@ -205,6 +206,14 @@ class ScanEngine:
         self._vulnerability_tester = VulnerabilityTester(self._http_client)
         self._idor_tester = IDORTester(self._http_client)
         self._url_greper = URLGreper()
+        
+        patterns_dir = os.path.join(os.path.dirname(__file__), 'utils', 'patterns')
+        if os.path.exists(patterns_dir):
+            self._gf_library = GFLibrary(patterns_dir)
+            logger.info(f"GF Library initialized with patterns from {patterns_dir}")
+        else:
+            self._gf_library = GFLibrary()
+            logger.info("GF Library initialized with default patterns")
         
         self._plugins_initialized = False
         self._plugin_registry = None

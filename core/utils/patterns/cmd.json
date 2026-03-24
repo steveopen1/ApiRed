@@ -1,0 +1,31 @@
+{
+  "name": "cmd",
+  "description": "Command Injection Patterns",
+  "severity": "critical",
+  "patterns": [
+    {
+      "name": "cmd_pipe",
+      "pattern": "[|;]\\s*(cat|ls|echo|wget|curl|nc|bash|sh)\\s",
+      "description": "Command Pipe Injection",
+      "severity": "critical"
+    },
+    {
+      "name": "cmd_backtick",
+      "pattern": "`[^`]+`",
+      "description": "Backtick Command Execution",
+      "severity": "critical"
+    },
+    {
+      "name": "cmd_substitution",
+      "pattern": "\\$\\([^)]+\\)",
+      "description": "$() Command Substitution",
+      "severity": "critical"
+    },
+    {
+      "name": "cmd_env",
+      "pattern": "\\$\\{?[a-zA-Z_][a-zA-Z0-9_]*\\}?",
+      "description": "Environment Variable Injection",
+      "severity": "medium"
+    }
+  ]
+}
