@@ -161,3 +161,112 @@ performance:
   keep_alive: true
   compress: false
   batch_size: 1000
+
+flux:
+  enabled: true
+  
+  fingerprint:
+    enabled: true
+    weights:
+      faviconhash: 0.45
+      header: 0.20
+      body_keyword: 0.20
+      title: 0.10
+      url_path: 0.05
+    thresholds:
+      report: 60
+      high_confidence: 75
+      verify: 40
+  
+  waf:
+    enabled: true
+    bypass_mode: true
+    bypass_techniques:
+      sqli: ["comment", "encoding", "case", "whitespace", "logical"]
+      xss: ["encoding", "html_entity", "alternative_tag", "polyglot"]
+      lfi: ["null_byte", "double_encoding", "path", "wrapper"]
+      rce: ["printf", "encoding", "obfuscation"]
+  
+  endpoint_fusion:
+    enabled: true
+    min_confidence: "low"
+    source_weights:
+      runtime_xhr: 0.3
+      runtime_fetch: 0.3
+      api_doc: 0.2
+      webpack: 0.15
+      js_ast: 0.1
+  
+  secret_matching:
+    enabled: true
+    entropy_threshold: 4.5
+    whitelist:
+      - example
+      - demo
+      - test
+      - mock
+      - placeholder
+    cloud_providers:
+      - aws
+      - aliyun
+      - tencent
+      - huawei
+      - azure
+      - gcp
+  
+  vuln_prioritizer:
+    enabled: true
+    scoring:
+      confidence: 0.25
+      exploit_likelihood: 0.35
+      impact: 0.25
+      context: 0.15
+  
+  differential_test:
+    enabled: true
+    thresholds:
+      sql_injection: 0.4
+      xss: 0.3
+      lfi: 0.5
+      rce: 0.6
+      ssrf: 0.5
+      idor: 0.35
+  
+  ai_security:
+    enabled: true
+    components:
+      - ollama
+      - vllm
+      - comfyui
+      - openwebui
+      - langchain
+      - n8n
+      - dify
+      - flowise
+      - jupyter
+      - mlflow
+  
+  kubernetes_security:
+    enabled: true
+    ports: [6443, 8080, 443, 2379, 10250]
+  
+  container_security:
+    enabled: true
+    socket_paths:
+      - /var/run/docker.sock
+      - /run/containerd/containerd.sock
+  
+  cicd_security:
+    enabled: true
+    config_files:
+      - .gitlab-ci.yml
+      - Jenkinsfile
+      - .github/workflows/
+  
+  cloud_security:
+    enabled: true
+    bucket_providers:
+      - aliyun_oss
+      - tencent_cos
+      - aws_s3
+      - huawei_obs

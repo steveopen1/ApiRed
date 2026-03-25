@@ -36,6 +36,21 @@ from .framework import FrameworkDetector
 from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
 from .observability import RunProfiler
 
+from .fingerprint import FingerprintEngine, FingerprintResult
+from .endpoint_fusion import EndpointFusionEngine, FusedEndpoint, SourceType, EndpointType
+from .secret_matcher import SecretMatcher, SecretMatch, SecretType, RiskLevel
+from .vuln_prioritizer import VulnPrioritizer, VulnCandidate, VulnPriority, VulnCategory
+from .waf_detector import WAFDetector, WAFBypass, WAFResult
+from .differential_tester import DifferentialTester, DifferentialResult, BaselineResponse
+from .js_resolver import JSResolver, JSDiscoveryRecord, extract_js_urls
+from .render_state import StateBudget, StateDeduplicator, StateQueue, ClickTargetEvaluator, PageState
+from .route_tracker import RouteTracker, RouteChange, StorageSync, ResponseCapture
+from .ai_security import AISecurityTester, AIVulnResult
+from .kubernetes_security import K8sSecurityTester, K8sVulnResult
+from .container_security import ContainerSecurityTester, ContainerVulnResult
+from .cicd_scanner import CICDScanner, CICDVulnResult
+from .cloud_security import CloudBucketTester, CloudSecretScanner, CloudVulnResult
+
 
 @dataclass
 class EngineConfig:
@@ -222,6 +237,23 @@ class ScanEngine:
         self._api_request_tester = APIRequestTester(self._http_client)
         self._profiler = RunProfiler()
         
+        self._fingerprint_engine: Optional[FingerprintEngine] = None
+        self._endpoint_fusion_engine: Optional[EndpointFusionEngine] = None
+        self._secret_matcher: Optional[SecretMatcher] = None
+        self._vuln_prioritizer: Optional[VulnPrioritizer] = None
+        self._waf_detector: Optional[WAFDetector] = None
+        self._differential_tester: Optional[DifferentialTester] = None
+        self._js_resolver: Optional[JSResolver] = None
+        self._route_tracker: Optional[RouteTracker] = None
+        self._storage_sync: Optional[StorageSync] = None
+        self._response_capture: Optional[ResponseCapture] = None
+        self._ai_security_tester: Optional[AISecurityTester] = None
+        self._k8s_security_tester: Optional[K8sSecurityTester] = None
+        self._container_security_tester: Optional[ContainerSecurityTester] = None
+        self._cicd_scanner: Optional[CICDScanner] = None
+        self._cloud_bucket_tester: Optional[CloudBucketTester] = None
+        self._cloud_secret_scanner: Optional[CloudSecretScanner] = None
+        
         self._plugins_initialized = False
         self._plugin_registry = None
         try:
@@ -298,6 +330,42 @@ class ScanEngine:
             target_url=self.config.target,
             start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
+        
+        await self._initialize_flux_modules()
+    
+    async def _initialize_flux_modules(self):
+        """初始化FLUX移植模块"""
+        try:
+            requests_session = None
+            if hasattr(self._http_client, '_session'):
+                requests_session = self._http_client._session
+            elif hasattr(self._http_client, 'session'):
+                requests_session = self._http_client.session
+                
+            self._fingerprint_engine = FingerprintEngine(session=requests_session)
+            logger.info(f"指纹引擎已加载: {len(self._fingerprint_engine.get_fingerprints())} 条规则")
+            
+            self._endpoint_fusion_engine = EndpointFusionEngine()
+            self._secret_matcher = SecretMatcher()
+            self._vuln_prioritizer = VulnPrioritizer()
+            self._waf_detector = WAFDetector()
+            
+            if requests_session:
+                self._differential_tester = DifferentialTester(session=requests_session)
+                self._ai_security_tester = AISecurityTester(session=requests_session)
+                self._k8s_security_tester = K8sSecurityTester(session=requests_session)
+                self._container_security_tester = ContainerSecurityTester(session=requests_session)
+                self._cicd_scanner = CICDScanner(session=requests_session)
+                self._cloud_bucket_tester = CloudBucketTester(session=requests_session)
+            
+            self._cloud_secret_scanner = CloudSecretScanner()
+            self._route_tracker = RouteTracker()
+            self._storage_sync = StorageSync()
+            self._response_capture = ResponseCapture()
+            
+            logger.info("FLUX移植模块初始化完成")
+        except Exception as e:
+            logger.warning(f"FLUX模块初始化部分失败: {e}")
     
     async def run(self) -> ScanResult:
         """运行扫描流程"""
