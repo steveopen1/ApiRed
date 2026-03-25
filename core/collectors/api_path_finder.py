@@ -54,6 +54,16 @@ PATH_BLACK_PATTERNS = [
     r't\.ttl$',  # TTL类文件
     r'/blob/',  # GitHub blob
     r'/tree/',  # GitHub tree
+    r'^YYYY-MM-DD$',  # 日期格式
+    r'^M/D/YY$',  # 日期格式 M/D/YY
+    r'^MM?/DD?/YY(?:YY)?$',  # 日期格式 MM/DD/YYYY
+    r'^\d{1,2}:\d{2}$',  # 时间格式
+    r'^[A-Z]{1,2}\d{1,4}[A-Z]?$',  # 股票代码格式
+    r'^[a-z]+-[a-z]+(-[a-z]+)+$',  # CSS类名格式 sub-menu-more
+    r'^#[0-9a-fA-F]{3,6}$',  # 颜色代码
+    r'^[0-9a-fA-F]{3,6}$',  # 纯颜色代码
+    r'^(?:http|https)?:$',  # 协议字符串
+    r'^[\w.-]+@[\w.-]+\.\w+$',  # 邮箱格式
 ]
 
 API_PATH_MIN_LENGTH = 2
