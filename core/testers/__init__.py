@@ -6,6 +6,7 @@ Testers Module
 from .fuzz_tester import FuzzTester
 from .vulnerability_tester import VulnerabilityTester
 from .api_tester import APIRequestTester, MultiThreadedTester, PreProbeTester, create_multi_tester
+from .bypass_tester import APIBypassTester, SmartBypassTester, BypassResult
 from .idor_tester import IDORTester
 
 __all__ = [
@@ -15,5 +16,8 @@ __all__ = [
     'MultiThreadedTester',
     'PreProbeTester',
     'create_multi_tester',
+    'APIBypassTester',
+    'SmartBypassTester',
+    'BypassResult',
     'IDORTester'
 ]

@@ -23,7 +23,7 @@ from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
-from .testers import FuzzTester, VulnerabilityTester, APIRequestTester
+from .testers import FuzzTester, VulnerabilityTester, APIRequestTester, APIBypassTester
 from .testers.idor_tester import IDORTester
 from .utils.url_greper import URLGreper
 from .utils.gf import GFLibrary
@@ -235,6 +235,7 @@ class ScanEngine:
         self._idor_tester = IDORTester(self._http_client)
         self._url_greper = URLGreper()
         self._api_request_tester = APIRequestTester(self._http_client)
+        self._bypass_tester = APIBypassTester(self._http_client)
         self._profiler = RunProfiler()
         
         self._fingerprint_engine: Optional[FingerprintEngine] = None
@@ -2418,7 +2419,7 @@ class ScanEngine:
         """运行测试阶段"""
         self._current_stage = 2
         
-        active_testers = self.config.testers or ['fuzz', 'vuln']
+        active_testers = self.config.testers or ['fuzz', 'vuln', 'bypass']
         
         tester_results = {}
         
@@ -2427,6 +2428,9 @@ class ScanEngine:
         
         if 'vuln' in active_testers:
             tester_results['vuln'] = await self._run_vuln_test()
+        
+        if 'bypass' in active_testers:
+            tester_results['bypass'] = await self._run_bypass_test()
         
         self._tester_results = tester_results
     
@@ -2828,6 +2832,79 @@ class ScanEngine:
             params=idor_params if idor_params else None,
             headers={'Cookie': self.config.cookies} if self.config.cookies else None
         )
+    
+    async def _run_bypass_test(self) -> Dict[str, Any]:
+        """
+        Bypass 测试 - 尝试绕过 API 访问限制
+        
+        当 API 返回 401/403/404/500 等状态码时，尝试多种绕过技术：
+        - 401: 认证头绕过
+        - 403: IP 欺骗、请求头操纵绕过
+        - 404: URL 变换绕过
+        - 500: Content-Type 绕过
+        """
+        bypass_count = 0
+        bypass_results = []
+        
+        for endpoint in self.result.api_endpoints if self.result else []:
+            try:
+                response = await self._http_client.request(
+                    endpoint.full_url,
+                    method=endpoint.method,
+                    headers={'Cookie': self.config.cookies} if self.config.cookies else None
+                )
+                
+                original_status = response.status_code if response else None
+                
+                if original_status in [401, 403, 404, 405, 500, 502, 503]:
+                    bypass_findings = await self._bypass_tester.test_bypass(
+                        url=endpoint.full_url,
+                        method=endpoint.method,
+                        original_status=original_status,
+                        headers={'Cookie': self.config.cookies} if self.config.cookies else None
+                    )
+                    
+                    for finding in bypass_findings:
+                        bypass_count += 1
+                        bypass_results.append({
+                            'endpoint': endpoint.full_url,
+                            'method': endpoint.method,
+                            'original_status': finding.original_status,
+                            'bypassed_status': finding.bypassed_status,
+                            'technique': finding.technique,
+                            'category': finding.category,
+                            'details': finding.details
+                        })
+                        
+                        if finding.bypassed and self.result:
+                            endpoint_bypass = {
+                                'api_id': endpoint.api_id,
+                                'vuln_type': 'bypass',
+                                'severity': 'medium',
+                                'evidence': f"Bypassed with {finding.technique}",
+                                'payload': finding.technique,
+                                'remediation': f"Block bypass techniques: {finding.category}"
+                            }
+                            from .models import Vulnerability
+                            vuln = Vulnerability(
+                                api_id=endpoint.api_id,
+                                vuln_type='bypass',
+                                severity='medium',
+                                evidence=finding.details,
+                                payload=finding.technique,
+                                remediation=f"Implement bypass protection for {finding.category} techniques"
+                            )
+                            self.result.vulnerabilities.append(vuln)
+                            
+            except Exception as e:
+                logger.debug(f"Bypass test error for {endpoint.full_url}: {e}")
+        
+        logger.info(f"Bypass testing completed: {bypass_count} bypasses found")
+        
+        return {
+            'bypass_count': bypass_count,
+            'bypass_results': bypass_results
+        }
     
     async def _stage_reporting(self):
         """报告生成阶段"""
