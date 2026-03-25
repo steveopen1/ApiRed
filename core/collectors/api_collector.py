@@ -621,13 +621,25 @@ class APIRouter:
                 identified_api_keywords.add(most_common_seg)
         
         base_urls = set()
+        tree_domains = set()
+        for tree_url in tree_urls:
+            if tree_url.startswith('http'):
+                try:
+                    parsed = urlparse(tree_url)
+                    domain = f"{parsed.scheme}://{parsed.netloc}"
+                    tree_domains.add(domain)
+                except Exception:
+                    tree_domains.add(tree_url)
+            else:
+                tree_domains.add(tree_url)
+        
         for full_path, segments in segment_urls.items():
             for i, seg in enumerate(segments):
                 if seg in identified_api_keywords:
                     api_prefix = '/' + '/'.join(segments[:i+1])
                     path_with_api_paths.add(api_prefix)
-                    if tree_urls:
-                        base_url = list(tree_urls)[0] + api_prefix
+                    if tree_domains:
+                        base_url = list(tree_domains)[0]
                         base_urls.add(base_url)
                     break
         
@@ -865,7 +877,7 @@ class APIRouter:
             if api_prefix and api_prefix != '/':
                 path_with_api_paths.add(api_prefix)
                 if tree_urls:
-                    base_url = list(tree_urls)[0] + api_prefix
+                    base_url = list(tree_urls)[0]
                     base_urls.add(base_url)
             elif segments:
                 first_seg = segments[0]
@@ -873,7 +885,7 @@ class APIRouter:
                     api_prefix = '/' + first_seg
                     path_with_api_paths.add(api_prefix)
                     if tree_urls:
-                        base_url = list(tree_urls)[0] + api_prefix
+                        base_url = list(tree_urls)[0]
                         base_urls.add(base_url)
         
         for full_path, segments in segment_urls.items():

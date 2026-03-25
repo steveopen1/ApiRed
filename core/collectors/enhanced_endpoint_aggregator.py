@@ -334,9 +334,21 @@ class EnhancedEndpointAggregator:
             'by_type': {},
         }
     
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        """规范化 base_url，只提取域名部分"""
+        if not base_url:
+            return ""
+        if base_url.startswith('http://') or base_url.startswith('https://'):
+            try:
+                parsed = urlparse(base_url)
+                return f"{parsed.scheme}://{parsed.netloc}"
+            except Exception:
+                return base_url
+        return base_url
+    
     def add_api(self, api: Any, source_info: Optional[Dict] = None) -> EnhancedEndpoint:
-        """
-        添加API - APIAggregator 接口兼容
+        """添加API - APIAggregator 接口兼容
         
         支持两种调用方式:
         1. add_api(APIFindResult, source_info)
@@ -344,21 +356,27 @@ class EnhancedEndpointAggregator:
         """
         if isinstance(api, EnhancedEndpoint):
             endpoint = api
+            if endpoint.base_url:
+                endpoint.base_url = self._normalize_base_url(endpoint.base_url)
             if not endpoint.full_url and endpoint.base_url:
                 endpoint.full_url = urljoin(endpoint.base_url.rstrip('/'), endpoint.path.lstrip('/'))
         elif isinstance(api, dict):
+            base_url = self._normalize_base_url(api.get('base_url', ''))
             endpoint = EnhancedEndpoint(
                 path=api.get('path', ''),
                 method=api.get('method', 'GET'),
                 source_type=api.get('source_type', 'regex'),
-                base_url=api.get('base_url', ''),
+                base_url=base_url,
                 context=api.get('context'),
                 url_type=api.get('url_type', 'api_path'),
             )
         else:
             endpoint = EnhancedEndpoint.from_api_find_result(api)
+            if endpoint.base_url:
+                endpoint.base_url = self._normalize_base_url(endpoint.base_url)
         
-        endpoint.full_url = endpoint.full_url or urljoin(endpoint.base_url.rstrip('/'), endpoint.path.lstrip('/'))
+        if not endpoint.full_url and endpoint.base_url:
+            endpoint.full_url = urljoin(endpoint.base_url.rstrip('/'), endpoint.path.lstrip('/'))
         fusion_key = endpoint.fusion_key
         
         if fusion_key in self.endpoints:
