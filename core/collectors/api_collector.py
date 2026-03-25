@@ -169,6 +169,8 @@ class APIRouter:
     参考 0x727/ChkApi 的 apiPathFind.py
     """
     
+    from functools import lru_cache
+    
     API_PATTERNS = {
         'axios': re.compile(r'''
             (?:axios|request)\s*[.(]?\s*(?:get|post|put|delete|patch)\s*\(?
@@ -193,6 +195,30 @@ class APIRouter:
         'path': re.compile(r'''
             ['"`](?:/api|/v\d+/|/rest)[^\s'"`]+['"`]
         ''', re.VERBOSE | re.IGNORECASE),
+        
+        'full_url_quoted': re.compile(r'''["\']http[^\s\'\'"\>\<\)\(]{2,250}?["\']''', re.IGNORECASE),
+        'full_url_assign': re.compile(r'''=https?://[^\s\'\'"\>\<\)\(]{2,250}''', re.IGNORECASE),
+        'relative_root': re.compile(r'''["\']/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'relative_path': re.compile(r'''["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'path_colon': re.compile(r'''(?<=path:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'path_colon_space': re.compile(r'''(?<=path\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'path_eq': re.compile(r'''(?<=path=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'path_eq_space': re.compile(r'''(?<=path\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'url_colon': re.compile(r'''(?<=url:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'url_colon_space': re.compile(r'''(?<=url\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'url_eq': re.compile(r'''(?<=url=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'url_eq_space': re.compile(r'''(?<=url\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'index_colon': re.compile(r'''(?<=index:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'index_colon_space': re.compile(r'''(?<=index\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'index_eq': re.compile(r'''(?<=index=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'index_eq_space': re.compile(r'''(?<=index\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']''', re.IGNORECASE),
+        'href_action_quoted': re.compile(r'''(?:href|action).{0,3}=.{0,3}["\'][^\s\'\'"\>\<\)\(]{2,250}''', re.IGNORECASE),
+        'href_action_unquoted': re.compile(r'''(?:href|action).{0,3}=.{0,3}[^\s\'\'"\>\<\)\(]{2,250}''', re.IGNORECASE),
+        'path_slash': re.compile(r'''(?:"|\'|`)(/[^"\'`<>]+)(?:"|\'|`)''', re.IGNORECASE),
+        'api_root_relative': re.compile(r'''["\'](?:api/|v\d+/)[^\s\'\'"\>\<\)\(]{0,250}["\']''', re.IGNORECASE),
+        'plugin_rel_or_dot': re.compile(r'''(?:"|\'|`)(?:\/|\.{1,2}\/)[^"\'`<>\s]{1,250}(?:"|\'|`)''', re.IGNORECASE),
+        'plugin_hash_router': re.compile(r'''(?:"|\'|`)(?:\/#\/)[^"\'`<>\s]{1,250}(?:"|\'|`)''', re.IGNORECASE),
+        'plugin_var_prefix': re.compile(r'''(?:"|\'|`)[A-Za-z0-9_]+\/[^"\'`<>\s]{1,250}(?:"|\'|`)''', re.IGNORECASE),
     }
     
     API_FUZZ_PATTERNS = [
@@ -202,6 +228,10 @@ class APIRouter:
         r'["\']http[^\s\'"\<\>\)\(]+?["\']',
         r'=http[^\s\'"\<\>\)\(]+',
         r'["\']/[^\s\'"\<\>\:\)\(\u4e00-\u9fa5]+?["\']',
+        r'["\']http[^\s\'\'"\>\<\)\(]{2,250}?["\']',
+        r'=https?://[^\s\'\'"\>\<\)\(]{2,250}',
+        r'["\']/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\']',
+        r'(?:href|action).{0,3}=.{0,3}["\'][^\s\'\'"\>\<\)\(]{2,250}',
     ]
 
     API_PATH_PATTERNS = [
@@ -227,22 +257,35 @@ class APIRouter:
         
         for name, pattern in cls.API_PATTERNS.items():
             matches = pattern.findall(js_content)
-            for path in matches:
-                if path and path not in found_paths:
-                    found_paths.add(path)
-                    
-                    method = "GET"
-                    for m in cls.HTTP_METHODS:
-                        if m in path.lower():
-                            method = m.upper()
-                            break
-                    
-                    results.append(APIFindResult(
-                        path=path,
-                        method=method,
-                        source_type=f"js_{name}",
-                        url_type="api_path"
-                    ))
+            for match in matches:
+                if isinstance(match, tuple):
+                    path = match[0] if match else ""
+                else:
+                    path = match
+                
+                if not path:
+                    continue
+                
+                cleaned = cls._clean_path(path)
+                if not cleaned:
+                    continue
+                
+                if cleaned in found_paths:
+                    continue
+                found_paths.add(cleaned)
+                
+                method = "GET"
+                for m in cls.HTTP_METHODS:
+                    if m in cleaned.lower():
+                        method = m.upper()
+                        break
+                
+                results.append(APIFindResult(
+                    path=cleaned,
+                    method=method,
+                    source_type=f"js_{name}",
+                    url_type="api_path"
+                ))
         
         return results
 
@@ -342,20 +385,60 @@ class APIRouter:
     
     @classmethod
     def _clean_path(cls, path: str) -> str:
-        """清理路径"""
-        path = path.strip("\"'").strip("/")
-        path = path.replace("\\/", "/")
+        """
+        清理路径
+        参考 0x727/ChkApi apiPathFind.py 的 urlFilter 清理逻辑
+        """
+        if not path:
+            return ""
+        
+        path = path.strip()
         path = path.replace(" ", "")
+        path = path.replace("\\/", "/")
+        path = path.replace("\"", "")
+        path = path.replace("'", "")
+        path = path.replace("href=\"", "", 1)
+        path = path.replace("href='", "", 1)
         path = path.replace("%3A", ":")
         path = path.replace("%2F", "/")
-        path = path.replace("\\", "")
-        
+        path = path.replace("\\\\", "")
         if path.endswith("\\"):
             path = path.rstrip("\\")
         if path.startswith("="):
             path = path.lstrip("=")
+        if path.startswith("href="):
+            path = path.lstrip("href=")
+        if path == 'href':
+            return ""
         
-        if not path or len(path) < 2:
+        if path.startswith("http://") or path.startswith("https://"):
+            return ""
+        
+        path = path.strip("\"'").strip("/")
+        
+        if not path:
+            return ""
+        
+        if '/' not in path and not path.lower().startswith('http'):
+            if path.lower() not in ['api', 'v1', 'v2', 'v3']:
+                if not any(path.lower().startswith(kw) for kw in ['path:', 'url:', 'index:']):
+                    return ""
+        
+        for prefix in ['path:', 'url:', 'index:']:
+            if path.lower().startswith(prefix):
+                path = path[len(prefix):].strip()
+                break
+        
+        if URLBlacklist.is_blacklisted_url(path):
+            return ""
+        
+        if URLBlacklist.is_static_file(path):
+            return ""
+        
+        if URLBlacklist.is_api_root_blacklisted(path):
+            return ""
+        
+        if URLBlacklist.is_ext_blacklisted(path):
             return ""
         
         return "/" + path if not path.startswith("/") else path
