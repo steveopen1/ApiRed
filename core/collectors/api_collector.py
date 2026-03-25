@@ -645,6 +645,124 @@ class APIRouter:
         }
     
     @classmethod
+    async def auto_classify_urls_with_ai(cls, urls: List[str], llm_client=None) -> Dict[str, List[str]]:
+        """
+        使用 AI 语义理解进行 URL 分类
+        AI Agent 模式增强版：使用 LLM 分析 URL 结构语义
+        
+        Args:
+            urls: URL 列表
+            llm_client: LLM 客户端，如果为 None 则回退到纯统计方法
+        
+        Returns:
+            分类后的 URL 组件字典
+        """
+        if not urls or not llm_client:
+            return cls.auto_classify_urls(urls)
+        
+        try:
+            url_samples = urls[:50] if len(urls) > 50 else urls
+            
+            prompt = f"""分析以下 URL 列表，识别哪些路径段是 API 前缀（如 gateway、api、v1、service、prod-api），哪些是资源路径（如 users、orders、auth、login）。
+
+URL 列表：
+{chr(10).join(url_samples)}
+
+请以 JSON 格式返回分析结果：
+{{
+    "api_prefixes": ["api前缀段1", "api前缀段2"],
+    "resource_paths": ["资源路径1", "资源路径2"],
+    "reasoning": "分析理由"
+}}
+
+注意：
+- API 前缀通常是服务名、网关、版本标识等
+- 资源路径通常是具体业务操作如 users、orders、auth 等
+"""
+            
+            response = await llm_client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                system="你是一个专业的 API 安全分析助手，擅长分析 URL 结构。"
+            )
+            
+            if not response:
+                return cls.auto_classify_urls(urls)
+            
+            import json
+            try:
+                result_text = response
+                if hasattr(response, 'result'):
+                    result_text = response.result
+                elif not isinstance(response, str):
+                    result_text = str(response)
+                
+                result_text = result_text.strip()
+                if result_text.startswith('```json'):
+                    result_text = result_text[7:]
+                if result_text.endswith('```'):
+                    result_text = result_text[:-3]
+                
+                ai_result = json.loads(result_text)
+                
+                identified_api_keywords = set(ai_result.get('api_prefixes', []))
+                
+                tree_urls = set()
+                segment_urls = {}
+                
+                for url in urls:
+                    if url.startswith('http://') or url.startswith('https://'):
+                        parsed = urlparse(url)
+                        tree_url = f"{parsed.scheme}://{parsed.netloc}"
+                        tree_urls.add(tree_url)
+                        segments = [s for s in parsed.path.split('/') if s]
+                    elif url.startswith('/'):
+                        segments = [s for s in url.split('/') if s]
+                    else:
+                        continue
+                    
+                    if segments:
+                        segment_urls['/' + '/'.join(segments)] = segments
+                
+                path_with_api_paths = set()
+                path_with_no_api_paths = set()
+                base_urls = set()
+                
+                for full_path, segments in segment_urls.items():
+                    has_api_prefix = False
+                    for i, seg in enumerate(segments):
+                        if seg in identified_api_keywords:
+                            has_api_prefix = True
+                            api_prefix = '/' + '/'.join(segments[:i+1])
+                            path_with_api_paths.add(api_prefix)
+                            if tree_urls:
+                                base_urls.add(list(tree_urls)[0] + api_prefix)
+                            break
+                    
+                    if not has_api_prefix:
+                        path_with_no_api_paths.add(full_path)
+                    else:
+                        suffix = '/' + '/'.join([s for s in segments if s not in identified_api_keywords])
+                        if suffix != '/':
+                            path_with_no_api_paths.add(suffix)
+                
+                return {
+                    'tree_urls': list(tree_urls),
+                    'base_urls': sorted(list(base_urls)),
+                    'path_with_api_paths': sorted(list(path_with_api_paths)),
+                    'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
+                    '_identified_keywords': sorted(list(identified_api_keywords)),
+                    '_method': 'ai'
+                }
+                
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning(f"AI classification parse failed: {e}, falling back to statistical method")
+                return cls.auto_classify_urls(urls)
+                
+        except Exception as e:
+            logger.warning(f"AI classification failed: {e}, falling back to statistical method")
+            return cls.auto_classify_urls(urls)
+    
+    @classmethod
     def build_api_urls(cls, base_urls: List[str], path_with_api_paths: List[str],
                        path_with_no_api_paths: List[str], tree_urls: Optional[List[str]] = None) -> List[str]:
         """
