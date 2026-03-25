@@ -992,9 +992,7 @@ class ScanEngine:
                 status_code = await try_request(full_url)
                 sub_endpoints = set()
                 
-                if status_code and 200 <= status_code < 400:
-                    logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
-                    
+                async def do_probe():
                     for suffix in list(all_suffixes)[:100]:
                         sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
                         sub_url = base_url + sub_path
@@ -1011,24 +1009,22 @@ class ScanEngine:
                             if sub_status and 200 <= sub_status < 400:
                                 sub_endpoints.add(parent_path.rstrip('/') + combined)
                 
+                if status_code and 200 <= status_code < 400:
+                    logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
+                    await do_probe()
                 elif status_code in (401, 403):
                     logger.info(f"Parent path exists (auth required): {parent_path} (status: {status_code})")
-                    
-                    for suffix in list(all_suffixes)[:100]:
-                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                        sub_url = base_url + sub_path
-                        sub_status = await try_request(sub_url)
-                        if sub_status and 200 <= sub_status < 400:
-                            sub_endpoints.add(sub_path)
-                            logger.debug(f"  Found (auth): {sub_path} (status: {sub_status})")
-                    
-                    for resource in list(js_resources)[:30]:
-                        for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                            combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
-                            sub_url = base_url + parent_path.rstrip('/') + combined
-                            sub_status = await try_request(sub_url)
-                            if sub_status and 200 <= sub_status < 400:
-                                sub_endpoints.add(parent_path.rstrip('/') + combined)
+                    await do_probe()
+                elif status_code == 404:
+                    logger.info(f"Parent path returns 404, probing sub-paths: {parent_path}")
+                    await do_probe()
+                else:
+                    if status_code:
+                        logger.debug(f"Parent path returns {status_code}, probing sub-paths: {parent_path}")
+                        await do_probe()
+                    else:
+                        logger.debug(f"Parent path not reachable, probing sub-paths: {parent_path}")
+                        await do_probe()
                 
                 return (parent_path, sub_endpoints, status_code if status_code else 0)
         
