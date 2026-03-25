@@ -1320,51 +1320,67 @@ class ScanEngine:
         seen_targets = set()
         
         for parent in parent_paths:
-            parent_clean = parent.rstrip('/')
+            parent_clean = parent.strip('/')
+            if not parent_clean:
+                parent_clean = parent.strip()
             if parent_clean in seen_targets:
                 continue
             seen_targets.add(parent_clean)
-            fuzz_targets.append((parent_clean, ''))
+            
+            parent_base = '/' + parent_clean.lstrip('/')
+            fuzz_targets.append((parent_base, ''))
             
             for suffix in js_suffixes:
                 if len(fuzz_targets) >= 5000:
                     break
-                suffix_clean = suffix.lstrip('/')
-                target = f"{parent_clean}/{suffix_clean}"
+                suffix_clean = suffix.strip('/').lstrip('/')
+                if not suffix_clean:
+                    continue
+                target = f"{parent_base}/{suffix_clean}"
                 if target not in seen_targets and target not in existing_apis:
                     seen_targets.add(target)
-                    fuzz_targets.append((parent_clean, f"/{suffix_clean}"))
+                    fuzz_targets.append((parent_base, f"/{suffix_clean}"))
             
             for resource in js_resources:
                 if len(fuzz_targets) >= 5000:
                     break
-                resource_clean = resource.lstrip('/')
-                target = f"{parent_clean}/{resource_clean}"
+                resource_clean = resource.strip('/').lstrip('/')
+                if not resource_clean:
+                    continue
+                target = f"{parent_base}/{resource_clean}"
                 if target not in seen_targets and target not in existing_apis:
                     seen_targets.add(target)
-                    fuzz_targets.append((parent_clean, f"/{resource_clean}"))
+                    fuzz_targets.append((parent_base, f"/{resource_clean}"))
                 
                 for rest_suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                    combo = f"{parent_clean}/{resource_clean}/{rest_suffix}"
+                    rest_clean = rest_suffix.strip('/').lstrip('/')
+                    combo = f"{parent_base}/{resource_clean}/{rest_clean}" if rest_clean else f"{parent_base}/{resource_clean}"
                     if combo not in seen_targets and combo not in existing_apis:
                         seen_targets.add(combo)
-                        fuzz_targets.append((parent_clean, f"/{resource_clean}/{rest_suffix}"))
+                        rest_suffix_part = f"/{rest_clean}" if rest_clean else ""
+                        fuzz_targets.append((parent_base, f"/{resource_clean}{rest_suffix_part}"))
                         if len(fuzz_targets) >= 5000:
                             break
         
         for api in list(existing_apis)[:200]:
-            api_clean = api.rstrip('/')
+            api_clean = api.strip('/')
+            if not api_clean:
+                continue
+            api_base = '/' + api_clean.lstrip('/')
             if js_params and len(fuzz_targets) < 3000:
                 for param in list(js_params)[:10]:
-                    param_combo = f"{api_clean}?{param}=1"
+                    param_clean = param.strip()
+                    if not param_clean:
+                        continue
+                    param_combo = f"{api_base}?{param_clean}=1"
                     if param_combo not in seen_targets:
                         seen_targets.add(param_combo)
-                        fuzz_targets.append((api_clean, f"?{param}=1"))
+                        fuzz_targets.append((api_base, f"?{param_clean}=1"))
                     
-                    param_combo2 = f"{api_clean}/{param}/1"
+                    param_combo2 = f"{api_base}/{param_clean}/1"
                     if param_combo2 not in seen_targets:
                         seen_targets.add(param_combo2)
-                        fuzz_targets.append((api_clean, f"/{param}/1"))
+                        fuzz_targets.append((api_base, f"/{param_clean}/1"))
         
         async def probe_target(base: str, suffix: str) -> Optional[Tuple[str, str]]:
             full_url = base_url + base + suffix
