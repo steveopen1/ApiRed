@@ -1038,8 +1038,9 @@ class ScanEngine:
         for result in results:
             if isinstance(result, tuple) and len(result) == 3:
                 parent_path, sub_endpoints, status_code = result
-                if status_code in (200, 401, 403):
+                if sub_endpoints:
                     probed_results[parent_path] = sub_endpoints
+                    logger.info(f"Found {len(sub_endpoints)} sub-endpoints via parent path: {parent_path}")
         
         return probed_results
     
@@ -1088,9 +1089,7 @@ class ScanEngine:
             sub_endpoints = set()
             status_code = await try_request(full_url)
             
-            if status_code and 200 <= status_code < 400:
-                logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
-                
+            async def do_probe_sub_paths():
                 async def probe_sub_path(suffix: str) -> Optional[str]:
                     sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
                     sub_url = base_url + sub_path
@@ -1114,33 +1113,25 @@ class ScanEngine:
                         if sub_status and 200 <= sub_status < 400:
                             sub_endpoints.add(parent_path.rstrip('/') + combined)
             
+            if status_code and 200 <= status_code < 400:
+                logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
+                await do_probe_sub_paths()
             elif status_code in (401, 403):
                 logger.info(f"Parent path exists (auth required): {parent_path} (status: {status_code})")
-                
-                async def probe_auth_sub_path(suffix: str) -> Optional[str]:
-                    sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                    sub_url = base_url + sub_path
-                    sub_status = await try_request(sub_url)
-                    if sub_status and 200 <= sub_status < 400:
-                        return sub_path
+                await do_probe_sub_paths()
+            elif status_code == 404:
+                logger.info(f"Parent path returns 404, but will probe sub-paths for fuzzing: {parent_path}")
+                await do_probe_sub_paths()
+            else:
+                if status_code:
+                    logger.debug(f"Parent path returns {status_code}, still probing sub-paths: {parent_path}")
+                    await do_probe_sub_paths()
+                else:
+                    logger.debug(f"Parent path not reachable, still probing sub-paths: {parent_path}")
+                    await do_probe_sub_paths()
                     return None
                 
-                sub_tasks = [probe_auth_sub_path(s) for s in list(all_suffixes)[:100]]
-                sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
-                
-                for result in sub_results:
-                    if result and isinstance(result, str):
-                        sub_endpoints.add(result)
-                
-                for resource in list(js_resources)[:30]:
-                    for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                        combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
-                        sub_url = base_url + parent_path.rstrip('/') + combined
-                        sub_status = await try_request(sub_url)
-                        if sub_status and 200 <= sub_status < 400:
-                            sub_endpoints.add(parent_path.rstrip('/') + combined)
-            
-            return (parent_path, sub_endpoints, status_code if status_code else 0)
+                return (parent_path, sub_endpoints, status_code if status_code else 0)
         
         tasks = [probe_single_path(p) for p in parent_paths_to_probe]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1148,8 +1139,9 @@ class ScanEngine:
         for result in results:
             if isinstance(result, tuple) and len(result) == 3:
                 parent_path, sub_endpoints, status_code = result
-                if status_code in (200, 401, 403):
+                if sub_endpoints:
                     probed_results[parent_path] = sub_endpoints
+                    logger.info(f"Found {len(sub_endpoints)} sub-endpoints via parent path: {parent_path}")
         
         return probed_results
     
