@@ -331,60 +331,14 @@ class ResponseBaselineLearner:
     
     def is_valid_api(self, response: 'TaskResult') -> bool:
         """
-        综合判断是否为有效的 API 响应
+        判断是否为有效的 API 响应
         
-        排除：
-        1. 默认页面
-        2. HTML 错误页面
-        3. 空响应
-        
-        保留：
-        1. JSON 响应
-        2. 包含 API 特征（token, code, data 等）
+        简化判定：只要不是 404 基线就是有效响应
         """
         if self.is_default_page(response):
             return False
         
-        content = self._get_content_preview(response)
-        if not content or len(content) < 10:
-            return False
-        
-        if self.is_api_response(response):
-            return True
-        
-        content_lower = content.lower()
-        
-        negative_patterns = [
-            '<html', '<!doctype', '<title>',
-            'page not found', '404',
-            'forbidden', 'access denied',
-            '安全卫士', '应用防护平台', '云防护',
-            '您的请求带有不法参数', '已被安全卫士拦截',
-            '请求拦截', '访问拦截', 'attackType',
-            'xss', 'sql injection', 'webshell',
-            'protected', 'defense', 'guard',
-            '<script', 'document.cookie', 'window.location',
-        ]
-        
-        positive_patterns = [
-            'application/json', 'application/xml',
-            '"code"', '"data"', '"success"',
-            '"token"', '"session"', '"user"',
-            '"id"', '"name"', '"error"',
-            'null', 'true', 'false',
-            '{', '}', '[', ']',
-        ]
-        
-        neg_score = sum(1 for p in negative_patterns if p in content_lower)
-        pos_score = sum(1 for p in positive_patterns if p in content_lower)
-        
-        if neg_score >= 3:
-            return False
-        
-        if pos_score >= 2:
-            return True
-        
-        return pos_score > neg_score
+        return True
     
     def get_baseline_count(self) -> int:
         """获取学习的基线数量"""
