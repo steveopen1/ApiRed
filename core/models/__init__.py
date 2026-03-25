@@ -36,6 +36,7 @@ class APIEndpoint:
     base_url: str = ""
     full_url: str = ""
     status: APIStatus = APIStatus.UNKNOWN
+    status_code: int = 0
     sources: List[Dict[str, Any]] = field(default_factory=list)
     score: int = 0
     parameters: List[str] = field(default_factory=list)
@@ -57,6 +58,7 @@ class APIEndpoint:
             'base_url': self.base_url,
             'full_url': self.full_url,
             'status': self.status.value if isinstance(self.status, Enum) else self.status,
+            'status_code': self.status_code,
             'sources': self.sources,
             'score': self.score,
             'parameters': self.parameters,

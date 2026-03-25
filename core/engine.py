@@ -2139,6 +2139,7 @@ class ScanEngine:
                     if is_valid:
                         from .models import APIStatus
                         endpoint.status = APIStatus.ALIVE
+                        endpoint.status_code = response.status_code
                         
                         if self._api_scorer:
                             self._api_scorer.add_evidence(

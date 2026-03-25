@@ -147,86 +147,162 @@ class APIPathExporter:
             
             lines.append(f"# Total APIs: {len(api_endpoints)}")
             
-            status_groups = {
-                'alive': [],
-                'unauthorized': [],
-                'suspicious': [],
-                'unknown': [],
-                'dead': []
+            status_code_groups = {
+                '2xx': [],
+                '301': [],
+                '302': [],
+                '401': [],
+                '403': [],
+                '404': [],
+                '500': [],
+                '502': [],
+                '503': [],
+                'other': [],
+                'unknown': []
             }
             
             for api in api_endpoints:
-                status = api.get('status', 'unknown')
+                status_code = api.get('status_code', 0)
                 method = api.get('method', 'GET')
                 path = api.get('path', '')
-                full_url = api.get('full_url', '')
                 
-                entry = f"{method}\t{path}" if path.startswith('/') else f"{method}\t/{path}"
-                
-                if status == 'alive':
-                    status_groups['alive'].append(entry)
-                elif status == 'unauthorized':
-                    status_groups['unauthorized'].append(entry)
-                elif status == 'suspicious':
-                    status_groups['suspicious'].append(entry)
-                elif status == 'dead':
-                    status_groups['dead'].append(entry)
+                if path.startswith('/'):
+                    entry = f"{method}\t{path}"
                 else:
-                    status_groups['unknown'].append(entry)
+                    entry = f"{method}\t/{path}"
+                
+                if status_code == 0:
+                    status_code_groups['unknown'].append(entry)
+                elif 200 <= status_code < 300:
+                    status_code_groups['2xx'].append(entry)
+                elif status_code == 301:
+                    status_code_groups['301'].append(entry)
+                elif status_code == 302:
+                    status_code_groups['302'].append(entry)
+                elif status_code == 401:
+                    status_code_groups['401'].append(entry)
+                elif status_code == 403:
+                    status_code_groups['403'].append(entry)
+                elif status_code == 404:
+                    status_code_groups['404'].append(entry)
+                elif status_code == 500:
+                    status_code_groups['500'].append(entry)
+                elif status_code == 502:
+                    status_code_groups['502'].append(entry)
+                elif status_code == 503:
+                    status_code_groups['503'].append(entry)
+                else:
+                    status_code_groups['other'].append(entry)
             
             lines.append("")
             lines.append("# " + "=" * 70)
-            lines.append("# Status Summary")
+            lines.append("# Status Code Summary")
             lines.append("# " + "=" * 70)
-            lines.append(f"# Alive (200-399):     {len(status_groups['alive'])}")
-            lines.append(f"# Unauthorized (401):   {len(status_groups['unauthorized'])}")
-            lines.append(f"# Suspicious (可疑):    {len(status_groups['suspicious'])}")
-            lines.append(f"# Dead (404+):         {len(status_groups['dead'])}")
-            lines.append(f"# Unknown (未测试):     {len(status_groups['unknown'])}")
+            lines.append(f"# 2xx (成功):      {len(status_code_groups['2xx'])}")
+            lines.append(f"# 301 (重定向):    {len(status_code_groups['301'])}")
+            lines.append(f"# 302 (重定向):    {len(status_code_groups['302'])}")
+            lines.append(f"# 401 (未授权):    {len(status_code_groups['401'])}")
+            lines.append(f"# 403 (禁止):      {len(status_code_groups['403'])}")
+            lines.append(f"# 404 (未找到):    {len(status_code_groups['404'])}")
+            lines.append(f"# 500 (服务器错误): {len(status_code_groups['500'])}")
+            lines.append(f"# 502 (网关错误):  {len(status_code_groups['502'])}")
+            lines.append(f"# 503 (服务不可用): {len(status_code_groups['503'])}")
+            lines.append(f"# Other (其他):     {len(status_code_groups['other'])}")
+            lines.append(f"# Unknown (未测试): {len(status_code_groups['unknown'])}")
             lines.append("")
             
-            if status_groups['alive']:
+            if status_code_groups['2xx']:
                 lines.append("# " + "=" * 70)
-                lines.append("# Alive APIs (200-399) - 有效响应")
+                lines.append("# 2xx - 成功响应 (200-299)")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_groups['alive'])):
+                for entry in sorted(set(status_code_groups['2xx'])):
                     lines.append(entry)
                 lines.append("")
             
-            if status_groups['unauthorized']:
+            if status_code_groups['301']:
                 lines.append("# " + "=" * 70)
-                lines.append("# Unauthorized (401/403) - 需要认证")
+                lines.append("# 301 - 永久重定向")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_groups['unauthorized'])):
+                for entry in sorted(set(status_code_groups['301'])):
                     lines.append(entry)
                 lines.append("")
             
-            if status_groups['suspicious']:
+            if status_code_groups['302']:
                 lines.append("# " + "=" * 70)
-                lines.append("# Suspicious - 可疑响应")
+                lines.append("# 302 - 临时重定向")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_groups['suspicious'])):
+                for entry in sorted(set(status_code_groups['302'])):
                     lines.append(entry)
                 lines.append("")
             
-            if status_groups['dead']:
+            if status_code_groups['401']:
                 lines.append("# " + "=" * 70)
-                lines.append("# Dead (404/500+) - 未找到或错误")
+                lines.append("# 401 - 需要认证/未授权")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_groups['dead']))[:500]:
+                for entry in sorted(set(status_code_groups['401'])):
                     lines.append(entry)
-                if len(status_groups['dead']) > 500:
-                    lines.append(f"# ... and {len(status_groups['dead']) - 500} more dead paths")
                 lines.append("")
             
-            if status_groups['unknown']:
+            if status_code_groups['403']:
                 lines.append("# " + "=" * 70)
-                lines.append("# Unknown - 未测试")
+                lines.append("# 403 - 禁止访问")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_groups['unknown']))[:500]:
+                for entry in sorted(set(status_code_groups['403'])):
                     lines.append(entry)
-                if len(status_groups['unknown']) > 500:
-                    lines.append(f"# ... and {len(status_groups['unknown']) - 500} more unknown paths")
+                lines.append("")
+            
+            if status_code_groups['404']:
+                lines.append("# " + "=" * 70)
+                lines.append("# 404 - 未找到")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['404']))[:500]:
+                    lines.append(entry)
+                if len(status_code_groups['404']) > 500:
+                    lines.append(f"# ... and {len(status_code_groups['404']) - 500} more 404 paths")
+                lines.append("")
+            
+            if status_code_groups['500']:
+                lines.append("# " + "=" * 70)
+                lines.append("# 500 - 服务器内部错误")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['500'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_code_groups['502']:
+                lines.append("# " + "=" * 70)
+                lines.append("# 502 - 网关错误")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['502'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_code_groups['503']:
+                lines.append("# " + "=" * 70)
+                lines.append("# 503 - 服务不可用")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['503'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_code_groups['other']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Other - 其他状态码")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['other']))[:500]:
+                    lines.append(entry)
+                if len(status_code_groups['other']) > 500:
+                    lines.append(f"# ... and {len(status_code_groups['other']) - 500} more paths")
+                lines.append("")
+            
+            if status_code_groups['unknown']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Unknown - 未测试 (无响应)")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_code_groups['unknown']))[:500]:
+                    lines.append(entry)
+                if len(status_code_groups['unknown']) > 500:
+                    lines.append(f"# ... and {len(status_code_groups['unknown']) - 500} more paths")
                 lines.append("")
             
             lines.append("# End of API Paths")
