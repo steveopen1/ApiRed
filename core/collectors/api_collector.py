@@ -221,6 +221,69 @@ class APIRouter:
         'plugin_var_prefix': re.compile(r'''(?:"|\'|`)[A-Za-z0-9_]+\/[^"\'`<>\s]{1,250}(?:"|\'|`)''', re.IGNORECASE),
     }
     
+    KNOWN_API_PREFIXES: frozenset = frozenset({
+        'api', 'v1', 'v2', 'v3', 'v4', 'v5',
+        'rest', 'restapi', 'graphql', 'grpc',
+        'gateway', 'proxy', 'middleware',
+        'admin', 'manage', 'management', 'console',
+        'web', 'www', 'static', 'cdn', 'assets',
+        'service', 'services', 'microservice', 'micro',
+        'prod', 'production', 'dev', 'development', 'test', 'stage', 'staging',
+        'internal', 'external', 'open', 'public',
+        'mobile', 'app', 'client', 'android', 'ios', 'wechat', 'mini',
+        'doc', 'docs', 'documentation', 'swagger', 'api-docs',
+        'file', 'files', 'upload', 'download', 'storage',
+        'data', 'dataset', 'analytics', 'statistics', 'report', 'reports',
+        'config', 'configuration', 'settings', 'options',
+        'monitor', 'monitoring', 'health', 'healthz', 'status', 'metrics',
+        'log', 'logs', 'logging', 'audit',
+        'notification', 'notify', 'notice', 'message', 'messages', 'msg',
+        'search', 'query', 'find', 'filter',
+        'backup', 'restore', 'export', 'import',
+        'workflow', 'process', 'task', 'tasks', 'job', 'jobs',
+        'build', 'ci', 'cd', 'deploy', 'pipeline',
+        'kubernetes', 'k8s', 'docker', 'container',
+        'socket', 'websocket', 'ws', 'wss', 'realtime', 'event',
+        'hook', 'hooks', 'webhook', 'callback',
+        'tenant', 'site', 'org', 'organization', 'company',
+        'image', 'images', 'photo', 'video', 'media', 'avatar',
+        'cart', 'wishlist', 'favorite', 'favorites',
+        'address', 'location', 'geo', 'map',
+        'stock', 'inventory', 'warehouse',
+        '物流', '订单', '商品', '用户', '管理', '服务', '系统',
+    })
+    
+    KNOWN_RESOURCE_PATHS: frozenset = frozenset({
+        'list', 'get', 'add', 'create', 'update', 'edit', 'delete', 'remove',
+        'detail', 'info', 'view', 'show', 'display', 'read',
+        'save', 'submit', 'submit', 'confirm', 'cancel',
+        'search', 'query', 'find', 'filter', 'batch',
+        'export', 'import', 'sync', 'push', 'pull',
+        'login', 'logout', 'signin', 'signout', 'signup', 'register', 'reset',
+        'verify', 'validate', 'check', 'status',
+        'enable', 'disable', 'activate', 'deactivate', 'lock', 'unlock',
+        'start', 'stop', 'pause', 'resume', 'run', 'execute',
+        'count', 'sum', 'total', 'summary', 'statistics', 'analytics',
+        'history', 'log', 'logs', 'timeline', 'feed',
+        'new', 'latest', 'hot', 'top', 'recommend', 'popular',
+        'all', 'any', 'other', 'others', 'common',
+        'index', 'home', 'main', 'root', 'dashboard',
+        'setting', 'settings', 'config', 'configuration', 'preference',
+        'profile', 'account', 'info', 'information', 'personal',
+        'avatar', 'photo', 'image', 'images', 'gallery',
+        'category', 'categories', 'tag', 'tags', 'label', 'taxonomy',
+        'comment', 'comments', 'reply', 'replies', 'review', 'reviews',
+        'like', 'unlike', 'share', 'follow', 'unfollow', 'subscribe', 'unsubscribe',
+        'notification', 'notifications', 'notice', 'notices',
+        'message', 'messages', 'chat', 'conversation', 'conversations',
+        'friend', 'friends', 'group', 'groups', 'member', 'members',
+        'order', 'orders', 'cart', 'carts', 'payment', 'payments', 'transaction', 'transactions',
+        'product', 'products', 'goods', 'item', 'items', 'sku', 'skus',
+        'stock', 'inventory', 'price', 'prices', 'discount', 'coupon', 'campaign',
+        'address', 'addresses', 'location', 'locations', 'shipping',
+        '物流', '订单', '商品', '用户', '评论', '消息', '订单', '产品',
+    })
+    
     API_FUZZ_PATTERNS = [
         r'["\']http[^\s\'"\<\>\:\(\)\[\,]+?\.js\b',
         r'["\']/[^\s\'"\<\>\:\(\)\[\,]+?\.js\b',
@@ -642,6 +705,201 @@ class APIRouter:
             'path_with_api_paths': sorted(list(path_with_api_paths)),
             'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
             '_identified_keywords': sorted(list(identified_api_keywords)),
+            '_method': 'statistical',
+        }
+    
+    VERSION_PREFIX_PATTERN = re.compile(r'^v\d+$', re.IGNORECASE)
+    
+    @classmethod
+    def auto_classify_urls_enhanced(cls, urls: List[str], custom_prefixes: set = None, custom_resources: set = None) -> Dict[str, List[str]]:
+        """
+        混合算法 URL 分类（知识库 + 统计增强）
+        
+        算法原理：
+        1. 知识库优先：使用已知 API 前缀和资源路径知识库进行初步分类
+        2. 版本前缀识别：自动识别 v1, v2, v3 等版本前缀
+        3. 统计增强：对知识库无法确定的段，使用统计方法辅助判断
+        4. 位置权重：考虑段在路径中的位置，段越靠前越可能是前缀
+        
+        Args:
+            urls: URL 列表
+            custom_prefixes: 自定义 API 前缀集合（可选，用于扩展知识库）
+            custom_resources: 自定义资源路径集合（可选，用于扩展知识库）
+        
+        Returns:
+            分类后的 URL 组件字典
+        """
+        from collections import Counter, defaultdict
+        
+        tree_urls = set()
+        all_api_paths = set()
+        path_with_api_paths = set()
+        path_with_no_api_paths = set()
+        
+        known_prefixes = set(cls.KNOWN_API_PREFIXES)
+        known_resources = set(cls.KNOWN_RESOURCE_PATHS)
+        if custom_prefixes:
+            known_prefixes.update(custom_prefixes)
+        if custom_resources:
+            known_resources.update(custom_resources)
+        
+        segment_at_position = defaultdict(list)
+        segment_count = Counter()
+        segment_urls = {}
+        segment_positions = defaultdict(set)
+        
+        for url in urls:
+            if not url:
+                continue
+            
+            parsed = None
+            if url.startswith('http://') or url.startswith('https://'):
+                parsed = urlparse(url)
+                tree_url = f"{parsed.scheme}://{parsed.netloc}"
+                tree_urls.add(tree_url)
+                path = parsed.path
+            elif url.startswith('/'):
+                path = url
+            else:
+                continue
+            
+            if not path or path == '/':
+                continue
+            
+            segments = [s for s in path.split('/') if s]
+            if not segments:
+                continue
+            
+            full_path = '/' + '/'.join(segments)
+            all_api_paths.add(full_path)
+            segment_urls[full_path] = segments
+            
+            for i, seg in enumerate(segments):
+                segment_at_position[i].append(seg)
+                segment_count[seg] += 1
+                segment_positions[seg].add(i)
+        
+        if not segment_at_position:
+            return {
+                'tree_urls': [],
+                'base_urls': [],
+                'path_with_api_paths': [],
+                'path_with_no_api_paths': list(all_api_paths),
+                '_identified_keywords': [],
+                '_method': 'enhanced',
+            }
+        
+        total_urls = len(segment_urls)
+        identified_api_keywords = set()
+        resource_candidates = set()
+        
+        for seg, positions in segment_positions.items():
+            if len(positions) == 1:
+                pos = list(positions)[0]
+                if pos >= 1 and seg.lower() in known_resources:
+                    resource_candidates.add(seg)
+        
+        for pos, segs in segment_at_position.items():
+            for seg in set(segs):
+                seg_lower = seg.lower()
+                
+                if seg_lower in known_prefixes:
+                    freq = segs.count(seg)
+                    if freq >= 1:
+                        identified_api_keywords.add(seg)
+                        continue
+                
+                if cls.VERSION_PREFIX_PATTERN.match(seg):
+                    freq = segs.count(seg)
+                    if freq >= 1:
+                        identified_api_keywords.add(seg)
+                        continue
+                
+                if pos <= 2 and len(segs) >= 2:
+                    unique_segments = set(segs)
+                    most_common_count = 0
+                    most_common_seg = None
+                    
+                    for s in unique_segments:
+                        cnt = segs.count(s)
+                        if cnt >= most_common_count and cnt >= 2:
+                            most_common_count = cnt
+                            most_common_seg = s
+                    
+                    if most_common_seg:
+                        seg_lower = most_common_seg.lower()
+                        if seg_lower not in known_resources:
+                            identified_api_keywords.add(most_common_seg)
+        
+        for pos, segs in segment_at_position.items():
+            if len(segs) < 2:
+                continue
+            
+            unique_segments = set(segs)
+            unique_ratio = len(unique_segments) / len(segs)
+            
+            if unique_ratio < 0.4:
+                for seg in unique_segments:
+                    seg_lower = seg.lower()
+                    if seg_lower not in known_resources:
+                        freq = segs.count(seg)
+                        if freq / total_urls >= 0.2:
+                            identified_api_keywords.add(seg)
+        
+        base_urls = set()
+        def get_api_prefix(segments, identified_keywords, known_prefixes):
+            """获取 URL 的 API 前缀（只取第一层）"""
+            for i, seg in enumerate(segments):
+                if seg in identified_keywords:
+                    seg_lower = seg.lower()
+                    if i == 0 and len(segments) >= 2:
+                        next_seg = segments[1]
+                        next_lower = next_seg.lower()
+                        if next_lower in known_prefixes:
+                            return '/' + '/'.join(segments[:2])
+                    return '/' + seg
+            return None
+        
+        for full_path, segments in segment_urls.items():
+            api_prefix = get_api_prefix(segments, identified_api_keywords, known_prefixes)
+            if api_prefix and api_prefix != '/':
+                path_with_api_paths.add(api_prefix)
+                if tree_urls:
+                    base_url = list(tree_urls)[0] + api_prefix
+                    base_urls.add(base_url)
+            elif segments:
+                first_seg = segments[0]
+                if first_seg.lower() in known_prefixes or cls.VERSION_PREFIX_PATTERN.match(first_seg):
+                    api_prefix = '/' + first_seg
+                    path_with_api_paths.add(api_prefix)
+                    if tree_urls:
+                        base_url = list(tree_urls)[0] + api_prefix
+                        base_urls.add(base_url)
+        
+        for full_path, segments in segment_urls.items():
+            is_api_path = False
+            for seg in segments:
+                if seg in identified_api_keywords:
+                    is_api_path = True
+                    break
+            
+            if not is_api_path:
+                path_with_no_api_paths.add(full_path)
+            else:
+                no_api_suffix = '/' + '/'.join([
+                    seg for seg in segments 
+                    if seg not in identified_api_keywords
+                ])
+                if no_api_suffix != '/':
+                    path_with_no_api_paths.add(no_api_suffix)
+        
+        return {
+            'tree_urls': list(tree_urls),
+            'base_urls': sorted(list(base_urls)),
+            'path_with_api_paths': sorted(list(path_with_api_paths)),
+            'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
+            '_identified_keywords': sorted(list(identified_api_keywords)),
+            '_method': 'enhanced',
         }
     
     @classmethod
@@ -1381,6 +1639,203 @@ class APIPathCombiner:
                 parts = normalized[len(prefix):].lstrip('/')
                 if parts:
                     return parts
-                return normalized
+        return normalized
+
+
+class APIDictionaryLoader:
+    """互联网开源 API 字典加载器"""
+    
+    SECLISTS_API_URLS = [
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/api-endpoints.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/objects.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/actions.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/objects-lowercase.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/objects-uppercase.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/actions-lowercase.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/actions-uppercase.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common-api-endpoints-mazen160.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/graphql.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/mcp-server.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/oauth-oidc-scopes.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/hashicorp-consul-api.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/hashicorp-vault.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/SOAP-functions.txt",
+        "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/burp-parameter-names.txt",
+    ]
+    
+    API_WORDLIST_URLS = [
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/api_seen_in_wild.txt",
+        "raw.githubusercontent.com/chrislockard/api_wordlist/master/objects.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/actions.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/common_paths.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/api_seen_in_wild_paths.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/objects-lowercase.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/objects-uppercase.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/actions-lowercase.txt",
+        "https://raw.githubusercontent.com/chrislockard/api_wordlist/master/actions-uppercase.txt",
+    ]
+    
+    ALL_DICTIONARY_URLS = SECLISTS_API_URLS + API_WORDLIST_URLS
+    
+    _cached_prefixes: set = None
+    _cached_resources: set = None
+    _cache_loaded: bool = False
+    _cache_loaded_urls: set = None
+    
+    @classmethod
+    def _is_valid_api_segment(cls, segment: str) -> bool:
+        """检查是否是有效的 API 段"""
+        import re
+        
+        if not segment or len(segment) < 2 or len(segment) > 40:
+            return False
+        
+        if re.match(r'^[\d\.\-\_]+$', segment):
+            return False
+        
+        if segment.startswith('.') or segment.endswith('.'):
+            return False
+        
+        if re.match(r'^v\d+(\.\d+)*$', segment, re.IGNORECASE):
+            return True
+        
+        if re.match(r'.*\.(json|xml|yaml|yml|js|html|css|png|jpg|gif|svg|ico|woff|woff2|ttf|eot)$', segment, re.IGNORECASE):
+            return False
+        
+        invalid_chars = ['<', '>', '{', '}', '(', ')', '[', ']', '&', '$', '!', '@', '%', '^', '*', '+', '=', '|', '\\', ':', ';', '"', "'"]
+        for char in invalid_chars:
+            if char in segment:
+                return False
+        
+        if re.match(r'.*_onclick$', segment, re.IGNORECASE):
+            return False
+        
+        return True
+    
+    @classmethod
+    async def download_all_api_dicts(cls) -> tuple:
+        """
+        下载并解析所有互联网开源 API 字典
+        
+        Returns:
+            (api_prefixes, resource_paths) 元组
+        """
+        import aiohttp
+        
+        api_prefixes = set()
+        resource_paths = set()
+        
+        known_prefix_keywords = {
+            'api', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6',
+            'rest', 'restapi', 'graphql', 'grpc', 'soap',
+            'gateway', 'proxy', 'middleware',
+            'admin', 'manage', 'management', 'console',
+            'web', 'www', 'static', 'cdn', 'assets',
+            'service', 'services', 'microservice', 'micro',
+            'prod', 'production', 'dev', 'development', 'test', 'stage', 'staging',
+            'internal', 'external', 'open', 'public', 'private',
+            'mobile', 'app', 'client', 'android', 'ios', 'wechat', 'mini',
+            'doc', 'docs', 'documentation', 'swagger', 'api-docs', 'openapi', 'apidocs',
+            'file', 'files', 'upload', 'download', 'storage',
+            'data', 'dataset', 'analytics', 'statistics', 'report', 'reports',
+            'config', 'configuration', 'settings', 'options',
+            'monitor', 'monitoring', 'health', 'healthz', 'status', 'metrics', 'ping',
+            'log', 'logs', 'logging', 'audit',
+            'notification', 'notify', 'notice', 'message', 'messages', 'msg',
+            'search', 'query', 'find', 'filter',
+            'backup', 'restore', 'export', 'import',
+            'workflow', 'process', 'task', 'tasks', 'job', 'jobs',
+            'build', 'ci', 'cd', 'deploy', 'pipeline',
+            'kubernetes', 'k8s', 'docker', 'container',
+            'socket', 'websocket', 'ws', 'wss', 'realtime', 'event',
+            'hook', 'hooks', 'webhook', 'callback',
+            'tenant', 'site', 'org', 'organization', 'company',
+            'image', 'images', 'photo', 'video', 'media', 'avatar',
+            'cart', 'wishlist', 'favorite', 'favorites',
+            'address', 'location', 'geo', 'map',
+            'stock', 'inventory', 'warehouse',
+        }
+        
+        for url in cls.ALL_DICTIONARY_URLS:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                        if response.status == 200:
+                            text = await response.text()
+                            for line in text.splitlines():
+                                line = line.strip()
+                                if not line or line.startswith('#'):
+                                    continue
+                                
+                                line_lower = line.lower()
+                                
+                                parts = line.split('/')
+                                if len(parts) >= 2:
+                                    first_part = parts[0].lower()
+                                    if first_part in known_prefix_keywords:
+                                        api_prefixes.add(first_part)
+                                    for part in parts[1:]:
+                                        part = part.strip()
+                                        if cls._is_valid_api_segment(part):
+                                            resource_paths.add(part.lower())
+                                elif cls._is_valid_api_segment(line):
+                                    resource_paths.add(line_lower)
+            except Exception as e:
+                logger.debug(f"Failed to download {url}: {e}")
+        
+        return api_prefixes, resource_paths
+    
+    @classmethod
+    def get_enhanced_prefixes_resources(cls) -> tuple:
+        """
+        获取增强版的 API 前缀和资源路径集合
+        
+        优先使用缓存，如果缓存不存在则返回内置知识库
+        """
+        if cls._cache_loaded and cls._cached_prefixes is not None:
+            return cls._cached_prefixes, cls._cached_resources
+        
+        return APIRouter.KNOWN_API_PREFIXES, APIRouter.KNOWN_RESOURCE_PATHS
+    
+    @classmethod
+    async def load_external_dicts(cls, force_reload: bool = False) -> bool:
+        """
+        异步加载外部字典
+        
+        Args:
+            force_reload: 是否强制重新加载
+            
+        Returns:
+            是否成功加载
+        """
+        if cls._cache_loaded and not force_reload:
+            return True
+        
+        try:
+            prefixes, resources = await cls.download_all_api_dicts()
+            
+            cls._cached_prefixes = APIRouter.KNOWN_API_PREFIXES | prefixes
+            cls._cached_resources = APIRouter.KNOWN_RESOURCE_PATHS | resources
+            cls._cache_loaded = True
+            
+            logger.info(f"Loaded external API dict: {len(prefixes)} prefixes, {len(resources)} resources")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load external dicts: {e}")
+            return False
+    
+    @classmethod
+    def get_custom_dicts(cls) -> tuple:
+        """
+        同步获取自定义字典（用于混合算法）
+        
+        如果外部字典已加载则返回扩展后的集合，否则返回内置知识库
+        """
+        if cls._cache_loaded:
+            return cls._cached_prefixes or APIRouter.KNOWN_API_PREFIXES, \
+                   cls._cached_resources or APIRouter.KNOWN_RESOURCE_PATHS
+        
+        return APIRouter.KNOWN_API_PREFIXES, APIRouter.KNOWN_RESOURCE_PATHS
+
         
         return normalized

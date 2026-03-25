@@ -227,7 +227,20 @@ class DiscoverAgent(AgentInterface):
                     path_with_no_api.update(classification_result.get('path_with_no_api_paths', []))
                     self.base_urls.update(classification_result.get('base_urls', []))
             except Exception as e:
-                logger.debug(f"AI classification failed, using rule-based: {e}")
+                logger.debug(f"AI classification failed, using enhanced statistical: {e}")
+                classification_result = APIRouter.auto_classify_urls_enhanced(all_urls)
+                if classification_result:
+                    logger.info(f"DiscoverAgent: Using enhanced statistical classification, identified: {classification_result.get('_identified_keywords', [])}")
+                    path_with_api.update(classification_result.get('path_with_api_paths', []))
+                    path_with_no_api.update(classification_result.get('path_with_no_api_paths', []))
+                    self.base_urls.update(classification_result.get('base_urls', []))
+        elif all_urls:
+            classification_result = APIRouter.auto_classify_urls_enhanced(all_urls)
+            if classification_result:
+                logger.info(f"DiscoverAgent: Using enhanced statistical classification, identified: {classification_result.get('_identified_keywords', [])}")
+                path_with_api.update(classification_result.get('path_with_api_paths', []))
+                path_with_no_api.update(classification_result.get('path_with_no_api_paths', []))
+                self.base_urls.update(classification_result.get('base_urls', []))
         
         if not path_with_api:
             for ep in existing_endpoints:
