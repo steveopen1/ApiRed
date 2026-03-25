@@ -446,24 +446,46 @@ class ScanEngine:
         return self.result
     
     async def _run_agent_mode(self) -> ScanResult:
-        """使用 Agent 系统运行扫描"""
+        """
+        使用 Agent 系统运行扫描（规则+AI双引擎）
+        
+        架构:
+        ┌─────────────────────────────────────────────────────────┐
+        │  Phase 1: 规则引擎（快速发现，不耗 AI token）              │
+        │  ├── DiscoverAgent - 快速端点发现                       │
+        │  ├── TestAgent - 快速漏洞测试                          │
+        │  └── ReflectAgent - 快速结果去重                       │
+        ├─────────────────────────────────────────────────────────┤
+        │  Phase 2: AI 引擎（深度分析，需要 AI key）             │
+        │  ├── ScannerAgent - AI 驱动的智能 JS 分析             │
+        │  ├── AnalyzerAgent - AI 漏洞分析和风险评估             │
+        │  └── TesterAgent - AI 辅助渗透测试                     │
+        └─────────────────────────────────────────────────────────┘
+        """
         from .agents.orchestrator import check_ai_config, print_ai_config_guide
+        from .agents.base import AgentConfig, BaseAgent
         
         missing_config = check_ai_config()
+        ai_client = None
+        
         if missing_config:
+            logger.warning("Agent 模式: AI API Key 未配置，将使用纯规则模式")
+            logger.info("如需启用 AI 模式，请配置以下环境变量:")
             print_ai_config_guide()
-            logger.warning(f"错误: Agent 模式需要配置 AI API 密钥")
-            logger.warning(f"缺少: {', '.join(missing_config.keys())}")
-            logger.info("提示: 也可以使用传统模式，无需配置 AI:")
-            logger.info(f"  python main.py scan -u {self.config.target}")
-            
             self.result = ScanResult(
                 target_url=self.config.target,
                 start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                status="failed",
-                errors=["AI API key not configured"]
+                status="running_with_rules_only",
+                errors=["AI API key not configured - using rule-based mode"]
             )
-            return self.result
+        else:
+            if ai_client is None:
+                from .ai import LLMClient
+                ai_client = LLMClient()
+            self.result = ScanResult(
+                target_url=self.config.target,
+                start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            )
         
         self._knowledge_base = KnowledgeBase.get_instance(self.config.target)
         
@@ -471,31 +493,42 @@ class ScanEngine:
             target=self.config.target,
             cookies=self.config.cookies or "",
             concurrency=self.config.concurrency,
-            ai_enabled=self.config.ai_enabled,
+            ai_enabled=(ai_client is not None),
             knowledge_base=self._knowledge_base
-        )
-        
-        self._orchestrator = Orchestrator(context)
-        self._orchestrator.register_agent(DiscoverAgent())
-        self._orchestrator.register_agent(TestAgent())
-        self._orchestrator.register_agent(ReflectAgent())
-        
-        self.result = ScanResult(
-            target_url=self.config.target,
-            start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
         
         self._emit('stage_start', {'stage': 'agent_mode', 'status': 'running'})
         
         try:
-            task_definitions = [
+            # Phase 1: 规则引擎（快速，不耗 AI token）
+            logger.info("=" * 60)
+            logger.info("Phase 1: 规则引擎 - 快速发现与测试")
+            logger.info("=" * 60)
+            
+            orchestrator = Orchestrator(context)
+            orchestrator.register_agent(DiscoverAgent())
+            orchestrator.register_agent(TestAgent())
+            orchestrator.register_agent(ReflectAgent())
+            
+            rule_based_tasks = [
                 {'agent': 'discover', 'task_type': 'js_collect', 'params': {'depth': self.config.js_depth}},
                 {'agent': 'test', 'task_type': 'vuln_test', 'params': {}},
                 {'agent': 'reflect', 'task_type': 'analysis', 'params': {}},
             ]
             
-            result = await self._orchestrator.run(task_definitions)
+            await orchestrator.run(rule_based_tasks)
             
+            logger.info(f"Phase 1 完成: 发现 {len(self._knowledge_base.get_endpoints())} 个端点")
+            
+            # Phase 2: AI 引擎（深度分析，需要 AI key）
+            if ai_client:
+                logger.info("=" * 60)
+                logger.info("Phase 2: AI 引擎 - 深度分析与智能测试")
+                logger.info("=" * 60)
+                
+                await self._run_ai_analysis_phase(context, ai_client)
+            
+            # 收集结果
             kb_data = self._knowledge_base.export()
             
             self.result.api_endpoints = kb_data.get('endpoints', [])
@@ -513,6 +546,79 @@ class ScanEngine:
             self._emit('error', {'error': str(e)})
         
         return self.result
+    
+    async def _run_ai_analysis_phase(self, context: ScanContext, ai_client) -> None:
+        """
+        AI 分析阶段 - 使用 LLM 进行深度分析
+        
+        ScannerAgent: 智能 JS 分析
+        AnalyzerAgent: 漏洞分析和风险评估  
+        TesterAgent: AI 辅助渗透测试
+        """
+        from .agents.base import AgentConfig
+        from .agents.scanner_agent import ScannerAgent
+        from .agents.analyzer_agent import AnalyzerAgent
+        from .agents.tester_agent import TesterAgent
+        
+        endpoints = self._knowledge_base.get_endpoints() if self._knowledge_base else []
+        
+        if not endpoints:
+            logger.info("Phase 2: 无端点，跳过 AI 分析")
+            return
+        
+        # ScannerAgent - AI 驱动的 JS 分析
+        scanner_config = AgentConfig(
+            name="AIScanner",
+            model="deepseek-chat",
+            system_prompt="你是一个专业的 JavaScript 安全分析专家，负责从 JS 代码中提取 API 路径和敏感信息。"
+        )
+        scanner_agent = ScannerAgent(scanner_config, ai_client)
+        scanner_agent.knowledge_base = self._knowledge_base
+        
+        logger.info(f"Phase 2a: ScannerAgent 分析 {len(endpoints)} 个端点")
+        js_content = "\n".join([f"{ep.path} {ep.method}" for ep in endpoints[:50]])
+        scanner_context = {'target': context.target, 'js_content': js_content}
+        await scanner_agent.run(scanner_context)
+        
+        # AnalyzerAgent - AI 驱动的漏洞分析
+        analyzer_config = AgentConfig(
+            name="AIAnalyzer",
+            model="deepseek-chat",
+            system_prompt="你是一个专业的 API 安全分析专家，负责评估漏洞风险等级和提出修复建议。"
+        )
+        analyzer_agent = AnalyzerAgent(analyzer_config)
+        analyzer_agent.llm_client = ai_client
+        
+        logger.info(f"Phase 2b: AnalyzerAgent 分析漏洞")
+        for endpoint in endpoints[:20]:
+            api_info = {
+                'path': endpoint.path,
+                'method': endpoint.method,
+                'source': getattr(endpoint, 'source', 'unknown')
+            }
+            response_data = {'content': '', 'status_code': 200}
+            risk = await analyzer_agent.assess_risk(api_info, response_data)
+            if risk in ['high', 'critical']:
+                tests = await analyzer_agent.suggest_tests(api_info)
+                logger.info(f"  {endpoint.path}: {risk} risk, suggested {len(tests)} tests")
+        
+        # TesterAgent - AI 辅助渗透测试
+        tester_config = AgentConfig(
+            name="AITester",
+            model="deepseek-chat",
+            system_prompt="你是一个专业的渗透测试专家，负责生成有效的攻击载荷。"
+        )
+        tester_agent = TesterAgent(tester_config)
+        tester_agent.llm_client = ai_client
+        
+        logger.info(f"Phase 2c: TesterAgent 生成智能载荷")
+        for endpoint in endpoints[:10]:
+            api_info = {'path': endpoint.path, 'method': endpoint.method}
+            payloads = await tester_agent.generate_payloads('sql_injection', api_info)
+            if payloads:
+                logger.debug(f"  {endpoint.path}: generated {len(payloads)} SQL injection payloads")
+        
+        logger.info("Phase 2 完成")
     
     async def _run_collectors(self):
         """运行采集阶段"""

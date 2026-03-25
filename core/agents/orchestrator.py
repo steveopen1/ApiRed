@@ -228,15 +228,22 @@ class ScanContext:
 
 
 class AgentInterface:
-    """Agent 接口定义"""
+    """Agent 接口定义（支持规则+AI双引擎）"""
     
-    def __init__(self, name: str):
+    def __init__(self, name: str, llm_client=None):
         self.name = name
         self.knowledge_base: Optional[KnowledgeBase] = None
+        self.llm_client = llm_client
+        self.ai_enabled = False
     
     async def initialize(self, context: ScanContext) -> None:
         """初始化 Agent"""
         self.knowledge_base = context.knowledge_base
+        self.ai_enabled = getattr(context, 'ai_enabled', False) and self.llm_client is not None
+        if self.ai_enabled:
+            logger.info(f"{self.name}: AI mode enabled")
+        else:
+            logger.info(f"{self.name}: Rule-based mode (AI not available)")
     
     async def execute(self, context: ScanContext) -> Any:
         """执行任务"""
@@ -245,6 +252,50 @@ class AgentInterface:
     async def cleanup(self) -> None:
         """清理资源"""
         pass
+    
+    async def think(self, prompt: str, context: Optional[Dict] = None) -> str:
+        """AI思考 - 使用LLM分析当前状态"""
+        if not self.llm_client:
+            return ""
+        
+        try:
+            import json
+            context_str = json.dumps(context, ensure_ascii=False) if context else ""
+            full_prompt = f"{prompt}\n\n上下文信息:\n{context_str}" if context_str else prompt
+            
+            response = self.llm_client.chat(
+                messages=[{"role": "user", "content": full_prompt}],
+                system="你是一个专业的安全分析助手，负责分析API和漏洞信息。"
+            )
+            
+            if hasattr(response, 'success') and response.success:
+                return getattr(response, 'result', str(response))
+            elif isinstance(response, str):
+                return response
+            return ""
+        except Exception as e:
+            logger.debug(f"{self.name} think error: {e}")
+            return ""
+    
+    async def chat(self, messages: List[Dict], system: str = "") -> str:
+        """AI对话"""
+        if not self.llm_client:
+            return ""
+        
+        try:
+            response = self.llm_client.chat(
+                messages=messages,
+                system=system or "你是一个专业的安全分析助手。"
+            )
+            
+            if hasattr(response, 'success') and response.success:
+                return getattr(response, 'result', str(response))
+            elif isinstance(response, str):
+                return response
+            return ""
+        except Exception as e:
+            logger.debug(f"{self.name} chat error: {e}")
+            return ""
 
 
 class Orchestrator:
