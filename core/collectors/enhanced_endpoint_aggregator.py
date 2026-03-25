@@ -197,20 +197,20 @@ class EnhancedEndpoint:
             base_score = 0.0
         
         source_scores = {
-            SourceType.RUNTIME_XHR: 0.3,
-            SourceType.RUNTIME_FETCH: 0.3,
-            SourceType.RENDER_DOM: 0.2,
-            SourceType.API_DOC: 0.2,
-            SourceType.WEBPACK: 0.15,
-            SourceType.JS_AST: 0.1,
-            SourceType.JS_STRING: 0.05,
-            SourceType.JS_CONCAT: 0.05,
-            SourceType.JS_FUZZ: 0.03,
-            SourceType.AI_INFERRED: 0.02,
-            SourceType.FINGERPRINT: 0.02,
-            SourceType.STATIC: 0.01,
-            SourceType.REGEX: 0.05,
-            SourceType.UNKNOWN: 0.02,
+            SourceType.RUNTIME_XHR: 0.6,
+            SourceType.RUNTIME_FETCH: 0.6,
+            SourceType.RENDER_DOM: 0.4,
+            SourceType.API_DOC: 0.5,
+            SourceType.WEBPACK: 0.3,
+            SourceType.JS_AST: 0.3,
+            SourceType.JS_STRING: 0.2,
+            SourceType.JS_CONCAT: 0.2,
+            SourceType.JS_FUZZ: 0.15,
+            SourceType.AI_INFERRED: 0.2,
+            SourceType.FINGERPRINT: 0.4,
+            SourceType.STATIC: 0.1,
+            SourceType.REGEX: 0.15,
+            SourceType.UNKNOWN: 0.05,
         }
         
         for evidence in self.evidence_chain:

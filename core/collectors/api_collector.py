@@ -888,10 +888,15 @@ class APIPathCombiner:
         return path
     
     @classmethod
-    def combine_base_and_path(cls, base_url: str, api_path: str) -> str:
+    def combine_base_and_path(cls, base_url: str, api_path: str, default_base: str = "") -> str:
         """组合Base URL和API路径"""
         if not base_url:
-            return api_path
+            if default_base:
+                base_url = default_base
+            elif api_path.startswith('http'):
+                return api_path
+            else:
+                return api_path
         
         if not api_path:
             return base_url

@@ -1886,7 +1886,8 @@ class ScanEngine:
             
             full_url = APIPathCombiner.combine_base_and_path(
                 endpoint.base_url or "",
-                endpoint.path
+                endpoint.path,
+                default_base=self.config.target if hasattr(self.config, 'target') else ""
             )
             api_endpoint = APIEndpoint(
                 path=endpoint.path,
@@ -2031,13 +2032,15 @@ class ScanEngine:
                     break
         
         high_value_count = sum(1 for e in endpoints if e.is_high_value)
+        from .models import APIStatus
+        alive_count = sum(1 for e in endpoints if e.status == APIStatus.ALIVE)
         
         if self.result:
-            self.result.alive_apis = high_value_count
+            self.result.alive_apis = alive_count
             self.result.high_value_apis = high_value_count
         
         return {
-            'alive_apis': high_value_count,
+            'alive_apis': alive_count,
             'high_value_apis': high_value_count
         }
     
