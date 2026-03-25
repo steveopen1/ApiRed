@@ -2186,34 +2186,34 @@ class ScanEngine:
                 except Exception as e:
                     logger.debug(f"[FLUX] 云安全检测失败: {e}")
             
-            if self._endpoint_fusion_engine:
-                try:
-                    for endpoint in (self.result.api_endpoints if self.result else []):
-                        source_type_val = getattr(endpoint, 'source_type', 'unknown')
-                        try:
-                            from .collectors.enhanced_endpoint_aggregator import SourceType as FluxSourceType
-                            source_type = FluxSourceType(source_type_val) if source_type_val else FluxSourceType.UNKNOWN
-                        except (ValueError, AttributeError):
-                            source_type = None
-                        
-                        is_high_value = getattr(endpoint, 'is_high_value', False)
-                        status_code_val = getattr(endpoint, 'status_code', 0) if is_high_value else 0
-                        
-                        ep = self._endpoint_fusion_engine.add_endpoint(
-                            url=endpoint.full_url,
-                            method=endpoint.method,
-                            source_type=source_type,
-                            source_url='',
-                            confidence='medium',
-                            runtime_observed=is_high_value,
-                            status_code=status_code_val,
-                        )
-                    fusion_report = self._endpoint_fusion_engine.get_fusion_report()
-                    flux_results['fusion_endpoints'] = fusion_report
+            if self._api_aggregator and hasattr(self._api_aggregator, '_fusion_engine') and self._api_aggregator._fusion_engine:
+                fusion_engine = self._api_aggregator._fusion_engine
+                for endpoint in (self.result.api_endpoints if self.result else []):
+                    source_type_val = getattr(endpoint, 'source_type', 'unknown')
+                    try:
+                        from .collectors.enhanced_endpoint_aggregator import SourceType as FluxSourceType
+                        source_type = FluxSourceType(source_type_val) if source_type_val else FluxSourceType.UNKNOWN
+                    except (ValueError, AttributeError):
+                        source_type = None
                     
-                    high_value_count = len(fusion_report.get('high_confidence_endpoints', []))
-                    runtime_count = fusion_report.get('runtime_confirmed_count', 0)
-                    logger.info(f"[FLUX] 端点融合完成: 融合后 {fusion_report.get('total_endpoints', 0)} 个端点, 高置信度 {high_value_count}, 运行时确认 {runtime_count}")
+                    is_high_value = getattr(endpoint, 'is_high_value', False)
+                    status_code_val = getattr(endpoint, 'status_code', 0) if is_high_value else 0
+                    
+                    ep = fusion_engine.add_endpoint(
+                        url=endpoint.full_url,
+                        method=endpoint.method,
+                        source_type=source_type,
+                        source_url='',
+                        confidence='medium',
+                        runtime_observed=is_high_value,
+                        status_code=status_code_val,
+                    )
+                fusion_report = fusion_engine.get_fusion_report()
+                flux_results['fusion_endpoints'] = fusion_report
+                
+                high_value_count = len(fusion_report.get('high_confidence_endpoints', []))
+                runtime_count = fusion_report.get('runtime_confirmed_count', 0)
+                logger.info(f"[FLUX] 端点融合完成: 融合后 {fusion_report.get('total_endpoints', 0)} 个端点, 高置信度 {high_value_count}, 运行时确认 {runtime_count}")
                 except Exception as e:
                     logger.debug(f"[FLUX] 端点融合失败: {e}")
             

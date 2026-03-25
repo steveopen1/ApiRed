@@ -30,6 +30,7 @@ class VulnCategory(Enum):
     SQLI = "sqli"
     XSS = "xss"
     RCE = "rce"
+    RFI = "rfi"
     INFO_LEAK = "info_leak"
     CONFIG_EXPOSE = "config_expose"
     CLOUD_LEAK = "cloud_leak"
