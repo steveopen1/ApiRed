@@ -477,38 +477,24 @@ class APIRouter:
     def auto_classify_urls(cls, urls: List[str]) -> Dict[str, List[str]]:
         """
         自动从 URL 列表中分类提取组件
-        参考 0x727/ChkApi filter_data 函数逻辑
-        使用智能频率分析算法识别 API 路径段
+        完全基于统计结构的动态检测，无硬编码关键词
         
-        算法步骤：
-        1. 收集所有路径段及位置
-        2. 统计每段在相同位置出现的频率
-        3. 结合语义指标识别 API 关键词：
-           - 出现频率 >= 2
-           - 在相同固定位置
-           - 语义上像 API 前缀
-        4. 用识别出的关键词分类路径
+        算法原理：
+        1. 收集所有路径段及其位置
+        2. 对每个位置，找出出现频率最高的段
+        3. 如果某段在固定位置出现 >= 2 次，且该位置总 URL 数 > 1，则识别为 API 前缀
+        4. 用识别出的前缀分类路径
         """
         from collections import Counter, defaultdict
         
         tree_urls = set()
-        base_urls = set()
         all_api_paths = set()
         path_with_api_paths = set()
         path_with_no_api_paths = set()
         
-        segment_positions = defaultdict(list)
+        segment_at_position = defaultdict(list)
+        segment_count = Counter()
         segment_urls = {}
-        
-        API_LIKELY_KEYWORDS = {
-            'api', 'apis', 'v1', 'v2', 'v3', 'v4', 'v5',
-            'rest', 'rpc', 'graphql', 'grpc',
-            'gateway', 'service', 'services',
-            'prod', 'dev', 'test', 'stage',
-            'admin', 'management', 'manage',
-            'internal', 'external', 'public', 'private',
-            'mobile', 'web', 'app', 'frontend', 'backend',
-        }
         
         for url in urls:
             if not url:
@@ -517,21 +503,18 @@ class APIRouter:
             parsed = None
             if url.startswith('http://') or url.startswith('https://'):
                 parsed = urlparse(url)
-                netloc = parsed.netloc
-                path = parsed.path
-                
-                tree_url = f"{parsed.scheme}://{netloc}"
+                tree_url = f"{parsed.scheme}://{parsed.netloc}"
                 tree_urls.add(tree_url)
-                
-                if not path or path == '/':
-                    continue
-                
-                segments = [s for s in path.split('/') if s]
+                path = parsed.path
             elif url.startswith('/'):
-                segments = [s for s in url.split('/') if s]
+                path = url
             else:
                 continue
             
+            if not path or path == '/':
+                continue
+            
+            segments = [s for s in path.split('/') if s]
             if not segments:
                 continue
             
@@ -540,9 +523,10 @@ class APIRouter:
             segment_urls[full_path] = segments
             
             for i, seg in enumerate(segments):
-                segment_positions[seg].append(i)
+                segment_at_position[i].append(seg)
+                segment_count[seg] += 1
         
-        if not segment_positions:
+        if not segment_at_position:
             return {
                 'tree_urls': [],
                 'base_urls': [],
@@ -550,67 +534,108 @@ class APIRouter:
                 'path_with_no_api_paths': list(all_api_paths),
             }
         
+        total_urls = len(segment_urls)
         identified_api_keywords = set()
         
-        for seg, positions in segment_positions.items():
-            if len(seg) <= 1:
+        for pos, segs in segment_at_position.items():
+            if len(segs) < 2:
                 continue
             
-            pos_counter = Counter(positions)
-            most_common_pos, pos_count = pos_counter.most_common(1)[0]
+            unique_segments = set(segs)
+            most_common_count = 0
+            most_common_seg = None
             
-            seg_lower = seg.lower()
-            is_api_keyword = False
+            for seg in unique_segments:
+                cnt = segs.count(seg)
+                if cnt >= most_common_count and cnt >= 2:
+                    most_common_count = cnt
+                    most_common_seg = seg
             
-            if pos_count >= 2:
-                if seg_lower in API_LIKELY_KEYWORDS:
-                    is_api_keyword = True
-                elif seg_lower.endswith('api') or 'api' in seg_lower:
-                    is_api_keyword = True
-                elif seg_lower.startswith(('v', 'rest', 'rpc', 'graphql', 'grpc')):
-                    is_api_keyword = True
-                elif pos_count >= 3:
-                    is_api_keyword = True
-            
-            if is_api_keyword:
-                identified_api_keywords.add(seg)
+            if most_common_seg:
+                identified_api_keywords.add(most_common_seg)
         
-        if not identified_api_keywords:
-            path_with_no_api_paths.update(all_api_paths)
-            return {
-                'tree_urls': list(tree_urls),
-                'base_urls': [],
-                'path_with_api_paths': [],
-                'path_with_no_api_paths': list(path_with_no_api_paths),
-            }
-        
+        base_urls = set()
         for full_path, segments in segment_urls.items():
-            has_api_segment = False
-            api_segment_index = -1
-            
             for i, seg in enumerate(segments):
                 if seg in identified_api_keywords:
-                    has_api_segment = True
-                    api_segment_index = i
+                    api_prefix = '/' + '/'.join(segments[:i+1])
+                    path_with_api_paths.add(api_prefix)
+                    if tree_urls:
+                        base_url = list(tree_urls)[0] + api_prefix
+                        base_urls.add(base_url)
+                    break
+        
+        for full_path, segments in segment_urls.items():
+            is_api_path = False
+            for seg in segments:
+                if seg in identified_api_keywords:
+                    is_api_path = True
                     break
             
-            if has_api_segment and api_segment_index >= 0:
-                api_prefix = '/' + '/'.join(segments[:api_segment_index + 1])
-                path_with_api_paths.add(api_prefix)
-                
-                if tree_urls:
-                    base_url = list(tree_urls)[0] + api_prefix
-                    base_urls.add(base_url)
-                
-                if api_segment_index < len(segments) - 1:
-                    no_api_suffix = '/' + '/'.join(segments[api_segment_index + 1:])
-                    path_with_no_api_paths.add(no_api_suffix)
-            else:
+            if not is_api_path:
                 path_with_no_api_paths.add(full_path)
+            else:
+                no_api_suffix = '/' + '/'.join([
+                    seg for seg in segments 
+                    if seg not in identified_api_keywords
+                ])
+                if no_api_suffix != '/':
+                    path_with_no_api_paths.add(no_api_suffix)
         
         return {
             'tree_urls': list(tree_urls),
-            'base_urls': list(base_urls),
+            'base_urls': sorted(list(base_urls)),
+            'path_with_api_paths': sorted(list(path_with_api_paths)),
+            'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
+            '_identified_keywords': sorted(list(identified_api_keywords)),
+        }
+        
+        total_urls = len(segment_urls)
+        
+        api_prefix_positions = set()
+        for pos, segments in segment_at_position.items():
+            unique_segments = set(segments)
+            unique_ratio = len(unique_segments) / len(segments)
+            
+            if unique_ratio < 0.5:
+                api_prefix_positions.add(pos)
+        
+        identified_api_keywords = set()
+        for pos in api_prefix_positions:
+            for seg in segment_at_position[pos]:
+                if segment_count[seg] / total_urls >= 0.3:
+                    identified_api_keywords.add(seg)
+        
+        base_urls = set()
+        for full_path, segments in segment_urls.items():
+            for i, seg in enumerate(segments):
+                if seg in identified_api_keywords:
+                    api_prefix = '/' + '/'.join(segments[:i+1])
+                    path_with_api_paths.add(api_prefix)
+                    if tree_urls:
+                        base_url = list(tree_urls)[0] + api_prefix
+                        base_urls.add(base_url)
+                    break
+        
+        for full_path, segments in segment_urls.items():
+            is_api_path = False
+            for seg in segments:
+                if seg in identified_api_keywords:
+                    is_api_path = True
+                    break
+            if not is_api_path:
+                path_with_no_api_paths.add(full_path)
+            else:
+                no_api_suffix = '/' + '/'.join([
+                    seg for seg in segments 
+                    if seg not in identified_api_keywords
+                ])
+                if no_api_suffix != '/':
+                    path_with_no_api_paths.add(no_api_suffix)
+        
+        return {
+            'tree_urls': list(tree_urls),
+            'base_urls': sorted(list(base_urls)),
             'path_with_api_paths': sorted(list(path_with_api_paths)),
             'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
             '_identified_keywords': sorted(list(identified_api_keywords)),
