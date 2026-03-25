@@ -263,27 +263,55 @@ class DiscoverAgent(AgentInterface):
         base_domain = f"{parsed.scheme}://{parsed.netloc}"
         
         for base in self.base_urls:
-            base_clean = base_domain
             if base.startswith(base_domain):
-                base_clean = base_domain
+                remaining = base[len(base_domain):].strip('/')
+                if remaining:
+                    base_clean = f"{base_domain}"
+                    api_prefix_in_base = remaining
+                else:
+                    base_clean = base_domain
+                    api_prefix_in_base = ""
             elif base.startswith('http'):
                 try:
-                    base_clean = f"{urlparse(base).scheme}://{urlparse(base).netloc}"
+                    parsed_base = urlparse(base)
+                    base_clean = f"{parsed_base.scheme}://{parsed_base.netloc}"
+                    api_prefix_in_base = parsed_base.path.strip('/')
                 except Exception:
                     base_clean = base_domain
+                    api_prefix_in_base = ""
+            else:
+                base_clean = base_domain
+                api_prefix_in_base = ""
             
             for api_path in path_with_api:
+                api_clean = api_path.lstrip('/')
+                api_full_path = '/' + api_clean
+                
+                if api_prefix_in_base and api_full_path.startswith(f"/{api_prefix_in_base}"):
+                    effective_api_prefix = ""
+                    effective_api_clean = ""
+                elif api_prefix_in_base and api_clean == api_prefix_in_base:
+                    effective_api_prefix = ""
+                    effective_api_clean = ""
+                elif api_prefix_in_base:
+                    effective_api_prefix = f"/{api_prefix_in_base}"
+                    effective_api_clean = f"/{api_clean}"
+                else:
+                    effective_api_prefix = ""
+                    effective_api_clean = f"/{api_clean}"
+                
                 for no_api_path in path_with_no_api:
-                    api_clean = api_path.lstrip('/')
                     no_api_clean = no_api_path.lstrip('/') if no_api_path.startswith('/') else no_api_path
                     
                     if no_api_clean:
-                        full_url = f"{base_clean}/{api_clean}/{no_api_clean}"
+                        full_url = f"{base_clean}{effective_api_prefix}{effective_api_clean}/{no_api_clean}"
+                        path = f"{effective_api_prefix}{effective_api_clean}/{no_api_clean}"
                     else:
-                        full_url = f"{base_clean}/{api_clean}"
+                        full_url = f"{base_clean}{effective_api_prefix}{effective_api_clean}"
+                        path = f"{effective_api_prefix}{effective_api_clean}"
                     
                     endpoint = APIEndpoint(
-                        path=f"/{api_clean}/{no_api_clean}" if no_api_clean else f"/{api_clean}",
+                        path=path,
                         method='GET',
                         source='base-combine',
                         full_url=full_url,

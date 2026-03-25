@@ -1103,11 +1103,15 @@ class ScanEngine:
                 
                 async def do_probe():
                     for suffix in list(all_suffixes)[:100]:
-                        sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                        sub_url = base_url + sub_path
+                        if '/' in suffix.lstrip('/'):
+                            sub_path = suffix.lstrip('/')
+                            sub_url = base_url + '/' + sub_path
+                        else:
+                            sub_path = parent_path.rstrip('/') + '/' + suffix.lstrip('/') if suffix else parent_path
+                            sub_url = base_url + sub_path
                         sub_status = await try_request(sub_url)
                         if sub_status and 200 <= sub_status < 400:
-                            sub_endpoints.add(sub_path)
+                            sub_endpoints.add('/' + sub_path.lstrip('/'))
                             logger.debug(f"  Found: {sub_path} (status: {sub_status})")
                     
                     for resource in list(js_resources)[:30]:
@@ -1196,11 +1200,14 @@ class ScanEngine:
             
             async def do_probe_sub_paths():
                 async def probe_sub_path(suffix: str) -> Optional[str]:
-                    sub_path = parent_path.rstrip('/') + suffix if suffix else parent_path
-                    sub_url = base_url + sub_path
+                    if '/' in suffix.lstrip('/'):
+                        sub_path = suffix.lstrip('/')
+                    else:
+                        sub_path = parent_path.rstrip('/') + '/' + suffix.lstrip('/') if suffix else parent_path
+                    sub_url = base_url + '/' + sub_path.lstrip('/')
                     sub_status = await try_request(sub_url)
                     if sub_status and 200 <= sub_status < 400:
-                        return sub_path
+                        return '/' + sub_path.lstrip('/')
                     return None
                 
                 sub_tasks = [probe_sub_path(s) for s in list(all_suffixes)[:100]]
@@ -1337,10 +1344,13 @@ class ScanEngine:
                 suffix_clean = suffix.strip('/').lstrip('/')
                 if not suffix_clean:
                     continue
-                target = f"{parent_base}/{suffix_clean}"
+                if '/' in suffix_clean:
+                    target = '/' + suffix_clean
+                else:
+                    target = f"{parent_base}/{suffix_clean}"
                 if target not in seen_targets and target not in existing_apis:
                     seen_targets.add(target)
-                    fuzz_targets.append((parent_base, f"/{suffix_clean}"))
+                    fuzz_targets.append((target, ''))
             
             for resource in js_resources:
                 if len(fuzz_targets) >= 5000:
