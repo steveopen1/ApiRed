@@ -76,8 +76,8 @@ Examples:
         scan_parser.add_argument('--aggregate', action='store_true',
                                   help='Aggregate results from multiple targets')
         scan_parser.add_argument('--output', '-o', help='Output directory')
-        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html', 'csv', 'all'], default='json',
-                                  help='Report format: json, html, csv, or all (default: json)')
+        scan_parser.add_argument('--format', '-fmt', choices=['json', 'html', 'csv', 'txt', 'all'], default='json',
+                                  help='Report format: json, html, csv, txt, or all (default: json)')
         
         vuln_group = scan_parser.add_argument_group('Vulnerability Tests')
         vuln_group.add_argument('--no-sql-test', dest='no_sql_test', action='store_true',

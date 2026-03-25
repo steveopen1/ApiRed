@@ -131,6 +131,54 @@ class OpenAPIExporter:
         return params 
 
 
+class APIPathExporter:
+    """API 路径纯文本导出器"""
+    
+    def export(self, data: Dict, output_path: str) -> bool:
+        """导出为纯文本格式"""
+        try:
+            lines = []
+            lines.append("# ApiRed API Paths")
+            lines.append(f"# Target: {data.get('target_url', '')}")
+            lines.append(f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append("")
+            
+            api_endpoints = data.get('api_endpoints', [])
+            
+            lines.append(f"# Total APIs: {len(api_endpoints)}")
+            lines.append("")
+            
+            lines.append("# API Endpoints List")
+            lines.append("# Format: METHOD /path")
+            lines.append("-" * 60)
+            
+            for api in api_endpoints:
+                method = api.get('method', 'GET')
+                path = api.get('path', '')
+                full_url = api.get('full_url', '')
+                status = api.get('status', 'unknown')
+                
+                if path:
+                    if path.startswith('/'):
+                        lines.append(f"{method}\t{path}")
+                    else:
+                        lines.append(f"{method}\t/{path}")
+                elif full_url:
+                    lines.append(f"{method}\t{full_url}")
+            
+            lines.append("")
+            lines.append("# End of API Paths")
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines))
+            
+            logger.info(f"API paths exported to: {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"API path export error: {e}")
+            return False
+
+
 class CSVExporter:
     """CSV 格式导出器
     参考 URLFinder 的 CSV 导出格式
@@ -992,7 +1040,8 @@ class ReportExporter:
             'excel': ExcelExporter(),
             'csv': CSVExporter(),
             'html': HTMLReporter(),
-            'junit': JUnitExporter()
+            'junit': JUnitExporter(),
+            'txt': APIPathExporter(),
         }
     
     def export(
