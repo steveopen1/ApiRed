@@ -253,9 +253,9 @@ class InlineJSParser:
         if len(path) < 2:
             return False
         
-        static_file_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf']
-        for pattern in static_file_patterns:
-            if path.endswith(pattern):
+        path_lower = path.lower()
+        for ext in self.STATIC_FILE_EXTENSIONS:
+            if path_lower.endswith(ext):
                 return False
         
         return True
@@ -279,6 +279,11 @@ class InlineJSParser:
         
         if path.startswith('data:'):
             return False
+        
+        path_lower = path.lower()
+        for ext in self.STATIC_FILE_EXTENSIONS:
+            if path_lower.endswith(ext):
+                return False
         
         return True
     
