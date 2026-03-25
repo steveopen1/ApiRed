@@ -356,25 +356,33 @@ class ResponseBaselineLearner:
         
         negative_patterns = [
             '<html', '<!doctype', '<title>',
-            'page not found', '404', '500 error',
-            'internal server error', 'forbidden',
-            'access denied', 'unauthorized',
-            '安全卫士', '应用防护平台', 'waf', '云防护',
+            'page not found', '404',
+            'forbidden', 'access denied',
+            '安全卫士', '应用防护平台', '云防护',
             '您的请求带有不法参数', '已被安全卫士拦截',
             '请求拦截', '访问拦截', 'attackType',
             'xss', 'sql injection', 'webshell',
-            'protected', 'defense', 'guard'
+            'protected', 'defense', 'guard',
+            '<script', 'document.cookie', 'window.location',
         ]
         
         positive_patterns = [
-            '"', 'application/json', 'application/xml',
+            'application/json', 'application/xml',
             '"code"', '"data"', '"success"',
             '"token"', '"session"', '"user"',
-            '"id"', '"name"'
+            '"id"', '"name"', '"error"',
+            'null', 'true', 'false',
+            '{', '}', '[', ']',
         ]
         
         neg_score = sum(1 for p in negative_patterns if p in content_lower)
         pos_score = sum(1 for p in positive_patterns if p in content_lower)
+        
+        if neg_score >= 3:
+            return False
+        
+        if pos_score >= 2:
+            return True
         
         return pos_score > neg_score
     
