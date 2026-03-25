@@ -916,7 +916,7 @@ class APIRouter:
             分类后的 URL 组件字典
         """
         if not urls or not llm_client:
-            return cls.auto_classify_urls(urls)
+            return cls.auto_classify_urls_enhanced(urls)
         
         try:
             url_samples = urls[:50] if len(urls) > 50 else urls
@@ -944,7 +944,7 @@ URL 列表：
             )
             
             if not response:
-                return cls.auto_classify_urls(urls)
+                return cls.auto_classify_urls_enhanced(urls)
             
             import json
             try:
@@ -1013,12 +1013,12 @@ URL 列表：
                 }
                 
             except (json.JSONDecodeError, KeyError, TypeError) as e:
-                logger.warning(f"AI classification parse failed: {e}, falling back to statistical method")
-                return cls.auto_classify_urls(urls)
+                logger.warning(f"AI classification parse failed: {e}, falling back to enhanced method")
+                return cls.auto_classify_urls_enhanced(urls)
                 
         except Exception as e:
-            logger.warning(f"AI classification failed: {e}, falling back to statistical method")
-            return cls.auto_classify_urls(urls)
+            logger.warning(f"AI classification failed: {e}, falling back to enhanced method")
+            return cls.auto_classify_urls_enhanced(urls)
     
     @classmethod
     def build_api_urls(cls, base_urls: List[str], path_with_api_paths: List[str],
