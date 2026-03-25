@@ -16,6 +16,13 @@ from .browser_collector import HeadlessBrowserCollector, BrowserResource, check_
 from .inline_js_parser import InlineJSParser, ResponseBasedAPIDiscovery
 from .api_path_finder import ApiPathFinder, ApiPathCombiner, DiscoveredAPI
 from .js_ast_analyzer import JavaScriptASTAnalyzer, JSASTDifferentialAnalyzer, extract_api_paths_from_js
+from .enhanced_endpoint_aggregator import (
+    EnhancedEndpointAggregator,
+    EnhancedEndpoint,
+    SourceType,
+    EndpointType,
+    ConfidenceLevel,
+)
 
 __all__ = [
     'JSFingerprintCache',
@@ -38,4 +45,9 @@ __all__ = [
     'JavaScriptASTAnalyzer',
     'JSASTDifferentialAnalyzer',
     'extract_api_paths_from_js',
+    'EnhancedEndpointAggregator',
+    'EnhancedEndpoint',
+    'SourceType',
+    'EndpointType',
+    'ConfidenceLevel',
 ]

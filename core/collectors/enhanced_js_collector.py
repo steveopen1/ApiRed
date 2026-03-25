@@ -1,6 +1,7 @@
 """
 Enhanced JS Collector Module
 整合原 ChkApi.py 的 JS 解析逻辑，增强版
+融合了 WebpackAnalyzer 的 Webpack 解析功能
 """
 
 import re
@@ -15,6 +16,13 @@ from concurrent.futures import ThreadPoolExecutor
 import sqlite3
 
 logger = logging.getLogger(__name__)
+
+try:
+    from .js_collector import WebpackAnalyzer
+    WEBPACK_ANALYZER_AVAILABLE = True
+except ImportError:
+    WEBPACK_ANALYZER_AVAILABLE = False
+    logger.warning("WebpackAnalyzer not available")
 
 
 @dataclass
@@ -98,53 +106,26 @@ class JSExtractor:
     
     @classmethod
     def extract_webpack_chunks(cls, js_content: str) -> List[str]:
-        """提取 Webpack chunk 路径 - 整合 webpack_js_find"""
+        """
+        提取 Webpack chunk 路径
+        融合了 WebpackAnalyzer 的高级解析能力
+        """
         paths = set()
         
-        m = re.search(
-            r'return\s+[a-zA-Z]\.p\+"([^"]+)".*\{(.*)\}\[[a-zA-Z]\]\+"\.js"\}',
-            js_content
-        )
-        if m:
-            base_path = m.group(1)
-            json_string = m.group(2)
-            pairs = json_string.split(',')
-            formatted_pairs = []
-            for pair in pairs:
-                try:
-                    key, value = pair.split(':', 1)
-                except Exception as e:
-                    logger.warning(f"JSON键值对解析异常: {e}")
-                    continue
-                if not key.strip().startswith('"'):
-                    continue
-                if not value.strip().startswith('"'):
-                    continue
-                formatted_pairs.append(key + ':' + value)
+        if WEBPACK_ANALYZER_AVAILABLE:
             try:
-                chunk_mapping = json.loads('{' + ','.join(formatted_pairs) + '}')
-                for key, value in chunk_mapping.items():
-                    paths.add('/' + base_path + key + '.' + value + '.js')
+                chunks = WebpackAnalyzer.extract_chunks(js_content)
+                modules = WebpackAnalyzer.extract_modules(js_content)
+                webpack_paths = WebpackAnalyzer.extract_webpack_chunk_paths(js_content)
+                paths.update(chunks.keys())
+                paths.update(modules)
+                paths.update(webpack_paths)
             except Exception as e:
-                logger.warning(f"JSON解析异常: {e}")
-                pass
-        
-        for m in re.finditer(
-            r'__webpack_require__\.u\s*=\s*function\(\w+\)\s*\{\s*return\s*"([^"]+)"\s*\+\s*\w+\s*\+\s*"([^"]+)"',
-            js_content
-        ):
-            dirprefix, suffix = m.groups()
-            for c in re.findall(r'__webpack_require__\.e\(\s*[\'"]([^\'"]+)[\'"]\s*\)', js_content):
-                paths.add('/' + dirprefix + c + suffix)
-        
-        for m in re.finditer(r'webpackChunkName\s*:\s*[\'"]([^\'"]+)[\'"]', js_content):
-            name = m.group(1)
-            if name and not name.endswith('.js'):
-                paths.add('./' + name + '.js')
+                logger.debug(f"WebpackAnalyzer failed, falling back to regex: {e}")
         
         for m in re.finditer(r'import\(\s*[\'"]([^\'"]+)[\'"]\s*\)', js_content):
             p = m.group(1).strip()
-            if p:
+            if p and ('.js' in p or '/api/' in p or '/v' in p):
                 paths.add(p)
         
         return list(paths)

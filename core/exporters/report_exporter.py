@@ -531,6 +531,362 @@ class HTMLReporter:
         )
 
 
+class FLUXHtmlReporter:
+    """FLUX 增强 HTML 报告生成器"""
+    
+    FLUX_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApiRed FLUX 增强安全扫描报告</title>
+    <style>
+        :root {{
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --critical: #dc3545;
+            --high: #fd7e14;
+            --medium: #ffc107;
+            --low: #28a745;
+            --info: #17a2b8;
+        }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        .header {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 20px; }}
+        .header h1 {{ margin: 0 0 10px 0; font-size: 1.8em; }}
+        .header .subtitle {{ opacity: 0.8; font-size: 0.9em; }}
+        .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }}
+        .stat-card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }}
+        .stat-card .value {{ font-size: 2.2em; font-weight: bold; color: var(--primary); }}
+        .stat-card .label {{ color: #666; margin-top: 5px; font-size: 0.85em; }}
+        .stat-card.highlight {{ background: linear-gradient(135deg, var(--primary), var(--secondary)); }}
+        .stat-card.highlight .value, .stat-card.highlight .label {{ color: white; }}
+        .section {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }}
+        .section h2 {{ margin-top: 0; color: #333; border-bottom: 2px solid var(--primary); padding-bottom: 10px; font-size: 1.2em; }}
+        .section h3 {{ color: #555; margin-bottom: 10px; font-size: 1em; }}
+        .subsection {{ background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        th {{ background: var(--primary); color: white; padding: 10px; text-align: left; font-weight: 500; }}
+        td {{ padding: 8px 10px; border-bottom: 1px solid #eee; }}
+        tr:hover {{ background: #f8f8f8; }}
+        tr.highlight {{ background: #fff3cd; }}
+        .badge {{ display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }}
+        .badge-critical {{ background: var(--critical); color: white; }}
+        .badge-high {{ background: var(--high); color: white; }}
+        .badge-medium {{ background: var(--medium); color: black; }}
+        .badge-low {{ background: var(--low); color: white; }}
+        .badge-info {{ background: var(--info); color: white; }}
+        .api-path {{ font-family: 'Consolas', monospace; background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }}
+        .method {{ font-weight: bold; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }}
+        .method-get {{ background: #61affe; color: white; }}
+        .method-post {{ background: #49cc90; color: white; }}
+        .method-put {{ background: #fca130; color: white; }}
+        .method-delete {{ background: #f93e3e; color: white; }}
+        .waf-alert {{ background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; }}
+        .waf-alert h4 {{ margin: 0 0 5px 0; }}
+        .fingerprint-tag {{ display: inline-block; background: #e9ecef; padding: 4px 10px; border-radius: 20px; margin: 3px; font-size: 0.85em; }}
+        .fingerprint-tag.ai {{ background: #d4edda; color: #155724; }}
+        .fingerprint-tag.framework {{ background: #cce5ff; color: #004085; }}
+        .fingerprint-tag.waf {{ background: #f8d7da; color: #721c24; }}
+        .fusion-stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }}
+        .fusion-stat {{ background: #f8f9fa; padding: 10px; border-radius: 6px; text-align: center; }}
+        .fusion-stat .value {{ font-size: 1.5em; font-weight: bold; color: var(--primary); }}
+        .fusion-stat .label {{ font-size: 0.8em; color: #666; }}
+        .priority-bar {{ display: flex; align-items: center; margin: 5px 0; }}
+        .priority-bar .bar {{ flex: 1; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }}
+        .priority-bar .fill {{ height: 100%; border-radius: 4px; }}
+        .priority-bar .fill.critical {{ background: var(--critical); }}
+        .priority-bar .fill.high {{ background: var(--high); }}
+        .priority-bar .fill.medium {{ background: var(--medium); }}
+        .priority-bar .fill.low {{ background: var(--low); }}
+        .empty-state {{ text-align: center; padding: 30px; color: #999; }}
+        .grid-2 {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ApiRed FLUX 增强安全扫描报告</h1>
+            <div class="subtitle">目标: {target} | 时间: {scan_time} | 耗时: {duration}s</div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card highlight">
+                <div class="value">{total_apis}</div>
+                <div class="label">发现端点</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{fusion_high}</div>
+                <div class="label">高置信度</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{fusion_runtime}</div>
+                <div class="label">运行时确认</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{vuln_count}</div>
+                <div class="label">漏洞</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{sensitive_count}</div>
+                <div class="label">敏感信息</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{fingerprint_count}</div>
+                <div class="label">指纹识别</div>
+            </div>
+        </div>
+        
+        {waf_alert}
+        
+        <div class="section">
+            <h2>端点融合统计</h2>
+            <div class="fusion-stats">
+                <div class="fusion-stat">
+                    <div class="value">{fusion_total}</div>
+                    <div class="label">融合后总数</div>
+                </div>
+                <div class="fusion-stat">
+                    <div class="value">{fusion_api}</div>
+                    <div class="label">API端点</div>
+                </div>
+                <div class="fusion-stat">
+                    <div class="value">{fusion_admin}</div>
+                    <div class="label">管理后台</div>
+                </div>
+                <div class="fusion-stat">
+                    <div class="value">{fusion_ai}</div>
+                    <div class="label">AI接口</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>指纹识别结果</h2>
+            {fingerprint_section}
+        </div>
+        
+        <div class="grid-2">
+            <div class="section">
+                <h2>漏洞优先级排序</h2>
+                {priority_section}
+            </div>
+            
+            <div class="section">
+                <h2>敏感信息检测 (FLUX)</h2>
+                {sensitive_section}
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>FLUX 安全检测</h2>
+            {flux_security_section}
+        </div>
+        
+        <div class="section">
+            <h2>高置信度端点</h2>
+            {high_confidence_section}
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    def export(self, data: Dict, output_path: str) -> bool:
+        """导出为 FLUX 增强 HTML 报告"""
+        try:
+            html = self._render_flux_template(data)
+            os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(html)
+            return True
+        except Exception as e:
+            logger.error(f"FLUX HTML export error: {e}")
+            return False
+    
+    def _render_flux_template(self, data: Dict) -> str:
+        flux = data.get('flux_enhanced', {})
+        
+        fusion_data = flux.get('fusion_endpoints', {})
+        fusion_stats = fusion_data.get('stats', {})
+        by_type = fusion_stats.get('by_type', {})
+        
+        fingerprint_section = self._render_fingerprints(flux.get('fingerprints', []))
+        priority_section = self._render_priority(flux.get('prioritized_vulns', []))
+        sensitive_section = self._render_sensitive(flux.get('sensitive_data', []))
+        flux_security_section = self._render_flux_security(flux)
+        high_conf_section = self._render_high_confidence(fusion_data.get('high_confidence_endpoints', []))
+        
+        waf_detected = flux.get('waf_detected')
+        waf_alert = ''
+        if waf_detected:
+            waf_alert = f'''
+            <div class="waf-alert">
+                <h4>WAF 检测警告</h4>
+                <p>检测到 Web 应用防火墙: <strong>{waf_detected}</strong>，部分绕过技术可能失效</p>
+            </div>'''
+        
+        fp_count = len(flux.get('fingerprints', []))
+        
+        return self.FLUX_TEMPLATE.format(
+            target=data.get('target_url', ''),
+            scan_time=data.get('start_time', ''),
+            duration=f"{data.get('duration', 0):.2f}",
+            total_apis=data.get('summary', {}).get('total_apis', data.get('total_apis', 0)),
+            fusion_high=fusion_stats.get('high_confidence', 0),
+            fusion_runtime=fusion_stats.get('runtime_confirmed', 0),
+            vuln_count=len(data.get('vulnerabilities', [])),
+            sensitive_count=len(flux.get('sensitive_data', [])),
+            fingerprint_count=fp_count,
+            waf_alert=waf_alert or '<div class="section"><h2>WAF 检测</h2><div class="empty-state">未检测到 WAF</div></div>',
+            fusion_total=fusion_stats.get('after_fusion', 0),
+            fusion_api=by_type.get('api_endpoint', 0),
+            fusion_admin=by_type.get('admin_panel', 0),
+            fusion_ai=by_type.get('ai_interface', 0),
+            fingerprint_section=fingerprint_section,
+            priority_section=priority_section,
+            sensitive_section=sensitive_section,
+            flux_security_section=flux_security_section,
+            high_confidence_section=high_conf_section,
+        )
+    
+    def _render_fingerprints(self, fingerprints: List) -> str:
+        if not fingerprints:
+            return '<div class="empty-state">未发现指纹</div>'
+        
+        html = '<div class="subsection">'
+        categories = {}
+        for fp in fingerprints[:30]:
+            cat = fp.get('category', 'Other')
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(fp)
+        
+        for cat, items in categories.items():
+            cat_class = 'ai' if 'ai' in cat.lower() else ('waf' if 'waf' in cat.lower() else ('framework' if any(fw in cat.lower() for fw in ['framework', 'cms', 'server']) else ''))
+            html += f'<h3>{cat}</h3><div>'
+            for item in items[:10]:
+                name = item.get('name', 'Unknown')
+                confidence = item.get('confidence', 0)
+                html += f'<span class="fingerprint-tag {cat_class}">{name} ({confidence}%)</span>'
+            html += '</div>'
+        
+        html += '</div>'
+        return html
+    
+    def _render_priority(self, vulns: List) -> str:
+        if not vulns:
+            return '<div class="empty-state">无优先级漏洞</div>'
+        
+        priority_counts = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+        for v in vulns:
+            p = v.get('priority', 'medium').lower()
+            priority_counts[p] = priority_counts.get(p, 0) + 1
+        
+        total = sum(priority_counts.values()) or 1
+        html = ''
+        for level in ['critical', 'high', 'medium', 'low']:
+            count = priority_counts.get(level, 0)
+            pct = int(count / total * 100)
+            html += f'''
+            <div class="priority-bar">
+                <span class="badge badge-{level}" style="width:70px">{level.upper()}</span>
+                <div class="bar"><div class="fill {level}" style="width:{pct}%"></div></div>
+                <span style="width:50px;text-align:right">{count}</span>
+            </div>'''
+        
+        html += '<table><tr><th>类型</th><th>URL</th><th>评分</th></tr>'
+        for v in vulns[:5]:
+            html += f'''<tr class="highlight">
+                <td><span class="badge badge-{v.get('priority', 'medium').lower()}">{v.get('vuln_type', '')}</span></td>
+                <td><span class="api-path">{v.get('url', '')[:50]}</span></td>
+                <td>{v.get('total_score', 0):.2f}</td>
+            </tr>'''
+        html += '</table>'
+        return html
+    
+    def _render_sensitive(self, items: List) -> str:
+        if not items:
+            return '<div class="empty-state">未发现敏感信息</div>'
+        
+        html = '<table><tr><th>类型</th><th>掩码值</th><th>来源</th></tr>'
+        for item in items[:10]:
+            masked = item.get('masked_value', item.get('evidence', ''))[:30]
+            html += f'''<tr>
+                <td><span class="badge badge-critical">{item.get('type', item.get('data_type', 'unknown'))}</span></td>
+                <td><code>{masked}</code></td>
+                <td><span class="api-path">{item.get('source', item.get('location', ''))[:40]}</span></td>
+            </tr>'''
+        html += '</table>'
+        return html
+    
+    def _render_flux_security(self, flux: Dict) -> str:
+        sections = []
+        
+        ai = flux.get('ai_security', [])
+        if ai:
+            sections.append(f'<div class="subsection"><h3>AI 安全 ({len(ai)}项)</h3>')
+            for item in ai[:5]:
+                sections.append(f'<div>- {item.get("component", "")}: {item.get("vuln_type", "")}</div>')
+            sections.append('</div>')
+        
+        k8s = flux.get('k8s_security', [])
+        if k8s:
+            sections.append(f'<div class="subsection"><h3>K8s 安全 ({len(k8s)}项)</h3>')
+            for item in k8s[:5]:
+                sections.append(f'<div>- {item.get("component", "")}: {item.get("vuln_type", "")}</div>')
+            sections.append('</div>')
+        
+        container = flux.get('container_security', [])
+        if container:
+            sections.append(f'<div class="subsection"><h3>容器安全 ({len(container)}项)</h3>')
+            for item in container[:5]:
+                sections.append(f'<div>- {item.get("runtime", "")}: {item.get("vuln_type", "")}</div>')
+            sections.append('</div>')
+        
+        cicd = flux.get('cicd_security', [])
+        if cicd:
+            sections.append(f'<div class="subsection"><h3>CI/CD 安全 ({len(cicd)}项)</h3>')
+            for item in cicd[:5]:
+                sections.append(f'<div>- {item.get("component", "")}: {item.get("vuln_type", "")}</div>')
+            sections.append('</div>')
+        
+        cloud = flux.get('cloud_security', [])
+        if cloud:
+            sections.append(f'<div class="subsection"><h3>云安全 ({len(cloud)}项)</h3>')
+            for item in cloud[:5]:
+                sections.append(f'<div>- {item.get("vuln_type", "")}: {item.get("detail", "")[:50]}</div>')
+            sections.append('</div>')
+        
+        if not sections:
+            return '<div class="empty-state">未发现 FLUX 安全问题</div>'
+        
+        return '\n'.join(sections)
+    
+    def _render_high_confidence(self, endpoints: List) -> str:
+        if not endpoints:
+            return '<div class="empty-state">无高置信度端点</div>'
+        
+        html = '<table><tr><th>端点</th><th>类型</th><th>置信度</th><th>证据数</th></tr>'
+        for ep in endpoints[:10]:
+            conf = ep.get('confidence_score', 0)
+            conf_pct = int(conf * 100)
+            html += f'''<tr>
+                <td><span class="api-path">{ep.get('full_url', ep.get('url', ''))[:60]}</span></td>
+                <td><span class="badge badge-info">{ep.get('endpoint_type', 'unknown')}</span></td>
+                <td>
+                    <div class="priority-bar">
+                        <div class="bar"><div class="fill {'high' if conf > 0.7 else 'medium'}" style="width:{conf_pct}%"></div></div>
+                        <span>{conf_pct}%</span>
+                    </div>
+                </td>
+                <td>{ep.get('evidence_count', 0)}</td>
+            </tr>'''
+        html += '</table>'
+        return html
+
+
 class JUnitExporter:
     """JUnit XML 格式导出器"""
     

@@ -726,14 +726,36 @@ class ServiceAnalyzer:
 
 
 class APIAggregator:
-    """API聚合器"""
+    """
+    API聚合器 - 融合了 EnhancedEndpointAggregator 的智能融合能力
     
-    def __init__(self):
+    增强功能:
+    - 置信度评分
+    - 证据链管理
+    - 自动端点分类
+    - 多维度去重
+    """
+    
+    def __init__(self, use_fusion: bool = True):
         self.apis: Dict[str, APIFindResult] = {}
         self.sources: Dict[str, List[Dict]] = {}
+        self._use_fusion = use_fusion
+        
+        if use_fusion:
+            try:
+                from .enhanced_endpoint_aggregator import EnhancedEndpointAggregator, EnhancedEndpoint, SourceType, EndpointType
+                self._fusion_engine = EnhancedEndpointAggregator()
+                self._enhanced_endpoint_class = EnhancedEndpoint
+                self._source_type_enum = SourceType
+                self._endpoint_type_enum = EndpointType
+            except ImportError:
+                self._fusion_engine = None
+                logger.warning("EnhancedEndpointAggregator not available, fusion disabled")
+        else:
+            self._fusion_engine = None
     
     def add_api(self, api: APIFindResult, source_info: Optional[Dict] = None):
-        """添加API"""
+        """添加API - 嵌入融合引擎"""
         key = f"{api.method}:{api.path}"
         
         if key not in self.apis:
@@ -742,6 +764,25 @@ class APIAggregator:
         
         if source_info:
             self.sources[key].append(source_info)
+        
+        if self._fusion_engine and hasattr(api, 'base_url') and api.base_url:
+            try:
+                full_url = f"{api.base_url.rstrip('/')}/{api.path.lstrip('/')}" if api.path else api.base_url
+                source_type_val = source_info.get('source_type', 'regex') if source_info else 'regex'
+                try:
+                    source_type = self._source_type_enum(source_type_val)
+                except (ValueError, AttributeError):
+                    source_type = self._source_type_enum.UNKNOWN
+                
+                self._fusion_engine.add_endpoint(
+                    url=full_url,
+                    method=api.method,
+                    source_type=source_type,
+                    source_url=api.base_url,
+                    confidence='medium'
+                )
+            except Exception as e:
+                logger.debug(f"Fusion engine add failed: {e}")
     
     def get_all(self) -> List[APIFindResult]:
         """获取所有API"""
@@ -759,6 +800,46 @@ class APIAggregator:
         """合并另一个聚合器"""
         for api in other.get_all():
             self.add_api(api)
+    
+    def get_fusion_stats(self) -> Dict:
+        """获取融合统计信息"""
+        if not self._fusion_engine:
+            return {
+                'fusion_enabled': False,
+                'total_apis': len(self.apis),
+            }
+        
+        fusion_stats = self._fusion_engine.get_stats()
+        return {
+            'fusion_enabled': True,
+            'total_apis': len(self.apis),
+            'after_fusion': fusion_stats.get('after_fusion', len(self.apis)),
+            'high_confidence': fusion_stats.get('high_confidence', 0),
+            'runtime_confirmed': fusion_stats.get('runtime_confirmed', 0),
+            'by_type': fusion_stats.get('by_type', {}),
+        }
+    
+    def get_high_confidence_apis(self) -> List[APIFindResult]:
+        """获取高置信度API"""
+        if not self._fusion_engine:
+            return self.get_all()
+        
+        high_conf = self._fusion_engine.get_high_confidence()
+        high_conf_urls = {ep.full_url for ep in high_conf}
+        
+        return [api for api in self.apis.values() 
+                if f"{api.base_url.rstrip('/')}/{api.path.lstrip('/')}" in high_conf_urls]
+    
+    def get_runtime_confirmed_apis(self) -> List[APIFindResult]:
+        """获取运行时确认的API"""
+        if not self._fusion_engine:
+            return []
+        
+        confirmed = self._fusion_engine.get_runtime_confirmed()
+        confirmed_urls = {ep.full_url for ep in confirmed}
+        
+        return [api for api in self.apis.values()
+                if f"{api.base_url.rstrip('/')}/{api.path.lstrip('/')}" in confirmed_urls]
 
 
 class APIPathCombiner:
