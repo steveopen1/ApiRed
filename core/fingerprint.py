@@ -162,17 +162,15 @@ class FingerprintEngine:
                     logger.debug(f"加载指纹库失败 {fp_file}: {e}")
 
     def _parse_and_add_rules(self, data) -> int:
-        """
-        解析指纹库数据，支持两种格式：
-        1. dict格式: {"指纹名": [规则列表], ...}
-        2. list格式: [{"name": "...", "method": "...", ...}, ...]
-        3. 嵌套dict格式: {"fingerprint": [...], ...}
-        """
         count = 0
-        
         if isinstance(data, dict):
-            if 'fingerprint' in data and isinstance(data['fingerprint'], list):
-                data = data['fingerprint']
+            fp_data = data.get('fingerprint')
+            if fp_data and isinstance(fp_data, list):
+                for item in fp_data:
+                    rule = self._parse_fingerprint_rule(item)
+                    if rule:
+                        self._add_rule(rule)
+                        count += 1
             else:
                 for name, rules in data.items():
                     if isinstance(rules, list):
