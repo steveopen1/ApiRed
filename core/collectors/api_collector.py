@@ -847,6 +847,32 @@ class APIPathCombiner:
     
     COMMON_PREFIXES = ['/api', '/v1', '/v2', '/v3', '/rest', '/restapi', '/service']
     
+    INVALID_PATTERNS = [
+        'application/x-www-form-urlencoded',
+        'multipart/form-data',
+        'base64',
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/',
+        'example.com',
+        'www.example.com',
+    ]
+    
+    @classmethod
+    def is_valid_api_path(cls, path: str) -> bool:
+        """验证API路径是否有效"""
+        if not path:
+            return False
+        path_lower = path.lower()
+        for pattern in cls.INVALID_PATTERNS:
+            if pattern.lower() in path_lower:
+                return False
+        if len(path) < 2:
+            return False
+        if path.startswith('data:'):
+            return False
+        if path.startswith('javascript:'):
+            return False
+        return True
+    
     @classmethod
     def normalize_path(cls, path: str) -> str:
         """规范化路径"""

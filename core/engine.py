@@ -1880,6 +1880,10 @@ class ScanEngine:
         final_endpoints = []
         
         for endpoint in raw_endpoints:
+            if not APIPathCombiner.is_valid_api_path(endpoint.path):
+                logger.debug(f"过滤无效路径: {endpoint.path}")
+                continue
+            
             full_url = APIPathCombiner.combine_base_and_path(
                 endpoint.base_url or "",
                 endpoint.path
