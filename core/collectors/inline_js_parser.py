@@ -1,6 +1,7 @@
 """
 Inline JavaScript Parser
 内联JavaScript解析器 - 从HTML页面中提取内联JS中的API路径
+参考 0x727/ChkApi apiPathFind.py 的高性能正则匹配模式
 """
 
 import re
@@ -8,6 +9,14 @@ import json
 import logging
 from typing import Dict, List, Set, Any, Optional, Tuple
 from urllib.parse import urljoin, urlparse
+from functools import lru_cache
+
+try:
+    import regex
+    HAS_REGEX = True
+except ImportError:
+    HAS_REGEX = False
+    regex = re
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +50,71 @@ class PathValidationConstants:
         'text/javascript', 'application/javascript', 'application/x-javascript',
         'image/', 'audio/', 'video/', 'font/',
     ]
+    
+    API_ROOT_BLACKLIST = [
+        '\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~',
+        '[', ']', '(', ')', '{', '}', '<', '>',
+    ]
+
+
+@lru_cache(maxsize=1)
+def _get_compiled_api_pattern():
+    """
+    预编译所有 API 匹配模式为单一复合正则表达式
+    参考 0x727/ChkApi apiPathFind.py 的 get_compiled_api_pattern
+    使用 regex 库的命名组来区分不同模式的匹配结果
+    """
+    if HAS_REGEX:
+        api_patterns = [
+            r'(?P<full_url_quoted>["\']http[^\s\'\'"\>\<\)\(]{2,250}?["\'])',
+            r'(?P<full_url_assign>=https?://[^\s\'\'"\>\<\)\(]{2,250})',
+            r'(?P<relative_root>["\']/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<relative_path>["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?/[^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<path_colon>(?<=path:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<path_colon_space>(?<=path\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<path_eq>(?<=path=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<path_eq_space>(?<=path\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<url_colon>(?<=url:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<url_colon_space>(?<=url\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<url_eq>(?<=url=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<url_eq_space>(?<=url\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<index_colon>(?<=index:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<index_colon_space>(?<=index\s:)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<index_eq>(?<=index=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<index_eq_space>(?<=index\s=)\s?["\'][^\s\'\'"\>\<\:\)\(\u4e00-\u9fa5]{1,250}?["\'])',
+            r'(?P<href_action_quoted>(?:href|action).{0,3}=.{0,3}["\'][^\s\'\'"\>\<\)\(]{2,250})',
+            r'(?P<href_action_unquoted>(?:href|action).{0,3}=.{0,3}[^\s\'\'"\>\<\)\(]{2,250})',
+            r'(?P<path_slash>(?:"|\'|`)(/[^"\'`<>]+)(?:"|\'|`))',
+            r'(?P<api_root_relative>["\'](?:api/|v\d+/)[^\s\'\'"\>\<\)\(]{0,250}["\'])',
+            r'(?P<plugin_rel_or_dot>(?:"|\'|`)(?:\/|\.{1,2}\/)[^"\'`<>\s]{1,250}(?:"|\'|`))',
+            r'(?P<plugin_hash_router>(?:"|\'|`)(?:\/#\/)[^"\'`<>\s]{1,250}(?:"|\'|`))',
+            r'(?P<plugin_var_prefix>(?:"|\'|`)[A-Za-z0-9_]+\/[^"\'`<>\s]{1,250}(?:"|\'|`))',
+        ]
+        combined_pattern = r'|'.join(f'(?:{p})' for p in api_patterns)
+        return regex.compile(combined_pattern, regex.IGNORECASE)
+    else:
+        api_patterns = [
+            r'(["\'])(http[^\s\'\'"\>\<\)\(]{2,250}?)\1',
+            r'(=)(https?://[^\s\'\'"\>\<\)\(]{2,250})',
+            r'(["\'])(/[^\s\'\'"\>\<\:\)\(]{1,250}?)\1',
+            r'(path:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(path\s:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(path=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(path\s=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(url:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(url\s:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(url=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(url\s=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(index:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(index\s:)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(index=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(index\s=)\s?(["\'])([^\s\'\'"\>\<\:\)]{1,250}?)\2',
+            r'(?:href|action).{0,3}=.{0,3}(["\'])([^\s\'\'"\>\<\)]{2,250})\1',
+            r'(?:"|\'|`)((?:/|\.{1,2}\/)[^"\'`<>\s]{1,250})(?:"|\'|`)',
+            r'(?:"|\'|`)((?:api/|v\d+/)[^"\'`<>\s]{0,250})(?:"|\'|`)',
+        ]
+        combined_pattern = r'|'.join(f'(?:{p})' for p in api_patterns)
+        return re.compile(combined_pattern, re.IGNORECASE)
 
 
 class InlineJSParser:
@@ -85,6 +159,10 @@ class InlineJSParser:
     STATIC_FILE_EXTENSIONS = PathValidationConstants.STATIC_FILE_EXTENSIONS
     INVALID_KEYWORDS = PathValidationConstants.INVALID_KEYWORDS
     CONTENT_TYPE_INDICATORS = PathValidationConstants.CONTENT_TYPE_INDICATORS
+    API_ROOT_BLACKLIST = [
+        '\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~',
+        '[', ']', '(', ')', '{', '}', '<', '>',
+    ]
     
     def __init__(self):
         self.extracted_paths: Set[str] = set()
@@ -174,6 +252,98 @@ class InlineJSParser:
                     api_paths.add(cleaned)
         
         return api_paths, sensitive_resources
+    
+    def _extract_api_paths_advanced(self, script_content: str) -> Tuple[Set[str], Set[str]]:
+        """
+        使用预编译的复合正则表达式从脚本内容中提取API路径（高级版）
+        参考 0x727/ChkApi apiPathFind.py 的 get_compiled_api_pattern
+        """
+        api_paths = set()
+        sensitive_resources = set()
+        
+        compiled_pattern = _get_compiled_api_pattern()
+        
+        try:
+            matches = compiled_pattern.findall(script_content)
+            for match in matches:
+                if isinstance(match, tuple):
+                    matched_text = None
+                    for group in match:
+                        if group:
+                            matched_text = group
+                            break
+                    if not matched_text:
+                        continue
+                else:
+                    matched_text = match
+                
+                cleaned = self._url_filter_clean(matched_text)
+                if not cleaned:
+                    continue
+                
+                if self._is_api_root_blacklisted(cleaned):
+                    continue
+                
+                if self._is_sensitive_resource(cleaned):
+                    sensitive_resources.add(cleaned)
+                elif self._is_valid_api_path(cleaned) or self._is_valid_route(cleaned):
+                    api_paths.add(cleaned)
+        except Exception as e:
+            logger.debug(f"Advanced API extraction failed: {e}")
+        
+        return api_paths, sensitive_resources
+    
+    def _url_filter_clean(self, path: str) -> str:
+        """
+        URL 清理函数
+        参考 0x727/ChkApi apiPathFind.py 的 urlFilter 逻辑
+        """
+        if not path:
+            return ""
+        
+        path = path.strip()
+        path = path.replace(" ", "")
+        path = path.replace("\\/", "/")
+        path = path.replace("\"", "")
+        path = path.replace("'", "")
+        path = path.replace("href=\"", "", 1)
+        path = path.replace("href='", "", 1)
+        path = path.replace("%3A", ":")
+        path = path.replace("%2F", "/")
+        path = path.replace("\\\\", "")
+        if path.endswith("\\"):
+            path = path.rstrip("\\")
+        if path.startswith("="):
+            path = path.lstrip("=")
+        if path.startswith("href="):
+            path = path.lstrip("href=")
+        if path == 'href':
+            return ""
+        
+        if not path:
+            return ""
+        
+        path_lower = path.lower()
+        if path_lower in self.INVALID_KEYWORDS:
+            return ""
+        
+        for indicator in self.CONTENT_TYPE_INDICATORS:
+            if indicator in path_lower:
+                return ""
+        
+        if '/' not in path and not path_lower.startswith('http'):
+            if path_lower not in ['api', 'v1', 'v2', 'v3']:
+                return ""
+        
+        return path
+    
+    def _is_api_root_blacklisted(self, path: str) -> bool:
+        """判断 API 根路径是否在黑名单中"""
+        path_stripped = path.strip("'\"").strip("/")
+        for char in self.API_ROOT_BLACKLIST:
+            if path_stripped.startswith(char):
+                return True
+        return False
     
     def _is_sensitive_resource(self, path: str) -> bool:
         """判断是否为敏感资源文件"""
