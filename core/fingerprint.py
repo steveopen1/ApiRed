@@ -321,11 +321,23 @@ class FingerprintEngine:
                     matches.append({'type': 'body', 'keyword': keyword})
         elif method == 'header':
             headers_lower = {k.lower(): v.lower() for k, v in headers.items()}
-            header_str = str(headers_lower)
             for keyword in rule.keyword:
                 keyword_lower = keyword.lower()
-                if keyword_lower in header_str:
-                    matches.append({'type': 'header', 'keyword': keyword})
+                keyword_parts = keyword_lower.split(':')
+                if len(keyword_parts) >= 2:
+                    key = keyword_parts[0].strip()
+                    value = ':'.join(keyword_parts[1:]).strip()
+                    header_value = headers_lower.get(key, '')
+                    if value and header_value:
+                        if value in header_value or header_value in value:
+                            matches.append({'type': 'header', 'keyword': keyword})
+                            break
+                else:
+                    for header_key, header_value in headers_lower.items():
+                        combined = f"{header_key}:{header_value}"
+                        if keyword_lower in combined:
+                            matches.append({'type': 'header', 'keyword': keyword})
+                            break
         elif method == 'url':
             for keyword in rule.keyword:
                 if keyword.lower() in url_path.lower():
