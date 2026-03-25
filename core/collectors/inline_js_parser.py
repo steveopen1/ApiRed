@@ -183,7 +183,7 @@ class InlineJSParser:
         if not path:
             return False
         
-        if len(path) < 3:
+        if len(path) < 2:
             return False
         
         invalid_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg']
