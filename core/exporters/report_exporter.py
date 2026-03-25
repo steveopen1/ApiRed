@@ -135,7 +135,7 @@ class APIPathExporter:
     """API 路径纯文本导出器"""
     
     def export(self, data: Dict, output_path: str) -> bool:
-        """导出为纯文本格式"""
+        """导出为纯文本格式，按状态码分类"""
         try:
             lines = []
             lines.append("# ApiRed API Paths")
@@ -146,27 +146,89 @@ class APIPathExporter:
             api_endpoints = data.get('api_endpoints', [])
             
             lines.append(f"# Total APIs: {len(api_endpoints)}")
-            lines.append("")
             
-            lines.append("# API Endpoints List")
-            lines.append("# Format: METHOD /path")
-            lines.append("-" * 60)
+            status_groups = {
+                'alive': [],
+                'unauthorized': [],
+                'suspicious': [],
+                'unknown': [],
+                'dead': []
+            }
             
             for api in api_endpoints:
+                status = api.get('status', 'unknown')
                 method = api.get('method', 'GET')
                 path = api.get('path', '')
                 full_url = api.get('full_url', '')
-                status = api.get('status', 'unknown')
                 
-                if path:
-                    if path.startswith('/'):
-                        lines.append(f"{method}\t{path}")
-                    else:
-                        lines.append(f"{method}\t/{path}")
-                elif full_url:
-                    lines.append(f"{method}\t{full_url}")
+                entry = f"{method}\t{path}" if path.startswith('/') else f"{method}\t/{path}"
+                
+                if status == 'alive':
+                    status_groups['alive'].append(entry)
+                elif status == 'unauthorized':
+                    status_groups['unauthorized'].append(entry)
+                elif status == 'suspicious':
+                    status_groups['suspicious'].append(entry)
+                elif status == 'dead':
+                    status_groups['dead'].append(entry)
+                else:
+                    status_groups['unknown'].append(entry)
             
             lines.append("")
+            lines.append("# " + "=" * 70)
+            lines.append("# Status Summary")
+            lines.append("# " + "=" * 70)
+            lines.append(f"# Alive (200-399):     {len(status_groups['alive'])}")
+            lines.append(f"# Unauthorized (401):   {len(status_groups['unauthorized'])}")
+            lines.append(f"# Suspicious (可疑):    {len(status_groups['suspicious'])}")
+            lines.append(f"# Dead (404+):         {len(status_groups['dead'])}")
+            lines.append(f"# Unknown (未测试):     {len(status_groups['unknown'])}")
+            lines.append("")
+            
+            if status_groups['alive']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Alive APIs (200-399) - 有效响应")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_groups['alive'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_groups['unauthorized']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Unauthorized (401/403) - 需要认证")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_groups['unauthorized'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_groups['suspicious']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Suspicious - 可疑响应")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_groups['suspicious'])):
+                    lines.append(entry)
+                lines.append("")
+            
+            if status_groups['dead']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Dead (404/500+) - 未找到或错误")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_groups['dead']))[:500]:
+                    lines.append(entry)
+                if len(status_groups['dead']) > 500:
+                    lines.append(f"# ... and {len(status_groups['dead']) - 500} more dead paths")
+                lines.append("")
+            
+            if status_groups['unknown']:
+                lines.append("# " + "=" * 70)
+                lines.append("# Unknown - 未测试")
+                lines.append("# " + "=" * 70)
+                for entry in sorted(set(status_groups['unknown']))[:500]:
+                    lines.append(entry)
+                if len(status_groups['unknown']) > 500:
+                    lines.append(f"# ... and {len(status_groups['unknown']) - 500} more unknown paths")
+                lines.append("")
+            
             lines.append("# End of API Paths")
             
             with open(output_path, 'w', encoding='utf-8') as f:
