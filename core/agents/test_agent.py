@@ -91,7 +91,7 @@ class TestAgent(AgentInterface):
                 workers=100
             )
             self._multi_tester.preprobe_enabled = True
-            self._multi_tester.preprobe_threshold = 50
+            self._multi_tester.preprobe_threshold = 100
             self._multi_tester.preprobe_budget = 128
         return self._multi_tester
     
