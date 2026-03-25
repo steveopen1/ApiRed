@@ -66,6 +66,8 @@ PATH_BLACK_PATTERNS = [
     r'^[\w.-]+@[\w.-]+\.\w+$',  # 邮箱格式
     r'^[a-z]+&&',  # JavaScript表达式 t&&
     r'^application/',  # MIME类型 application/sdp
+    r'^http协议',  # 中文错误消息 http协议不支持对讲
+    r'^trackID=$',  # URL参数而非路径
 ]
 
 API_PATH_MIN_LENGTH = 2
