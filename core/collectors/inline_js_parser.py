@@ -12,6 +12,37 @@ from urllib.parse import urljoin, urlparse
 logger = logging.getLogger(__name__)
 
 
+class PathValidationConstants:
+    """路径验证共享常量"""
+    
+    SENSITIVE_FILE_PATTERNS = [
+        '.pdf', '.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt',
+        '.exe', '.7z', '.zip', '.rar', '.tar', '.gz',
+        '.csv', '.txt', '.log',
+        '.bak', '.backup', '.old',
+    ]
+    
+    STATIC_FILE_EXTENSIONS = [
+        '.js', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
+        '.woff', '.woff2', '.ttf', '.eot', '.otf', '.webp', '.bmp', '.tiff', '.webm', '.mp4',
+        '.avi', '.mp3', '.wav', '.ogg', '.flac', '.webm',
+    ]
+    
+    INVALID_KEYWORDS = {
+        'httpagent', 'httpsagent', 'httpversionnotsupported', 
+        'xmlhttprequest', 'activexobject', 'msxml2', 'microsoft',
+        'window', 'document', 'location', 'navigator', 'console',
+        'function', 'return', 'var', 'let', 'const', 'import', 'export',
+        'prototype', 'constructor', 'typeof', 'undefined', 'null',
+    }
+    
+    CONTENT_TYPE_INDICATORS = [
+        'text/html', 'application/json', 'text/plain', 'text/xml',
+        'text/javascript', 'application/javascript', 'application/x-javascript',
+        'image/', 'audio/', 'video/', 'font/',
+    ]
+
+
 class InlineJSParser:
     """
     内联JavaScript解析器
@@ -50,32 +81,10 @@ class InlineJSParser:
         re.compile(r'''VUE_APP_API_URL\s*=\s*['"`]([^'"`]+)['"`]'''),
     ]
     
-    SENSITIVE_FILE_PATTERNS = [
-        '.pdf', '.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt',
-        '.exe', '.7z', '.zip', '.rar', '.tar', '.gz',
-        '.csv', '.txt', '.log',
-        '.bak', '.backup', '.old',
-    ]
-    
-    STATIC_FILE_EXTENSIONS = [
-        '.js', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
-        '.woff', '.woff2', '.ttf', '.eot', '.otf', '.webp', '.bmp', '.tiff', '.webm', '.mp4',
-        '.avi', '.mp3', '.wav', '.ogg', '.flac', '.webm',
-    ]
-    
-    INVALID_KEYWORDS = {
-        'httpagent', 'httpsagent', 'httpversionnotsupported', 
-        'xmlhttprequest', 'activexobject', 'msxml2', 'microsoft',
-        'window', 'document', 'location', 'navigator', 'console',
-        'function', 'return', 'var', 'let', 'const', 'import', 'export',
-        'prototype', 'constructor', 'typeof', 'undefined', 'null',
-    }
-    
-    CONTENT_TYPE_INDICATORS = [
-        'text/html', 'application/json', 'text/plain', 'text/xml',
-        'text/javascript', 'application/javascript', 'application/x-javascript',
-        'image/', 'audio/', 'video/', 'font/',
-    ]
+    SENSITIVE_FILE_PATTERNS = PathValidationConstants.SENSITIVE_FILE_PATTERNS
+    STATIC_FILE_EXTENSIONS = PathValidationConstants.STATIC_FILE_EXTENSIONS
+    INVALID_KEYWORDS = PathValidationConstants.INVALID_KEYWORDS
+    CONTENT_TYPE_INDICATORS = PathValidationConstants.CONTENT_TYPE_INDICATORS
     
     def __init__(self):
         self.extracted_paths: Set[str] = set()
@@ -326,32 +335,10 @@ class ResponseBasedAPIDiscovery:
     
     JS_VAR_PATTERN = re.compile(r'''(?:window|global)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*['"`]([^'"`]+)['"`]''')
     
-    SENSITIVE_FILE_PATTERNS = [
-        '.pdf', '.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt',
-        '.exe', '.7z', '.zip', '.rar', '.tar', '.gz',
-        '.csv', '.txt', '.log',
-        '.bak', '.backup', '.old',
-    ]
-    
-    STATIC_FILE_EXTENSIONS = [
-        '.js', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
-        '.woff', '.woff2', '.ttf', '.eot', '.otf', '.webp', '.bmp', '.tiff', '.webm', '.mp4',
-        '.avi', '.mp3', '.wav', '.ogg', '.flac', '.webm',
-    ]
-    
-    INVALID_KEYWORDS = {
-        'httpagent', 'httpsagent', 'httpversionnotsupported', 
-        'xmlhttprequest', 'activexobject', 'msxml2', 'microsoft',
-        'window', 'document', 'location', 'navigator', 'console',
-        'function', 'return', 'var', 'let', 'const', 'import', 'export',
-        'prototype', 'constructor', 'typeof', 'undefined', 'null',
-    }
-    
-    CONTENT_TYPE_INDICATORS = [
-        'text/html', 'application/json', 'text/plain', 'text/xml',
-        'text/javascript', 'application/javascript', 'application/x-javascript',
-        'image/', 'audio/', 'video/', 'font/',
-    ]
+    SENSITIVE_FILE_PATTERNS = PathValidationConstants.SENSITIVE_FILE_PATTERNS
+    STATIC_FILE_EXTENSIONS = PathValidationConstants.STATIC_FILE_EXTENSIONS
+    INVALID_KEYWORDS = PathValidationConstants.INVALID_KEYWORDS
+    CONTENT_TYPE_INDICATORS = PathValidationConstants.CONTENT_TYPE_INDICATORS
     
     def __init__(self):
         self.discovered_paths: Set[str] = set()
@@ -524,13 +511,6 @@ class ResponseBasedAPIDiscovery:
         
         for ext in self.STATIC_FILE_EXTENSIONS:
             if path_lower.endswith(ext):
-                return False
-        
-        return True
-        
-        static_file_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf']
-        for pattern in static_file_patterns:
-            if path.lower().endswith(pattern):
                 return False
         
         return True
