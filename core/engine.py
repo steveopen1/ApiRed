@@ -865,7 +865,7 @@ class ScanEngine:
         'dashboard', 'home', 'index', 'main', 'workspace', 'console', 'welcome',
     ]
     
-    async def _probe_parent_paths(self, js_results: List) -> Dict[str, Set[str]]:
+    async def _probe_parent_paths(self, js_results: List, additional_paths: List[str] = None) -> Dict[str, Set[str]]:
         """
         探测父路径是否可访问，并进一步探测常见 RESTful 端点、业务后缀和JS路径模板
         
@@ -875,6 +875,10 @@ class ScanEngine:
         3. 父路径 + JS路径模板片段 (从JS提取的 /users/{id} -> /users)
         4. 父路径 + 资源 + 后缀组合探测 (/admin/role/list)
         5. JS提取的后缀和资源片段进行智能拼接
+        
+        Args:
+            js_results: ParsedJSResult 对象列表
+            additional_paths: 额外的API路径列表（用于生成父路径）
         
         Returns:
             {探测到的有效父路径: 该路径下探测到的额外端点}
@@ -905,6 +909,23 @@ class ScanEngine:
             if hasattr(js_result, 'resource_fragments') and js_result.resource_fragments:
                 for resource in js_result.resource_fragments:
                     js_resources.add(resource)
+        
+        if additional_paths:
+            for path in additional_paths:
+                if not isinstance(path, str) or len(path) < 3:
+                    continue
+                parts = path.strip('/').split('/')
+                if len(parts) <= 2:
+                    continue
+                for i in range(1, min(len(parts), 4)):
+                    parent = '/' + '/'.join(parts[:-i])
+                    if parent and len(parent) > 1:
+                        parent_paths_to_probe.add(parent)
+        
+        max_parent_paths = 50
+        if len(parent_paths_to_probe) > max_parent_paths:
+            parent_list = list(parent_paths_to_probe)[:max_parent_paths]
+            parent_paths_to_probe = set(parent_list)
         
         if not parent_paths_to_probe:
             return probed_results
@@ -1819,7 +1840,8 @@ class ScanEngine:
                             source_info={'source': 'api_path_finder'}
                         )
         
-        probed_parent_paths = await self._probe_parent_paths(js_results)
+        all_api_paths = list(existing_paths)
+        probed_parent_paths = await self._probe_parent_paths(js_results, additional_paths=all_api_paths)
         
         for parent_path, sub_endpoints in probed_parent_paths.items():
             for sub_path in sub_endpoints:
