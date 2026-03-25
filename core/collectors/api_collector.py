@@ -475,34 +475,73 @@ class APIRouter:
     
     @classmethod
     def build_api_urls(cls, base_urls: List[str], path_with_api_paths: List[str],
-                       path_with_no_api_paths: List[str]) -> List[str]:
+                       path_with_no_api_paths: List[str], tree_urls: List[str] = None) -> List[str]:
         """
         构建完整的 API URL 列表
         参考 0x727/ChkApi 的 filter_data 函数逻辑
         
         组合方式：
-        1. base_urls + path_with_api_paths + path_with_no_api_paths
-        2. base_urls + path_with_api_paths + COMMON_API_PATHS
-        3. tree_urls + path_with_api_paths + path_with_no_api_paths
-        4. tree_urls + path_with_api_paths + COMMON_API_PATHS
+        1. tree_urls + base_urls 作为根路径（前缀）
+        2. path_with_api_paths 作为 API 路径段（中间）
+        3. path_with_no_api_paths 作为完整路径（后缀）
+        
+        ChkApi 组合逻辑：
+        - tree_urls: 根路径 (http://x.x.x.x:8082/prod-api)
+        - base_urls: Base URL (http://x.x.x.x:8082/prod-api)  
+        - path_with_api_paths: API路径段 (/gateway/api, /marketing_api)
+        - path_with_no_api_paths: 完整路径 (/auth/tenant/list)
+        
+        示例：
+        - tree_url: http://x.x.x.x:8082
+        - base_url: http://x.x.x.x:8082/prod-api
+        - path_with_api_path: /api
+        - path_with_no_api_path: /users/list
+        
+        组合结果：
+        - http://x.x.x.x:8082/prod-api/api/users/list
+        - http://x.x.x.x:8082/api/users/list
         """
         api_urls = set()
+        
+        tree_urls = tree_urls or []
         
         if not path_with_api_paths:
             path_with_api_paths = ['/api']
         
-        for base in base_urls:
-            base_clean = base.rstrip('/')
+        all_prefix_urls = list(set(tree_urls + base_urls))
+        
+        all_api_base_urls = set()
+        for prefix in all_prefix_urls:
+            prefix_clean = prefix.rstrip('/')
             for api_path in path_with_api_paths:
                 api_path_clean = api_path.lstrip('/')
-                for no_api_path in path_with_no_api_paths:
-                    no_api_clean = no_api_path.lstrip('/') if no_api_path.startswith('/') else no_api_path
-                    url = f"{base_clean}/{api_path_clean}/{no_api_clean}"
-                    api_urls.add(url)
+                if api_path_clean:
+                    full_base = f"{prefix_clean}/{api_path_clean}"
+                else:
+                    full_base = prefix_clean
+                all_api_base_urls.add(full_base)
+        
+        if not all_api_base_urls:
+            all_api_base_urls = {''}
+        
+        for api_base in all_api_base_urls:
+            api_base_clean = api_base.rstrip('/')
+            
+            for no_api_path in path_with_no_api_paths:
+                no_api_clean = no_api_path.lstrip('/') if no_api_path.startswith('/') else no_api_path
                 
-                for common_path in COMMON_API_PATHS:
-                    url = f"{base_clean}/{api_path_clean}/{common_path}"
+                if no_api_clean:
+                    url = f"{api_base_clean}/{no_api_clean}"
+                else:
+                    url = api_base_clean
+                
+                if url:
                     api_urls.add(url)
+            
+            for common_path in COMMON_API_PATHS:
+                common_clean = common_path.lstrip('/') if common_path.startswith('/') else common_path
+                url = f"{api_base_clean}/{common_clean}"
+                api_urls.add(url)
         
         return list(api_urls)
     
