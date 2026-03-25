@@ -263,11 +263,27 @@ class DiscoverAgent(AgentInterface):
         base_domain = f"{parsed.scheme}://{parsed.netloc}"
         
         for base in self.base_urls:
+            base_clean = base_domain
+            if base.startswith(base_domain):
+                base_clean = base_domain
+            elif base.startswith('http'):
+                try:
+                    base_clean = f"{urlparse(base).scheme}://{urlparse(base).netloc}"
+                except Exception:
+                    base_clean = base_domain
+            
             for api_path in path_with_api:
                 for no_api_path in path_with_no_api:
-                    full_url = f"{base}{api_path}{no_api_path}"
+                    api_clean = api_path.lstrip('/')
+                    no_api_clean = no_api_path.lstrip('/') if no_api_path.startswith('/') else no_api_path
+                    
+                    if no_api_clean:
+                        full_url = f"{base_clean}/{api_clean}/{no_api_clean}"
+                    else:
+                        full_url = f"{base_clean}/{api_clean}"
+                    
                     endpoint = APIEndpoint(
-                        path=f"{api_path}{no_api_path}",
+                        path=f"/{api_clean}/{no_api_clean}" if no_api_clean else f"/{api_clean}",
                         method='GET',
                         source='base-combine',
                         full_url=full_url,
