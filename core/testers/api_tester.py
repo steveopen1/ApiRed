@@ -6,6 +6,7 @@ API Request Tester
 
 import json
 import time
+import asyncio
 import logging
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
@@ -213,22 +214,112 @@ class APIRequestTester:
         return results
 
 
+class PreProbeTester:
+    """
+    PreProbe 预探测器
+    
+    在大量扫描前先用 HEAD 请求快速探测哪些URL是活跃的
+    参考 0x727/ChkApi apiUrlReqWithParameter.py 的 _preprobe_responsive_urls
+    """
+    
+    DEFAULT_OK_CODES = set(list(range(200, 400)) + [401, 403, 405, 500])
+    
+    def __init__(self, http_client=None, timeout: int = 2):
+        self.http_client = http_client
+        self.timeout = timeout
+        self.responsive_urls: Set[str] = set()
+    
+    async def _probe_single(self, url: str, headers: Dict = None) -> bool:
+        """探测单个 URL 是否响应"""
+        try:
+            response = await self.http_client.request(
+                url,
+                method='HEAD',
+                headers=headers,
+                timeout=self.timeout
+            )
+            return response.status_code in self.DEFAULT_OK_CODES
+        except Exception:
+            return False
+    
+    async def probe_urls(self, urls: List[str], headers: Dict = None, budget: int = 128) -> Set[str]:
+        """
+        预探测 URLs
+        
+        Args:
+            urls: URL 列表
+            headers: 请求头
+            budget: 最多探测数量
+            
+        Returns:
+            会响应的 URL 集合
+        """
+        if not urls or budget <= 0:
+            return set()
+        
+        urls_to_probe = urls[:min(budget, len(urls))]
+        responsive = set()
+        
+        tasks = [self._probe_single(url, headers) for url in urls_to_probe]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for url, result in zip(urls_to_probe, results):
+            if isinstance(result, bool) and result:
+                responsive.add(url)
+        
+        self.responsive_urls = responsive
+        return responsive
+    
+    def prioritize_urls(self, urls: List[str]) -> List[str]:
+        """
+        根据预探测结果优先处理会响应的 URL
+        
+        Args:
+            urls: 原始 URL 列表
+            
+        Returns:
+            排序后的 URL 列表（活跃的在前）
+        """
+        if not self.responsive_urls:
+            return list(urls)
+        
+        prioritized = []
+        for url in urls:
+            if url in self.responsive_urls:
+                prioritized.append(url)
+        
+        for url in urls:
+            if url not in self.responsive_urls:
+                prioritized.append(url)
+        
+        return prioritized
+
+
 class MultiThreadedTester:
     """
     多线程 API 测试器
     模仿 0x727/ChkApi 的 300 线程设计
+    支持 PreProbe 优化
     """
     
-    def __init__(self, http_client=None, max_workers: int = 300):
+    def __init__(self, http_client=None, max_workers: int = 300, preprobe_budget: int = 128):
         self.http_client = http_client
         self.max_workers = max_workers
+        self.preprobe_budget = preprobe_budget
+        self.preprobe_tester = PreProbeTester(http_client)
         self.tester = APIRequestTester(http_client)
         self.results: List[APIRequestResult] = []
         self.failed_urls: List[str] = []
+        self.preprobe_enabled = True
+        self.preprobe_threshold = 100
     
     def test_urls(self, urls: List[str], params: Dict = None, headers: Dict = None) -> List[APIRequestResult]:
         """
         多线程测试 URL 列表
+        
+        支持 PreProbe 优化：
+        1. 如果 URL 数量超过阈值，先预探测活跃 URL
+        2. 优先处理会响应的 URL
         
         Args:
             urls: URL 列表
@@ -238,13 +329,33 @@ class MultiThreadedTester:
         Returns:
             所有结果
         """
+        urls_to_test = list(urls)
+        
+        if (self.preprobe_enabled and 
+            len(urls_to_test) >= self.preprobe_threshold and 
+            self.preprobe_budget > 0):
+            
+            logger.info(f"PreProbe enabled: testing {len(urls_to_test)} URLs, probing {self.preprobe_budget} first...")
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                responsive = loop.run_until_complete(
+                    self.preprobe_tester.probe_urls(urls_to_test, headers, self.preprobe_budget)
+                )
+                logger.info(f"PreProbe found {len(responsive)} responsive URLs")
+                
+                urls_to_test = self.preprobe_tester.prioritize_urls(urls_to_test)
+            finally:
+                loop.close()
+        
         all_results = []
         failed = []
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(self._test_single, url, params, headers): url
-                for url in urls
+                for url in urls_to_test
             }
             
             for future in as_completed(futures):
