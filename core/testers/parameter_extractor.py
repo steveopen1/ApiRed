@@ -28,11 +28,67 @@ class APIParameterExtractor:
     1. 从 JSON 响应中提取 key 作为参数
     2. 从错误信息中提取参数名
     3. 从请求参数中学习
+    
+    参考 0x727/ChkApi getParameter.py 的参数提取模式
     """
     
     def __init__(self):
         self.extracted_params: Set[str] = set()
         self.param_types: Dict[str, str] = {}
+        
+        self.english_error_patterns = [
+            (r"'(.+?)' parameter", "parameter"),
+            (r'"(.+?)" parameter', "parameter"),
+            (r'(.+?) parameter', "parameter"),
+            (r'\((.+?)[=]*\) parameter', "parameter"),
+            (r"parameter '(.+?)'", "parameter"),
+            (r'parameter "(.+?)"', "parameter"),
+            (r'param \'([a-zA-Z]+)\'', "param"),
+            (r'param "([a-zA-Z]+)"', "param"),
+            (r'param ([a-zA-Z]+)', "param"),
+        ]
+        
+        self.chinese_error_keywords = ["不能为空", "非法的", "参数", "必填", "缺少", "缺失", "无效", "错误"]
+        
+        self.error_patterns = [
+            (r"'(.+?)' (?:is required|must be provided)", "required_field"),
+            (r"parameter '(.+?)'", "parameter"),
+            (r"field (.+?) is required", "required_field"),
+            (r"(.+?) cannot be null", "not_null"),
+            (r"(.+?) is missing", "missing_field"),
+            (r"invalid (.+?)", "invalid_field"),
+            (r"'(.+?)' parameter", "parameter"),
+        ]
+        
+        self.value_patterns = [
+            (r'"param"\s*:\s*"([^"]+)"', "param_value"),
+            (r'"parameter"\s*:\s*"([^"]+)"', "parameter_value"),
+        ]
+        
+        self._compile_chinese_pattern()
+    
+    def _compile_chinese_pattern(self):
+        """预编译中文参数提取模式"""
+        import re
+        chinese_part = '|'.join(self.chinese_error_keywords)
+        
+        english_param_with_chinese = [
+            r"'([a-zA-Z_][a-zA-Z0-9_]*)'\s*(?:{})".format(chinese_part),
+            r"\"([a-zA-Z_][a-zA-Z0-9_]*)\"\s*(?:{})".format(chinese_part),
+            r"(?:{})\s*'?([a-zA-Z_][a-zA-Z0-9_]*)'?".format(chinese_part),
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:{})".format(chinese_part),
+        ]
+        
+        self._chinese_patterns = [re.compile(p, re.IGNORECASE) for p in english_param_with_chinese]
+        
+        self.chinese_error_keywords = ["不能为空", "非法的", "参数", "必填", "缺少", "缺失", "无效"]
+        
+        chinese_pattern_parts = '|'.join(self.chinese_error_keywords)
+        self.chinese_error_pattern = re.compile(
+            r"(['\"]?)([a-zA-Z_][a-zA-Z0-9_]*)\1\s*(?:{})|(?:(?:{})\s*['\"]?([a-zA-Z_][a-zA-Z0-9_]*?)['\"]?)".format(
+                chinese_pattern_parts, chinese_pattern_parts
+            )
+        )
         
         self.error_patterns = [
             (r"'(.+?)' (?:is required|must be provided)", "required_field"),
@@ -114,6 +170,36 @@ class APIParameterExtractor:
                         name=param_name,
                         param_type="error",
                         source=f"error_{pattern_type}",
+                        confidence=0.7,
+                        example_value=None
+                    ))
+        
+        for pattern, pattern_type in self.english_error_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                param_name = match.group(1).strip()
+                
+                if param_name and param_name not in self.extracted_params:
+                    self.extracted_params.add(param_name)
+                    
+                    params.append(ExtractedParameter(
+                        name=param_name,
+                        param_type="error",
+                        source=f"error_{pattern_type}",
+                        confidence=0.7,
+                        example_value=None
+                    ))
+        
+        for pattern in self._chinese_patterns:
+            matches = pattern.findall(text)
+            for param_name in matches:
+                if param_name and param_name not in self.extracted_params:
+                    self.extracted_params.add(param_name)
+                    
+                    params.append(ExtractedParameter(
+                        name=param_name,
+                        param_type="error",
+                        source="chinese_error",
                         confidence=0.7,
                         example_value=None
                     ))
