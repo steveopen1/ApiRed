@@ -358,7 +358,12 @@ class ResponseBaselineLearner:
             '<html', '<!doctype', '<title>',
             'page not found', '404', '500 error',
             'internal server error', 'forbidden',
-            'access denied', 'unauthorized'
+            'access denied', 'unauthorized',
+            '安全卫士', '应用防护平台', 'waf', '云防护',
+            '您的请求带有不法参数', '已被安全卫士拦截',
+            '请求拦截', '访问拦截', 'attackType',
+            'xss', 'sql injection', 'webshell',
+            'protected', 'defense', 'guard'
         ]
         
         positive_patterns = [

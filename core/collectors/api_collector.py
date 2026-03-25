@@ -854,13 +854,65 @@ class APIPathCombiner:
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/',
         'example.com',
         'www.example.com',
+        'https:',
+        'http:',
+        '://',
+        'lib/index',
+        '/dist/',
+        '/build/',
+        '/node_modules/',
+        '.js',
+        '.css',
+        '.html',
+        '.json',
+        '.png',
+        '.jpg',
+        '.svg',
+        'data:',
+        'javascript:',
+        'void(',
+        'undefined',
+        'null',
     ]
+    
+    INVALID_PATH_PATTERNS = [
+        r'^https:$',
+        r'^http:$', 
+        r'^//$',
+        r'^[a-z]:[/\\]?$',
+        r'^lib/',
+        r'^dist/',
+        r'^build/',
+        r'^src/',
+        r'^assets/',
+        r'^static/',
+        r'^public/',
+        r'\.min\.(js|css)$',
+        r'^M/D/YY$',
+        r'^YYYY-MM-DD$',
+        r'^\d{1,2}:\d{2}$',
+        r'^#[0-9a-fA-F]{3,6}$',
+        r'^[0-9a-fA-F]{3,6}$',
+        r'^\d+$',
+        r'^[A-Z]{1,2}\d{1,4}[A-Z]?$',
+    ]
+    
+    INVALID_PATH_PATTERNS_COMPILED = None
     
     @classmethod
     def is_valid_api_path(cls, path: str) -> bool:
         """验证API路径是否有效"""
         if not path:
             return False
+        
+        import re
+        if cls.INVALID_PATH_PATTERNS_COMPILED is None:
+            cls.INVALID_PATH_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in cls.INVALID_PATH_PATTERNS]
+        
+        for pattern in cls.INVALID_PATH_PATTERNS_COMPILED:
+            if pattern.match(path):
+                return False
+        
         path_lower = path.lower()
         for pattern in cls.INVALID_PATTERNS:
             if pattern.lower() in path_lower:
@@ -870,6 +922,8 @@ class APIPathCombiner:
         if path.startswith('data:'):
             return False
         if path.startswith('javascript:'):
+            return False
+        if '/' not in path and len(path) < 4:
             return False
         return True
     
