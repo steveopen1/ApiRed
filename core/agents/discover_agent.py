@@ -40,7 +40,8 @@ class DiscoverAgent(AgentInterface):
     async def initialize(self, context: ScanContext) -> None:
         """初始化发现代理"""
         await super().initialize(context)
-        self._browser = HeadlessBrowserCollector(context.target)
+        from ..collectors.browser_collector import create_browser_collector
+        self._browser = await create_browser_collector({'target': context.target})
         self._framework_detector = FrameworkDetector()
         self._response_cluster = ResponseCluster()
     
