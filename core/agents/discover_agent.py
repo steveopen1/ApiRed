@@ -203,24 +203,45 @@ class DiscoverAgent(AgentInterface):
         target: str, 
         existing_endpoints: List[APIEndpoint]
     ) -> List[APIEndpoint]:
-        """基于 Base URL 组合发现更多端点"""
+        """基于 Base URL 组合发现更多端点，支持 AI 语义增强分类"""
         endpoints = []
         
         path_with_api = set()
         path_with_no_api = set()
         
+        all_urls = []
         for ep in existing_endpoints:
-            path = ep.path.lower()
-            if '/api' in path or '/v1' in path or '/v2' in path:
-                path_parts = path.split('/')
-                for i, part in enumerate(path_parts):
-                    if part in ['api', 'v1', 'v2', 'v3']:
-                        base_path = '/'.join(path_parts[:i])
-                        if base_path:
-                            self.base_urls.add(base_path)
-                        path_with_api.add(path)
-            else:
-                path_with_no_api.add(path)
+            if ep.full_url:
+                all_urls.append(ep.full_url)
+            elif ep.path:
+                parsed = urlparse(target)
+                base = f"{parsed.scheme}://{parsed.netloc}"
+                all_urls.append(base + ep.path)
+        
+        if all_urls and self.ai_enabled and self.llm_client:
+            try:
+                classification_result = await APIRouter.auto_classify_urls_with_ai(all_urls, self.llm_client)
+                if classification_result and classification_result.get('_method') == 'ai':
+                    logger.info(f"DiscoverAgent: Using AI-enhanced URL classification, identified: {classification_result.get('_identified_keywords', [])}")
+                    path_with_api.update(classification_result.get('path_with_api_paths', []))
+                    path_with_no_api.update(classification_result.get('path_with_no_api_paths', []))
+                    self.base_urls.update(classification_result.get('base_urls', []))
+            except Exception as e:
+                logger.debug(f"AI classification failed, using rule-based: {e}")
+        
+        if not path_with_api:
+            for ep in existing_endpoints:
+                path = ep.path.lower()
+                if '/api' in path or '/v1' in path or '/v2' in path:
+                    path_parts = path.split('/')
+                    for i, part in enumerate(path_parts):
+                        if part in ['api', 'v1', 'v2', 'v3']:
+                            base_path = '/'.join(path_parts[:i])
+                            if base_path:
+                                self.base_urls.add(base_path)
+                            path_with_api.add(path)
+                else:
+                    path_with_no_api.add(path)
         
         if not path_with_api:
             path_with_api.add('/api')
@@ -231,9 +252,9 @@ class DiscoverAgent(AgentInterface):
         for base in self.base_urls:
             for api_path in path_with_api:
                 for no_api_path in path_with_no_api:
-                    full_url = f"{base_domain}{base}{api_path}{no_api_path}"
+                    full_url = f"{base}{api_path}{no_api_path}"
                     endpoint = APIEndpoint(
-                        path=f"{base}{api_path}{no_api_path}",
+                        path=f"{api_path}{no_api_path}",
                         method='GET',
                         source='base-combine',
                         full_url=full_url,
