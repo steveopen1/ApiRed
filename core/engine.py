@@ -2680,6 +2680,15 @@ class ScanEngine:
             attack_chain_exporter.generate_html_report(self.result, html_path)
         except Exception as e:
                 logger.error(f"Attack chain export error: {e}")
+        
+        try:
+            from .exporters.report_exporter import FLUXHtmlReporter
+            flux_html_path = os.path.join(self.config.output_dir, folder_name, 'flux_report.html')
+            flux_reporter = FLUXHtmlReporter()
+            flux_reporter.export(scan_dict, flux_html_path)
+            logger.info(f"[FLUX] FLUX HTML 报告已生成: {flux_html_path}")
+        except Exception as e:
+            logger.error(f"FLUX HTML export error: {e}")
     
     async def _save_checkpoint(self):
         """保存检查点"""
