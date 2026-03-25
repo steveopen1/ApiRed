@@ -450,11 +450,17 @@ class HeadlessBrowserCollector:
                 await self.context.close()
             if self.browser:
                 await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()
         except Exception as e:
             logger.warning(f"关闭浏览器异常: {e}")
             pass
+    
+    def get_js_urls(self) -> List[str]:
+        """获取收集到的 JS 文件 URLs"""
+        return list(self.js_files)
+    
+    async def cleanup(self) -> None:
+        """清理资源"""
+        await self.close()
 
 
 async def create_browser_collector(config: Optional[Dict] = None) -> HeadlessBrowserCollector:

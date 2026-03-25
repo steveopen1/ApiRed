@@ -104,7 +104,7 @@ class DiscoverAgent(AgentInterface):
         
         try:
             if self._browser:
-                js_urls = await self._browser.collect_js_urls(target)
+                js_urls = self._browser.get_js_urls()
                 self.js_urls.update(js_urls)
             
             parser = JSParser()
