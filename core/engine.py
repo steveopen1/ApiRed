@@ -37,7 +37,7 @@ from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
 from .observability import RunProfiler
 
 from .fingerprint import FingerprintEngine, FingerprintResult
-from .endpoint_fusion import EndpointFusionEngine, FusedEndpoint, SourceType, EndpointType
+from .collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator, EnhancedEndpoint, SourceType, EndpointType
 from .secret_matcher import SecretMatcher, SecretMatch, SecretType, RiskLevel
 from .vuln_prioritizer import VulnPrioritizer, VulnCandidate, VulnPriority, VulnCategory
 from .waf_detector import WAFDetector, WAFBypass, WAFResult
@@ -238,7 +238,7 @@ class ScanEngine:
         self._profiler = RunProfiler()
         
         self._fingerprint_engine: Optional[FingerprintEngine] = None
-        self._endpoint_fusion_engine: Optional[EndpointFusionEngine] = None
+        self._endpoint_fusion_engine: Optional[EnhancedEndpointAggregator] = None
         self._secret_matcher: Optional[SecretMatcher] = None
         self._vuln_prioritizer: Optional[VulnPrioritizer] = None
         self._waf_detector: Optional[WAFDetector] = None
@@ -345,7 +345,7 @@ class ScanEngine:
             self._fingerprint_engine = FingerprintEngine(session=requests_session)
             logger.info(f"指纹引擎已加载: {len(self._fingerprint_engine.get_fingerprints())} 条规则")
             
-            self._endpoint_fusion_engine = EndpointFusionEngine()
+            self._endpoint_fusion_engine = EnhancedEndpointAggregator()
             self._secret_matcher = SecretMatcher()
             self._vuln_prioritizer = VulnPrioritizer()
             self._waf_detector = WAFDetector()
@@ -2176,15 +2176,31 @@ class ScanEngine:
             if self._endpoint_fusion_engine:
                 try:
                     for endpoint in (self.result.api_endpoints if self.result else []):
-                        self._endpoint_fusion_engine.add_endpoint(
+                        source_type_val = getattr(endpoint, 'source_type', 'unknown')
+                        try:
+                            from .collectors.enhanced_endpoint_aggregator import SourceType as FluxSourceType
+                            source_type = FluxSourceType(source_type_val) if source_type_val else FluxSourceType.UNKNOWN
+                        except (ValueError, AttributeError):
+                            source_type = None
+                        
+                        is_high_value = getattr(endpoint, 'is_high_value', False)
+                        status_code_val = getattr(endpoint, 'status_code', 0) if is_high_value else 0
+                        
+                        ep = self._endpoint_fusion_engine.add_endpoint(
                             url=endpoint.full_url,
                             method=endpoint.method,
-                            source_type=getattr(endpoint, 'source_type', None),
-                            confidence='medium'
+                            source_type=source_type,
+                            source_url='',
+                            confidence='medium',
+                            runtime_observed=is_high_value,
+                            status_code=status_code_val,
                         )
                     fusion_report = self._endpoint_fusion_engine.get_fusion_report()
                     flux_results['fusion_endpoints'] = fusion_report
-                    logger.info(f"[FLUX] 端点融合完成: 融合后 {fusion_report.get('total_endpoints', 0)} 个端点")
+                    
+                    high_value_count = len(fusion_report.get('high_confidence_endpoints', []))
+                    runtime_count = fusion_report.get('runtime_confirmed_count', 0)
+                    logger.info(f"[FLUX] 端点融合完成: 融合后 {fusion_report.get('total_endpoints', 0)} 个端点, 高置信度 {high_value_count}, 运行时确认 {runtime_count}")
                 except Exception as e:
                     logger.debug(f"[FLUX] 端点融合失败: {e}")
             
