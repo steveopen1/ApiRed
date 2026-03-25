@@ -2203,10 +2203,46 @@ class ScanEngine:
             if self.result:
                 self.result.sensitive_data.append(sensitive_data)
         
+        self._process_sensitive_resources_from_js()
+        
         return {
             'sensitive_count': len(sensitive_findings),
             'findings': [f.to_dict() for f in sensitive_findings]
         }
+    
+    def _process_sensitive_resources_from_js(self):
+        """处理从 JS/HTML 中提取的敏感资源"""
+        if not self._collector_results or 'js' not in self._collector_results:
+            return
+        
+        js_result = self._collector_results['js']
+        
+        inline_sensitive = js_result.get('sensitive_resources', [])
+        response_sensitive = js_result.get('response_sensitive_resources', [])
+        
+        all_sensitive = set(inline_sensitive + response_sensitive)
+        
+        if not all_sensitive:
+            return
+        
+        logger.info(f"Found {len(all_sensitive)} sensitive resources from JS/HTML")
+        
+        from .models import SensitiveData
+        for resource_path in all_sensitive:
+            if not resource_path:
+                continue
+            
+            sensitive_data = SensitiveData(
+                api_id=resource_path,
+                data_type='sensitive_resource',
+                matches=[resource_path],
+                severity='medium',
+                evidence=resource_path,
+                context='JS/HTML extraction',
+                location=resource_path
+            )
+            if self.result:
+                self.result.sensitive_data.append(sensitive_data)
     
     async def _flux_enhanced_detection(self):
         """
