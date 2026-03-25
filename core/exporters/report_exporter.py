@@ -135,7 +135,7 @@ class APIPathExporter:
     """API 路径纯文本导出器"""
     
     def export(self, data: Dict, output_path: str) -> bool:
-        """导出为纯文本格式，按状态码分类"""
+        """导出为纯文本格式，按响应类型+状态码分类"""
         try:
             lines = []
             lines.append("# ApiRed API Paths")
@@ -147,22 +147,11 @@ class APIPathExporter:
             
             lines.append(f"# Total APIs: {len(api_endpoints)}")
             
-            status_code_groups = {
-                '2xx': [],
-                '301': [],
-                '302': [],
-                '401': [],
-                '403': [],
-                '404': [],
-                '500': [],
-                '502': [],
-                '503': [],
-                'other': [],
-                'unknown': []
-            }
+            response_type_groups = {}
             
             for api in api_endpoints:
                 status_code = api.get('status_code', 0)
+                response_type = api.get('response_type', 'UNKNOWN') or 'UNKNOWN'
                 method = api.get('method', 'GET')
                 path = api.get('path', '')
                 
@@ -171,138 +160,54 @@ class APIPathExporter:
                 else:
                     entry = f"{method}\t/{path}"
                 
-                if status_code == 0:
-                    status_code_groups['unknown'].append(entry)
-                elif 200 <= status_code < 300:
-                    status_code_groups['2xx'].append(entry)
-                elif status_code == 301:
-                    status_code_groups['301'].append(entry)
-                elif status_code == 302:
-                    status_code_groups['302'].append(entry)
-                elif status_code == 401:
-                    status_code_groups['401'].append(entry)
-                elif status_code == 403:
-                    status_code_groups['403'].append(entry)
-                elif status_code == 404:
-                    status_code_groups['404'].append(entry)
-                elif status_code == 500:
-                    status_code_groups['500'].append(entry)
-                elif status_code == 502:
-                    status_code_groups['502'].append(entry)
-                elif status_code == 503:
-                    status_code_groups['503'].append(entry)
-                else:
-                    status_code_groups['other'].append(entry)
+                key = f"{response_type}|{status_code}"
+                if key not in response_type_groups:
+                    response_type_groups[key] = []
+                response_type_groups[key].append(entry)
             
             lines.append("")
             lines.append("# " + "=" * 70)
-            lines.append("# Status Code Summary")
+            lines.append("# Response Type + Status Code Summary")
             lines.append("# " + "=" * 70)
-            lines.append(f"# 2xx (成功):      {len(status_code_groups['2xx'])}")
-            lines.append(f"# 301 (重定向):    {len(status_code_groups['301'])}")
-            lines.append(f"# 302 (重定向):    {len(status_code_groups['302'])}")
-            lines.append(f"# 401 (未授权):    {len(status_code_groups['401'])}")
-            lines.append(f"# 403 (禁止):      {len(status_code_groups['403'])}")
-            lines.append(f"# 404 (未找到):    {len(status_code_groups['404'])}")
-            lines.append(f"# 500 (服务器错误): {len(status_code_groups['500'])}")
-            lines.append(f"# 502 (网关错误):  {len(status_code_groups['502'])}")
-            lines.append(f"# 503 (服务不可用): {len(status_code_groups['503'])}")
-            lines.append(f"# Other (其他):     {len(status_code_groups['other'])}")
-            lines.append(f"# Unknown (未测试): {len(status_code_groups['unknown'])}")
+            
+            for key in sorted(response_type_groups.keys()):
+                parts = key.split('|')
+                resp_type = parts[0]
+                status = parts[1] if len(parts) > 1 else '0'
+                count = len(response_type_groups[key])
+                lines.append(f"# {resp_type:12} | {status:6} | {count:6}")
+            
             lines.append("")
             
-            if status_code_groups['2xx']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 2xx - 成功响应 (200-299)")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['2xx'])):
-                    lines.append(entry)
-                lines.append("")
+            priority_order = ['JSON', 'XML', 'TEXT', 'HTML', 'JS', 'CSS', 'IMAGE', 'FONT', 'BINARY', 'UNKNOWN']
+            status_priority = ['200', '201', '204', '301', '302', '400', '401', '403', '404', '500', '502', '503', '0']
             
-            if status_code_groups['301']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 301 - 永久重定向")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['301'])):
-                    lines.append(entry)
-                lines.append("")
+            def sort_key(item):
+                key = item[0]
+                parts = key.split('|')
+                resp_type = parts[0]
+                status = parts[1] if len(parts) > 1 else '0'
+                type_idx = priority_order.index(resp_type) if resp_type in priority_order else len(priority_order)
+                status_idx = status_priority.index(status) if status in status_priority else len(status_priority)
+                return (type_idx, status_idx)
             
-            if status_code_groups['302']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 302 - 临时重定向")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['302'])):
-                    lines.append(entry)
-                lines.append("")
+            sorted_groups = sorted(response_type_groups.items(), key=sort_key)
             
-            if status_code_groups['401']:
+            for key, entries in sorted_groups:
+                parts = key.split('|')
+                resp_type = parts[0]
+                status = parts[1] if len(parts) > 1 else '0'
+                
+                status_desc = self._get_status_description(int(status) if status.isdigit() else 0)
                 lines.append("# " + "=" * 70)
-                lines.append("# 401 - 需要认证/未授权")
+                lines.append(f"# {resp_type} | {status} {status_desc}")
                 lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['401'])):
+                
+                for entry in sorted(set(entries))[:500]:
                     lines.append(entry)
-                lines.append("")
-            
-            if status_code_groups['403']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 403 - 禁止访问")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['403'])):
-                    lines.append(entry)
-                lines.append("")
-            
-            if status_code_groups['404']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 404 - 未找到")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['404']))[:500]:
-                    lines.append(entry)
-                if len(status_code_groups['404']) > 500:
-                    lines.append(f"# ... and {len(status_code_groups['404']) - 500} more 404 paths")
-                lines.append("")
-            
-            if status_code_groups['500']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 500 - 服务器内部错误")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['500'])):
-                    lines.append(entry)
-                lines.append("")
-            
-            if status_code_groups['502']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 502 - 网关错误")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['502'])):
-                    lines.append(entry)
-                lines.append("")
-            
-            if status_code_groups['503']:
-                lines.append("# " + "=" * 70)
-                lines.append("# 503 - 服务不可用")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['503'])):
-                    lines.append(entry)
-                lines.append("")
-            
-            if status_code_groups['other']:
-                lines.append("# " + "=" * 70)
-                lines.append("# Other - 其他状态码")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['other']))[:500]:
-                    lines.append(entry)
-                if len(status_code_groups['other']) > 500:
-                    lines.append(f"# ... and {len(status_code_groups['other']) - 500} more paths")
-                lines.append("")
-            
-            if status_code_groups['unknown']:
-                lines.append("# " + "=" * 70)
-                lines.append("# Unknown - 未测试 (无响应)")
-                lines.append("# " + "=" * 70)
-                for entry in sorted(set(status_code_groups['unknown']))[:500]:
-                    lines.append(entry)
-                if len(status_code_groups['unknown']) > 500:
-                    lines.append(f"# ... and {len(status_code_groups['unknown']) - 500} more paths")
+                
+                if len(entries) > 500:
+                    lines.append(f"# ... and {len(entries) - 500} more {resp_type}|{status} paths")
                 lines.append("")
             
             lines.append("# End of API Paths")
@@ -315,6 +220,25 @@ class APIPathExporter:
         except Exception as e:
             logger.error(f"API path export error: {e}")
             return False
+    
+    def _get_status_description(self, status_code: int) -> str:
+        """获取状态码描述"""
+        descriptions = {
+            200: "OK",
+            201: "Created",
+            204: "No Content",
+            301: "Moved Permanently",
+            302: "Found",
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            500: "Internal Server Error",
+            502: "Bad Gateway",
+            503: "Service Unavailable",
+            0: "No Response"
+        }
+        return descriptions.get(status_code, "")
 
 
 class CSVExporter:

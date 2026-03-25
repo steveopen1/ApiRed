@@ -1703,6 +1703,50 @@ class ScanEngine:
         
         return path
     
+    def _detect_response_type(self, response) -> str:
+        """检测响应类型"""
+        content_type = ""
+        if hasattr(response, 'headers') and response.headers:
+            content_type = response.headers.get('Content-Type', '') or response.headers.get('content-type', '')
+        
+        if not content_type and hasattr(response, 'content') and response.content:
+            content = response.content[:200] if len(response.content) > 200 else response.content
+            if isinstance(content, bytes):
+                content = content.decode('utf-8', errors='ignore')
+            
+            if content.startswith('{') or content.startswith('['):
+                return "JSON"
+            elif content.startswith('<!DOCTYPE') or content.startswith('<html'):
+                return "HTML"
+            elif content.startswith('<?xml'):
+                return "XML"
+            elif content.startswith('<'):
+                return "XML"
+        
+        content_type_lower = content_type.lower()
+        if 'json' in content_type_lower:
+            return "JSON"
+        elif 'html' in content_type_lower:
+            return "HTML"
+        elif 'xml' in content_type_lower:
+            return "XML"
+        elif 'text' in content_type_lower:
+            return "TEXT"
+        elif 'javascript' in content_type_lower:
+            return "JS"
+        elif 'css' in content_type_lower:
+            return "CSS"
+        elif 'image' in content_type_lower:
+            return "IMAGE"
+        elif 'font' in content_type_lower:
+            return "FONT"
+        elif 'octet-stream' in content_type_lower or 'binary' in content_type_lower:
+            return "BINARY"
+        elif content_type:
+            return content_type.split(';')[0].strip()
+        
+        return "UNKNOWN"
+    
     def _generate_cross_fuzz_targets(self, path_segments: set, suffixes: set) -> List[Tuple[str, str]]:
         """
         生成跨来源Fuzzing目标组合
@@ -2140,6 +2184,7 @@ class ScanEngine:
                         from .models import APIStatus
                         endpoint.status = APIStatus.ALIVE
                         endpoint.status_code = response.status_code
+                        endpoint.response_type = self._detect_response_type(response)
                         
                         if self._api_scorer:
                             self._api_scorer.add_evidence(
