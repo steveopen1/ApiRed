@@ -810,7 +810,9 @@ class ScanEngine:
             'finder_api_paths': finder_api_paths,
             'js_params': list(js_params),
             'ast_routes': list(ast_routes),
-            'env_configs': dict(env_configs)
+            'env_configs': dict(env_configs),
+            'sensitive_resources': list(all_extracted.get('sensitive_resources', [])),
+            'response_sensitive_resources': list(all_discovered.get('sensitive_resources', []))
         }
     
     async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
