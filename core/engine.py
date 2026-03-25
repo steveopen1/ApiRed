@@ -639,6 +639,30 @@ class ScanEngine:
                             js_parser.parse(js_content, js_url)
                         except Exception as e:
                             logger.debug(f"JS parse error for {js_url}: {e}")
+                        
+                        if self._js_resolver:
+                            try:
+                                js_resolver_records = self._js_resolver.extract_from_js(js_content, js_url)
+                                if js_resolver_records:
+                                    for record in js_resolver_records[:50]:
+                                        js_resolver_url = record.url
+                                        if js_resolver_url and js_resolver_url not in js_urls:
+                                            js_urls.append(js_resolver_url)
+                                            try:
+                                                js_resolver_response = await self._http_client.request(js_resolver_url)
+                                                if js_resolver_response.status_code == 200:
+                                                    resolver_content = js_resolver_response.content
+                                                    if isinstance(resolver_content, str):
+                                                        resolver_content = resolver_content.encode('utf-8')
+                                                    js_content_all += resolver_content.decode('utf-8', errors='ignore') + "\n"
+                                                    alive_js.append({
+                                                        'url': js_resolver_url,
+                                                        'content': resolver_content
+                                                    })
+                                            except Exception as e:
+                                                logger.debug(f"JSResolver fetch error for {js_resolver_url}: {e}")
+                            except Exception as e:
+                                logger.debug(f"JSResolver error for {js_url}: {e}")
                 except Exception as e:
                     logger.debug(f"JS request error for {js_url}: {e}")
         
@@ -2603,6 +2627,21 @@ class ScanEngine:
             return
         
         scan_dict = self.result.to_dict()
+        
+        if hasattr(self, '_flux_results') and self._flux_results:
+            scan_dict['flux_enhanced'] = {
+                'fingerprints': self._flux_results.get('fingerprints', []),
+                'waf_detected': self._flux_results.get('waf_detected'),
+                'sensitive_data': self._flux_results.get('flux_sensitive', []),
+                'ai_security': self._flux_results.get('ai_findings', []),
+                'k8s_security': self._flux_results.get('k8s_findings', []),
+                'container_security': self._flux_results.get('container_findings', []),
+                'cicd_security': self._flux_results.get('cicd_findings', []),
+                'cloud_security': self._flux_results.get('cloud_findings', []),
+                'endpoint_fusion': self._flux_results.get('fusion_endpoints', {}),
+                'prioritized_vulns': self._flux_results.get('prioritized_vulns', []),
+            }
+            logger.info(f"[FLUX] 增强数据已合并到报告: {len(self._flux_results.get('fingerprints', []))} 指纹, {len(self._flux_results.get('flux_sensitive', []))} 敏感信息")
         
         self.file_storage.save_json(scan_dict, 'scan_result.json')
         

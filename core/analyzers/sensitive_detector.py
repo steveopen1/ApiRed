@@ -1,6 +1,7 @@
 """
 Sensitive Detector Module
 两级敏感信息检测模块
+集成 FLUX SecretMatcher 作为增强层
 """
 
 import re
@@ -11,6 +12,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+try:
+    from ..secret_matcher import SecretMatcher, SecretType, RiskLevel
+    SECRET_MATCHER_AVAILABLE = True
+except ImportError:
+    SECRET_MATCHER_AVAILABLE = False
+    logger.debug("SecretMatcher not available, using only regex rules")
 
 
 class Severity(Enum):
@@ -111,6 +119,12 @@ class TwoTierSensitiveDetector:
         self._load_custom_rules()
         self.ai_enabled = self.config.get('ai_enabled', False)
         self.min_confidence = self.config.get('min_confidence', 0.8)
+        
+        if SECRET_MATCHER_AVAILABLE:
+            self.secret_matcher = SecretMatcher()
+            logger.info("TwoTierSensitiveDetector: SecretMatcher integrated as enhancement layer")
+        else:
+            self.secret_matcher = None
     
     def _load_custom_rules(self):
         """加载自定义规则"""
@@ -143,7 +157,7 @@ class TwoTierSensitiveDetector:
                 logger.warning(f"Failed to load custom rules: {e}")
     
     def tier1_scan(self, content: str, url: str = "") -> List[SensitiveFinding]:
-        """第一层：正则扫描"""
+        """第一层：正则扫描 + SecretMatcher增强"""
         findings = []
         
         for rule_name, rule_info in self.tier1_rules.items():
@@ -164,6 +178,31 @@ class TwoTierSensitiveDetector:
                     confidence=0.95
                 )
                 findings.append(finding)
+        
+        if self.secret_matcher and content:
+            try:
+                secret_matches = self.secret_matcher.scan_text(content, url)
+                for match in secret_matches:
+                    if not match.is_likely_false_positive and match.confidence >= self.min_confidence:
+                        severity_map = {
+                            RiskLevel.CRITICAL: Severity.CRITICAL,
+                            RiskLevel.HIGH: Severity.HIGH,
+                            RiskLevel.MEDIUM: Severity.MEDIUM,
+                            RiskLevel.LOW: Severity.LOW
+                        }
+                        finding = SensitiveFinding(
+                            data_type=f"flux_secret_{match.type.value}",
+                            matches=[match.masked_value],
+                            severity=severity_map.get(match.risk_level, Severity.MEDIUM),
+                            evidence=match.evidence[:200] if match.evidence else match.masked_value,
+                            context=match.context[:200] if match.context else '',
+                            location=url,
+                            detection_method='flux_secret_matcher',
+                            confidence=match.confidence
+                        )
+                        findings.append(finding)
+            except Exception as e:
+                logger.debug(f"SecretMatcher scan error: {e}")
         
         return findings
     
