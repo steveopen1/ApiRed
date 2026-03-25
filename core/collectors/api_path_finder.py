@@ -45,12 +45,18 @@ PATH_BLACK_KEYWORDS = [
 
 PATH_BLACK_PATTERNS = [
     r'^//',  # //开头
-    r'^/\d{3}$',  # /401, /404, /500等HTTP状态码
     r'^/\.$',  # /.
     r'^/#',  # /#
-    r'^[a-z],$',  # 单字母逗号 g,
+    r'^/,$',  # /, 单独的逗号
+    r'^/[a-z],$',  # /g, 单字母逗号
+    r'^,[a-z]$',  # ,g 逗号开头
+    r'^[a-z],$',  # g, 单字母逗号
     r'^[a-z]=[a-z]$',  # 单字母等于 g=u
     r'^/[a-z]/[a-z]$',  # /a/b, /a/i
+    r'\.color$',  # CSS属性 .color
+    r'\.style$',  # CSS属性 .style
+    r'^/[^/]*[A-Z][^/]*\.color',  # /xxxColor.color 驼峰命名的CSS属性
+    r'^/[^/]*[A-Z][^/]*\.style',  # /xxxStyle.style 驼峰命名的CSS属性
     r't\.ttl$',  # TTL类文件
     r'/blob/',  # GitHub blob
     r'/tree/',  # GitHub tree
@@ -364,7 +370,7 @@ class ApiPathFinder:
                 continue
             
             for pattern in PATH_BLACK_PATTERNS:
-                if re.match(pattern, clean_line):
+                if re.search(pattern, clean_line):
                     is_blacklisted = True
                     break
             if is_blacklisted:

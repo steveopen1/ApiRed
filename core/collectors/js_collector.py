@@ -853,7 +853,81 @@ class JSParser:
             if resource in js_lower:
                 resources.add(resource)
         
+        suffixes = self._filter_invalid_fragments(list(suffixes), is_suffix=True)
+        resources = self._filter_invalid_fragments(list(resources), is_suffix=False)
+        
         return (list(suffixes), list(resources))
+    
+    def _filter_invalid_fragments(self, fragments: List[str], is_suffix: bool = False) -> List[str]:
+        """
+        过滤无效的片段
+        
+        Args:
+            fragments: 待过滤的片段列表
+            is_suffix: 是否为后缀片段
+            
+        Returns:
+            过滤后的片段列表
+        """
+        invalid_patterns = [
+            '.color', '.style', '.background', '.border', '.margin', '.padding',
+            '.width', '.height', '.size', '.font', '.text', '.align', '.display',
+            '.opacity', '.transform', '.animation', '.transition', '.position',
+            '.zindex', '.overflow', '.visibility', '.cursor', '.gradient',
+            '.shadow', '.radius', '.rotate', '.scale', '.translate',
+            '.header', '.footer', '.sidebar', '.container', '.wrapper',
+            '.content', '.button', '.input', '.form', '.label', '.icon',
+            '.image', '.photo', '.picture', '.video', '.audio', '.media',
+            '.modal', '.dialog', '.tooltip', '.popover', '.dropdown', '.menu',
+            '.nav', '.tab', '.accordion', '.carousel', '.slider', '.scroll',
+            '.loading', '.spinner', '.progress', '.badge', '.alert', '.toast',
+            '.card', '.panel', '.well', '.jumbotron', '.thumbnail', '.media',
+            '.list', '.table', '.row', '.cell', '.column', '.header', '.footer',
+            '.item', '.row', '.element', '.node', '.component', '.module',
+            '.util', '.helper', '.factory', '.service', '.controller', '.directive',
+            '.filter', '.map', '.reduce', '.forEach', '.some', '.every',
+            '.length', '.size', '.count', '.index', '.id', '.key', '.value',
+            '.prototype', '.constructor', '.call', '.apply', '.bind', '.this',
+            '.get', '.set', '.has', '.contains', '.add', '.remove', '.clear',
+        ]
+        
+        css_property_patterns = [
+            r'^[a-z]+[A-Z]',  # camelCase like lineStyle, itemStyle
+            r'.*\.[a-z]+$',   # ending with dot property like .color, .size
+            r'^[a-z]+-[a-z]+$',  # kebab-case
+        ]
+        
+        filtered = []
+        for frag in fragments:
+            frag_lower = frag.lower()
+            frag_stripped = frag_lower.strip()
+            
+            if not frag_stripped or len(frag_stripped) < 2:
+                continue
+            
+            if frag_stripped in (',', '.', '/', '\\', '-', '_', '=', '+', '*', '&', '%', '$', '#', '@', '!', '~', '`', '^', '(', ')', '[', ']', '{', '}', '|', ';', ':', '"', "'", '<', '>', '?', ' '):
+                continue
+            
+            if frag_stripped.startswith('.') or frag_stripped.startswith(','):
+                continue
+            
+            if '.' in frag_stripped and not frag_stripped.startswith('/'):
+                continue
+            
+            if any(invalid in frag_lower for invalid in invalid_patterns):
+                continue
+            
+            for pattern in css_property_patterns:
+                if re.match(pattern, frag_stripped):
+                    continue
+            
+            if is_suffix:
+                if any(c in frag_stripped for c in '=?&%$#@!~`^*()[]{}|;:\'"<>'):
+                    continue
+            
+            filtered.append(frag)
+        
+        return filtered
     
     def generate_crud_guesses(self, resource_path: str) -> List[str]:
         """
