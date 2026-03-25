@@ -210,7 +210,7 @@ class ScanEngine:
         self._js_cache = JSFingerprintCache(self.db_storage)
         self._api_aggregator = APIAggregator(use_fusion=True)
         self._api_scorer = APIScorer(
-            min_high_value_score=self.cfg.get('ai.thresholds.high_value_api_score', 5)
+            min_high_value_score=self.cfg.get('ai.thresholds.high_value_api_score', 3)
         )
         self._evidence_aggregator = APIEvidenceAggregator(self._api_scorer)
         self._response_cluster = ResponseCluster()

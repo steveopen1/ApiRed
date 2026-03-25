@@ -155,32 +155,43 @@ class FingerprintEngine:
                 try:
                     with open(fp_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                    
                     count = self._parse_and_add_rules(data)
                     logger.info(f"[*] 加载外部指纹库: {fp_file} ({count} 条规则)")
                 except Exception as e:
                     logger.debug(f"加载指纹库失败 {fp_file}: {e}")
 
     def _parse_and_add_rules(self, data) -> int:
+        """
+        解析指纹库数据，支持两种格式：
+        1. dict格式: {"指纹名": [规则列表], ...}
+        2. list格式: [{"name": "...", "method": "...", ...}, ...]
+        3. 嵌套dict格式: {"fingerprint": [...], ...}
+        """
         count = 0
-        if isinstance(data, list):
+        
+        if isinstance(data, dict):
+            if 'fingerprint' in data and isinstance(data['fingerprint'], list):
+                data = data['fingerprint']
+            else:
+                for name, rules in data.items():
+                    if isinstance(rules, list):
+                        for item in rules:
+                            rule = self._parse_fingerprint_rule(item, name)
+                            if rule:
+                                self._add_rule(rule)
+                                count += 1
+                    elif isinstance(rules, dict):
+                        rule = self._parse_fingerprint_rule(rules, name)
+                        if rule:
+                            self._add_rule(rule)
+                            count += 1
+        elif isinstance(data, list):
             for item in data:
                 rule = self._parse_fingerprint_rule(item)
                 if rule:
                     self._add_rule(rule)
                     count += 1
-        elif isinstance(data, dict):
-            for name, rules in data.items():
-                if isinstance(rules, list):
-                    for item in rules:
-                        rule = self._parse_fingerprint_rule(item, name)
-                        if rule:
-                            self._add_rule(rule)
-                            count += 1
-                elif isinstance(rules, dict):
-                    rule = self._parse_fingerprint_rule(rules, name)
-                    if rule:
-                        self._add_rule(rule)
-                        count += 1
         return count
 
     def _parse_fingerprint_rule(self, item: Dict, default_name: str = None) -> Optional[FingerprintRule]:
