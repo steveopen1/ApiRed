@@ -247,7 +247,7 @@ class TestAgent(AgentInterface):
             if responses:
                 first_response = responses[0]
                 result['status_code'] = first_response.status_code
-                result['alive'] = first_response.status_code in [200, 201, 204, 401, 403]
+                result['alive'] = first_response.status_code in [200, 201, 202, 204, 301, 302, 307, 401, 403]
 
                 if result['alive']:
                     content = first_response.content
