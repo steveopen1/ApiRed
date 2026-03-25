@@ -349,6 +349,7 @@ class ScanEngine:
             self._secret_matcher = SecretMatcher()
             self._vuln_prioritizer = VulnPrioritizer()
             self._waf_detector = WAFDetector()
+            self._js_resolver = JSResolver(base_url=self.config.target)
             
             if requests_session:
                 self._differential_tester = DifferentialTester(session=requests_session)
@@ -359,6 +360,7 @@ class ScanEngine:
                 self._cloud_bucket_tester = CloudBucketTester(session=requests_session)
             
             self._cloud_secret_scanner = CloudSecretScanner()
+            
             self._route_tracker = RouteTracker()
             self._storage_sync = StorageSync()
             self._response_capture = ResponseCapture()
