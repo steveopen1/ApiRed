@@ -333,9 +333,21 @@ class ResponseBaselineLearner:
         """
         判断是否为有效的 API 响应
         
-        简化判定：只要不是 404 基线就是有效响应
+        判定条件：
+        1. 不是 404 基线
+        2. 不是默认页面
+        3. 不是纯 HTML 页面（可能是登录页或错误页）
         """
         if self.is_default_page(response):
+            return False
+        
+        content_type = ""
+        if hasattr(response, 'headers') and response.headers:
+            content_type = response.headers.get('Content-Type', '') or response.headers.get('content-type', '')
+        
+        content_type_lower = content_type.lower()
+        
+        if 'text/html' in content_type_lower or 'application/xhtml' in content_type_lower:
             return False
         
         return True

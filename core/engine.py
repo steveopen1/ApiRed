@@ -2221,6 +2221,18 @@ class ScanEngine:
             self.result.alive_apis = alive_count
             self.result.high_value_apis = high_value_count
         
+        filtered_endpoints = [e for e in endpoints if e.status == APIStatus.ALIVE and e.response_type and e.response_type != 'HTML']
+        if self.result and filtered_endpoints:
+            self.result.api_endpoints = filtered_endpoints
+            self.result.total_apis = len(filtered_endpoints)
+        
+        alive_count = len(filtered_endpoints)
+        high_value_count = sum(1 for e in filtered_endpoints if e.is_high_value)
+        
+        if self.result:
+            self.result.alive_apis = alive_count
+            self.result.high_value_apis = high_value_count
+        
         return {
             'alive_apis': alive_count,
             'high_value_apis': high_value_count
