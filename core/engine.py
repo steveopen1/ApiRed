@@ -278,7 +278,8 @@ class ScanEngine:
             while not browser_initialized and retry_count < max_retries:
                 try:
                     self._browser_collector = HeadlessBrowserCollector()
-                    browser_initialized = await self._browser_collector.initialize(headless=True)
+                    ignore_ssl = not getattr(self.config, 'verify_ssl', True)
+                    browser_initialized = await self._browser_collector.initialize(headless=True, ignore_ssl_errors=ignore_ssl)
                     
                     if not browser_initialized:
                         retry_count += 1

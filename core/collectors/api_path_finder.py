@@ -64,6 +64,8 @@ PATH_BLACK_PATTERNS = [
     r'^[0-9a-fA-F]{3,6}$',  # 纯颜色代码
     r'^(?:http|https)?:$',  # 协议字符串
     r'^[\w.-]+@[\w.-]+\.\w+$',  # 邮箱格式
+    r'^[a-z]+&&',  # JavaScript表达式 t&&
+    r'^application/',  # MIME类型 application/sdp
 ]
 
 API_PATH_MIN_LENGTH = 2
