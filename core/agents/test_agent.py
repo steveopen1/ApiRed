@@ -12,7 +12,7 @@ import os
 
 from .orchestrator import AgentInterface, ScanContext
 from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
-from ..testers.api_tester import APIRequestTester
+from ..testers.api_tester import APIRequestTester, MultiThreadedTester, create_multi_tester
 from ..testers.parameter_extractor import DangerousAPIFilter
 from ..testers.bypass_techniques import BypassTechniques
 from ..testers.vulnerability_tester import VulnerabilityTester
@@ -38,6 +38,7 @@ class TestAgent(AgentInterface):
     def __init__(self):
         super().__init__("test")
         self._tester = None
+        self._multi_tester = None
         self._vulnerability_tester = None
         self._bypass_techniques = None
         self._sensitive_detector = None
@@ -81,6 +82,18 @@ class TestAgent(AgentInterface):
         if self._tester is None:
             self._tester = APIRequestTester(self._http_client)
         return self._tester
+    
+    def _get_multi_tester(self) -> MultiThreadedTester:
+        """获取多线程批量测试器（支持 PreProbe 优化）"""
+        if self._multi_tester is None:
+            self._multi_tester = create_multi_tester(
+                http_client=self._http_client,
+                workers=100
+            )
+            self._multi_tester.preprobe_enabled = True
+            self._multi_tester.preprobe_threshold = 50
+            self._multi_tester.preprobe_budget = 128
+        return self._multi_tester
     
     def _get_vulnerability_tester(self):
         """获取漏洞测试器"""
@@ -426,7 +439,49 @@ class TestAgent(AgentInterface):
             logger.debug(f"Analysis error: {e}")
 
         return result
-
+    
+    def _batch_test_endpoints(
+        self,
+        endpoints: List[APIEndpoint],
+        context: ScanContext,
+        batch_size: int = 200
+    ) -> Dict[str, Any]:
+        """
+        使用 MultiThreadedTester 批量测试端点（支持 PreProbe 优化）
+        
+        Args:
+            endpoints: 端点列表
+            context: 扫描上下文
+            batch_size: 批量大小
+            
+        Returns:
+            测试结果
+        """
+        if not endpoints:
+            return {'results': [], 'tested': 0, 'alive': 0}
+        
+        logger.info(f"Batch testing {len(endpoints)} endpoints with MultiThreadedTester (PreProbe enabled)")
+        
+        urls = []
+        for endpoint in endpoints:
+            full_url = endpoint.full_url or f"{context.target.rstrip('/')}{endpoint.path}"
+            urls.append(full_url)
+        
+        multi_tester = self._get_multi_tester()
+        
+        urls_to_test = urls[:batch_size]
+        results = multi_tester.test_urls(urls_to_test, params=None, headers=context.headers)
+        
+        alive_count = sum(1 for r in results if r.status_code in [200, 201, 202, 204, 301, 302, 307, 401, 403])
+        
+        logger.info(f"Batch test completed: {len(results)} tested, {alive_count} alive")
+        
+        return {
+            'results': results,
+            'tested': len(results),
+            'alive': alive_count
+        }
+    
     async def extract_parameters(self, context: ScanContext) -> Dict[str, Set[str]]:
         """提取参数"""
         endpoints = self.knowledge_base.get_endpoints() if self.knowledge_base else []
