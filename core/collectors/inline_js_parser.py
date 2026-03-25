@@ -21,6 +21,7 @@ class InlineJSParser:
     2. 路由定义 (/user, /admin, etc.)
     3. URL模板 (/user/:id, /order/:id, etc.)
     4. AJAX请求模式
+    5. 敏感资源链接 (PDF, Excel, Word, EXE等)
     """
     
     API_PATH_PATTERNS = [
@@ -49,11 +50,39 @@ class InlineJSParser:
         re.compile(r'''VUE_APP_API_URL\s*=\s*['"`]([^'"`]+)['"`]'''),
     ]
     
+    SENSITIVE_FILE_PATTERNS = [
+        '.pdf', '.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt',
+        '.exe', '.7z', '.zip', '.rar', '.tar', '.gz',
+        '.csv', '.txt', '.log',
+        '.bak', '.backup', '.old',
+    ]
+    
+    STATIC_FILE_EXTENSIONS = [
+        '.js', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
+        '.woff', '.woff2', '.ttf', '.eot', '.otf', '.webp', '.bmp', '.tiff', '.webm', '.mp4',
+        '.avi', '.mp3', '.wav', '.ogg', '.flac', '.webm',
+    ]
+    
+    INVALID_KEYWORDS = {
+        'httpagent', 'httpsagent', 'httpversionnotsupported', 
+        'xmlhttprequest', 'activexobject', 'msxml2', 'microsoft',
+        'window', 'document', 'location', 'navigator', 'console',
+        'function', 'return', 'var', 'let', 'const', 'import', 'export',
+        'prototype', 'constructor', 'typeof', 'undefined', 'null',
+    }
+    
+    CONTENT_TYPE_INDICATORS = [
+        'text/html', 'application/json', 'text/plain', 'text/xml',
+        'text/javascript', 'application/javascript', 'application/x-javascript',
+        'image/', 'audio/', 'video/', 'font/',
+    ]
+    
     def __init__(self):
         self.extracted_paths: Set[str] = set()
         self.extracted_routes: Set[str] = set()
         self.extracted_templates: Set[str] = set()
         self.extracted_configs: Dict[str, str] = {}
+        self.extracted_sensitive_resources: Set[str] = set()
     
     def parse_html(self, html_content: str) -> Dict[str, Set[str]]:
         """
@@ -69,7 +98,8 @@ class InlineJSParser:
             'api_paths': set(),
             'routes': set(),
             'url_templates': set(),
-            'configs': {}
+            'configs': {},
+            'sensitive_resources': set()
         }
         
         script_blocks = self._extract_script_blocks(html_content)
@@ -78,8 +108,9 @@ class InlineJSParser:
             if not script_content or len(script_content) < 50:
                 continue
             
-            api_paths = self._extract_api_paths(script_content)
+            api_paths, sensitive_resources = self._extract_api_paths(script_content)
             results['api_paths'].update(api_paths)
+            results['sensitive_resources'].update(sensitive_resources)
             
             routes = self._extract_routes(script_content)
             results['routes'].update(routes)
@@ -94,6 +125,7 @@ class InlineJSParser:
         self.extracted_routes.update(results['routes'])
         self.extracted_templates.update(results['url_templates'])
         self.extracted_configs.update(results['configs'])
+        self.extracted_sensitive_resources.update(results['sensitive_resources'])
         
         return results
     
@@ -115,18 +147,36 @@ class InlineJSParser:
         
         return inline_scripts
     
-    def _extract_api_paths(self, script_content: str) -> Set[str]:
-        """从脚本内容中提取API路径"""
-        paths = set()
+    def _extract_api_paths(self, script_content: str) -> Tuple[Set[str], Set[str]]:
+        """从脚本内容中提取API路径和敏感资源"""
+        api_paths = set()
+        sensitive_resources = set()
         
         for pattern in self.API_PATH_PATTERNS:
             matches = pattern.findall(script_content)
             for match in matches:
                 cleaned = self._clean_path(match)
-                if cleaned and self._is_valid_api_path(cleaned):
-                    paths.add(cleaned)
+                if not cleaned:
+                    continue
+                
+                if self._is_sensitive_resource(cleaned):
+                    sensitive_resources.add(cleaned)
+                elif self._is_valid_api_path(cleaned):
+                    api_paths.add(cleaned)
         
-        return paths
+        return api_paths, sensitive_resources
+    
+    def _is_sensitive_resource(self, path: str) -> bool:
+        """判断是否为敏感资源文件"""
+        if not path:
+            return False
+        
+        path_lower = path.lower()
+        for pattern in self.SENSITIVE_FILE_PATTERNS:
+            if path_lower.endswith(pattern):
+                return True
+        
+        return False
     
     def _extract_routes(self, script_content: str) -> Set[str]:
         """从脚本内容中提取路由"""
@@ -176,6 +226,14 @@ class InlineJSParser:
         path = path.split('?')[0]
         path = path.split('#')[0]
         
+        if path.startswith('http://'):
+            path = path[7:]
+        elif path.startswith('https://'):
+            path = path[8:]
+        
+        if '/' in path:
+            path = '/' + path.split('/', 1)[1]
+        
         return path.strip()
     
     def _is_valid_api_path(self, path: str) -> bool:
@@ -186,8 +244,8 @@ class InlineJSParser:
         if len(path) < 2:
             return False
         
-        invalid_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg']
-        for pattern in invalid_patterns:
+        static_file_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf']
+        for pattern in static_file_patterns:
             if path.endswith(pattern):
                 return False
         
@@ -201,10 +259,16 @@ class InlineJSParser:
         if len(path) < 2:
             return False
         
-        if path.startswith('http'):
+        if path.startswith('javascript:'):
             return False
         
-        if path.startswith('javascript:'):
+        if path.startswith('mailto:'):
+            return False
+        
+        if path.startswith('tel:'):
+            return False
+        
+        if path.startswith('data:'):
             return False
         
         return True
@@ -215,7 +279,8 @@ class InlineJSParser:
             'api_paths': list(self.extracted_paths),
             'routes': list(self.extracted_routes),
             'url_templates': list(self.extracted_templates),
-            'configs': self.extracted_configs
+            'configs': self.extracted_configs,
+            'sensitive_resources': list(self.extracted_sensitive_resources)
         }
     
     def generate_probe_paths(self) -> List[str]:
@@ -252,6 +317,7 @@ class ResponseBasedAPIDiscovery:
     1. 从HTML响应中提取链接和表单action
     2. 从JSON响应中提取关联的API路径
     3. 从JavaScript响应中提取API调用
+    4. 从响应中发现敏感资源链接
     """
     
     HTML_LINK_PATTERN = re.compile(r'''(?:href|src|action)=['"](/[a-zA-Z0-9_/\-.?=&]+)['"']''')
@@ -260,12 +326,40 @@ class ResponseBasedAPIDiscovery:
     
     JS_VAR_PATTERN = re.compile(r'''(?:window|global)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*['"`]([^'"`]+)['"`]''')
     
+    SENSITIVE_FILE_PATTERNS = [
+        '.pdf', '.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt',
+        '.exe', '.7z', '.zip', '.rar', '.tar', '.gz',
+        '.csv', '.txt', '.log',
+        '.bak', '.backup', '.old',
+    ]
+    
+    STATIC_FILE_EXTENSIONS = [
+        '.js', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 
+        '.woff', '.woff2', '.ttf', '.eot', '.otf', '.webp', '.bmp', '.tiff', '.webm', '.mp4',
+        '.avi', '.mp3', '.wav', '.ogg', '.flac', '.webm',
+    ]
+    
+    INVALID_KEYWORDS = {
+        'httpagent', 'httpsagent', 'httpversionnotsupported', 
+        'xmlhttprequest', 'activexobject', 'msxml2', 'microsoft',
+        'window', 'document', 'location', 'navigator', 'console',
+        'function', 'return', 'var', 'let', 'const', 'import', 'export',
+        'prototype', 'constructor', 'typeof', 'undefined', 'null',
+    }
+    
+    CONTENT_TYPE_INDICATORS = [
+        'text/html', 'application/json', 'text/plain', 'text/xml',
+        'text/javascript', 'application/javascript', 'application/x-javascript',
+        'image/', 'audio/', 'video/', 'font/',
+    ]
+    
     def __init__(self):
         self.discovered_paths: Set[str] = set()
+        self.discovered_sensitive_resources: Set[str] = set()
     
-    def discover_from_response(self, url: str, content: str, content_type: str) -> Set[str]:
+    def discover_from_response(self, url: str, content: str, content_type: str) -> Dict[str, Set[str]]:
         """
-        从HTTP响应中发现新的API路径
+        从HTTP响应中发现新的API路径和敏感资源
         
         Args:
             url: 响应来源URL
@@ -273,57 +367,82 @@ class ResponseBasedAPIDiscovery:
             content_type: Content-Type头
             
         Returns:
-            发现的新路径集合
+            包含api_paths和sensitive_resources的字典
         """
-        new_paths = set()
+        result = {
+            'api_paths': set(),
+            'sensitive_resources': set()
+        }
         
         if 'html' in content_type.lower():
-            new_paths.update(self._discover_from_html(content))
+            paths, sensitive = self._discover_from_html(content)
+            result['api_paths'].update(paths)
+            result['sensitive_resources'].update(sensitive)
         elif 'json' in content_type.lower():
-            new_paths.update(self._discover_from_json(content))
+            paths, sensitive = self._discover_from_json(content)
+            result['api_paths'].update(paths)
+            result['sensitive_resources'].update(sensitive)
         elif 'javascript' in content_type.lower() or 'script' in content_type.lower():
-            new_paths.update(self._discover_from_js(content))
+            paths, sensitive = self._discover_from_js(content)
+            result['api_paths'].update(paths)
+            result['sensitive_resources'].update(sensitive)
         
-        self.discovered_paths.update(new_paths)
-        return new_paths
+        self.discovered_paths.update(result['api_paths'])
+        self.discovered_sensitive_resources.update(result['sensitive_resources'])
+        return result
     
-    def _discover_from_html(self, content: str) -> Set[str]:
-        """从HTML内容中发现API路径"""
+    def _discover_from_html(self, content: str) -> Tuple[Set[str], Set[str]]:
+        """从HTML内容中发现API路径和敏感资源"""
         paths = set()
+        sensitive_resources = set()
         
         links = self.HTML_LINK_PATTERN.findall(content)
         for link in links:
-            if self._is_api_related(link):
+            if self._is_sensitive_resource(link):
+                sensitive_resources.add(link)
+            elif self._is_api_related(link):
                 paths.add(link)
         
         forms = re.findall(r'''<form[^>]*action=['"](/[^"']+)['"']''', content, re.IGNORECASE)
         for form_action in forms:
-            if self._is_api_related(form_action):
+            if self._is_sensitive_resource(form_action):
+                sensitive_resources.add(form_action)
+            elif self._is_api_related(form_action):
                 paths.add(form_action)
         
         ajax_urls = re.findall(r'''(?:url|endpoint|uri)\s*:\s*['"](/[^"']+)['"']''', content, re.IGNORECASE)
         for ajax_url in ajax_urls:
-            paths.add(ajax_url)
+            if self._is_sensitive_resource(ajax_url):
+                sensitive_resources.add(ajax_url)
+            else:
+                paths.add(ajax_url)
         
-        return paths
+        return paths, sensitive_resources
     
-    def _discover_from_json(self, content: str) -> Set[str]:
-        """从JSON内容中发现API路径"""
+    def _discover_from_json(self, content: str) -> Tuple[Set[str], Set[str]]:
+        """从JSON内容中发现API路径和敏感资源"""
         paths = set()
+        sensitive_resources = set()
         
         try:
             data = json.loads(content)
-            paths.update(self._extract_paths_from_dict(data))
+            extracted_paths, extracted_sensitive = self._extract_paths_from_dict(data)
+            paths.update(extracted_paths)
+            sensitive_resources.update(extracted_sensitive)
         except (json.JSONDecodeError, TypeError):
             api_refs = self.JSON_API_PATTERN.findall(content)
             for ref in api_refs:
-                paths.add(ref)
+                if self._is_sensitive_resource(ref):
+                    sensitive_resources.add(ref)
+                else:
+                    paths.add(ref)
         
-        return paths
+        return paths, sensitive_resources
     
-    def _extract_paths_from_dict(self, obj: Any, prefix: str = "") -> Set[str]:
-        """递归从字典中提取路径"""
+    def _extract_paths_from_dict(self, obj: Any, prefix: str = "") -> Tuple[Set[str], Set[str]]:
+        """递归从字典中提取路径和敏感资源"""
         paths = set()
+        sensitive_resources = set()
         
         if isinstance(obj, dict):
             for key, value in obj.items():
@@ -331,26 +450,41 @@ class ResponseBasedAPIDiscovery:
                 
                 if key_lower in ('url', 'uri', 'endpoint', 'path', 'href', 'src', 'link'):
                     if isinstance(value, str) and value.startswith('/'):
-                        paths.add(value)
+                        if self._is_sensitive_resource(value):
+                            sensitive_resources.add(value)
+                        else:
+                            paths.add(value)
                 
                 if isinstance(value, (dict, list)):
-                    paths.update(self._extract_paths_from_dict(value, prefix))
+                    extracted_paths, extracted_sensitive = self._extract_paths_from_dict(value, prefix)
+                    paths.update(extracted_paths)
+                    sensitive_resources.update(extracted_sensitive)
         
         elif isinstance(obj, list):
             for item in obj:
                 if isinstance(item, (dict, list)):
-                    paths.update(self._extract_paths_from_dict(item, prefix))
-                elif isinstance(item, str) and item.startswith('/') and self._is_api_related(item):
-                    paths.add(item)
+                    extracted_paths, extracted_sensitive = self._extract_paths_from_dict(item, prefix)
+                    paths.update(extracted_paths)
+                    sensitive_resources.update(extracted_sensitive)
+                elif isinstance(item, str) and item.startswith('/'):
+                    if self._is_sensitive_resource(item):
+                        sensitive_resources.add(item)
+                    elif self._is_api_related(item):
+                        paths.add(item)
         
-        return paths
+        return paths, sensitive_resources
     
-    def _discover_from_js(self, content: str) -> Set[str]:
-        """从JavaScript内容中发现API路径"""
+    def _discover_from_js(self, content: str) -> Tuple[Set[str], Set[str]]:
+        """从JavaScript内容中发现API路径和敏感资源"""
         paths = set()
+        sensitive_resources = set()
         
         api_refs = self.JSON_API_PATTERN.findall(content)
-        paths.update(api_refs)
+        for ref in api_refs:
+            if self._is_sensitive_resource(ref):
+                sensitive_resources.add(ref)
+            else:
+                paths.add(ref)
         
         ajax_patterns = [
             re.compile(r'''\.(?:get|post|put|delete|patch)\(['"](/[^"']+)['"']'''),
@@ -361,27 +495,61 @@ class ResponseBasedAPIDiscovery:
         
         for pattern in ajax_patterns:
             matches = pattern.findall(content)
-            paths.update(matches)
+            for match in matches:
+                if self._is_sensitive_resource(match):
+                    sensitive_resources.add(match)
+                else:
+                    paths.add(match)
         
-        return paths
+        return paths, sensitive_resources
     
     def _is_api_related(self, path: str) -> bool:
-        """判断路径是否与API相关"""
+        """判断路径是否为有效的Web路径"""
         if not path or len(path) < 2:
             return False
         
+        path = path.strip()
         path_lower = path.lower()
         
-        api_indicators = ['/api', '/v1', '/v2', '/v3', '/rest', '/graphql', '/rpc']
-        for indicator in api_indicators:
-            if indicator in path_lower:
-                return True
+        if path_lower in self.INVALID_KEYWORDS:
+            return False
         
-        if path_lower.startswith('/admin') or path_lower.startswith('/user'):
-            return True
+        if '/' not in path and not path_lower.startswith('http'):
+            if path_lower not in ['api', 'v1', 'v2', 'v3']:
+                return False
+        
+        for indicator in self.CONTENT_TYPE_INDICATORS:
+            if indicator in path_lower:
+                return False
+        
+        for ext in self.STATIC_FILE_EXTENSIONS:
+            if path_lower.endswith(ext):
+                return False
+        
+        return True
+        
+        static_file_patterns = ['.js', '.css', '.html', '.json', '.png', '.jpg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf']
+        for pattern in static_file_patterns:
+            if path.lower().endswith(pattern):
+                return False
+        
+        return True
+    
+    def _is_sensitive_resource(self, path: str) -> bool:
+        """判断是否为敏感资源文件"""
+        if not path:
+            return False
+        
+        path_lower = path.lower()
+        for pattern in self.SENSITIVE_FILE_PATTERNS:
+            if path_lower.endswith(pattern):
+                return True
         
         return False
     
-    def get_all_discovered(self) -> List[str]:
-        """获取所有发现的新路径"""
-        return list(self.discovered_paths)
+    def get_all_discovered(self) -> Dict[str, List[str]]:
+        """获取所有发现的新路径和敏感资源"""
+        return {
+            'api_paths': list(self.discovered_paths),
+            'sensitive_resources': list(self.discovered_sensitive_resources)
+        }
