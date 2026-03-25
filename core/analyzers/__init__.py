@@ -11,6 +11,7 @@ from .sensitive_detector import TwoTierSensitiveDetector
 from .endpoint_analyzer import EndpointAnalyzer, EndpointFeatures, EndpointFeature, extract_features_from_endpoint
 from .test_selector import TestSelector, TestSelection, TestSelectionRule, TestCategory, select_tests_for_endpoint
 from .traffic_analyzer import TrafficAnalyzer, APIBehaviorBaseline, create_traffic_analyzer_from_endpoints
+from .vulnerability_prioritizer import VulnerabilityPrioritizer, VulnerabilityContext, Exploitability, AttackSurface
 
 __all__ = [
     'APIScorer', 
@@ -30,5 +31,9 @@ __all__ = [
     'select_tests_for_endpoint',
     'TrafficAnalyzer',
     'APIBehaviorBaseline',
-    'create_traffic_analyzer_from_endpoints'
+    'create_traffic_analyzer_from_endpoints',
+    'VulnerabilityPrioritizer',
+    'VulnerabilityContext',
+    'Exploitability',
+    'AttackSurface',
 ]

@@ -23,6 +23,9 @@ class GraphQLTestResult:
     remediation: str
 
 
+__all__ = ['GraphQLSecurityTester', 'GraphQLTestResult']
+
+
 class GraphQLSecurityTester:
     """
     GraphQL 安全测试器

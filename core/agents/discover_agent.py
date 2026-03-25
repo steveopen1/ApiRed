@@ -148,8 +148,8 @@ class DiscoverAgent(AgentInterface):
         endpoints = []
         
         try:
-            from ..http_client import HTTPClient
-            http_client = HTTPClient()
+            from ..utils.http_client import AsyncHttpClient
+            http_client = AsyncHttpClient()
             parser = APISpecParser(http_client)
             
             spec_result = await parser.discover_and_parse(target)

@@ -46,8 +46,8 @@ class GraphQLTesterAgent(AgentInterface):
     async def initialize(self, context: ScanContext) -> None:
         """初始化 GraphQL 测试代理"""
         await super().initialize(context)
-        from ..http_client import HTTPClient
-        self._http_client = HTTPClient()
+        from ..utils.http_client import AsyncHttpClient
+        self._http_client = AsyncHttpClient()
         self._graphql_tester = GraphQLSecurityTester(self._http_client)
     
     async def execute(self, context: ScanContext) -> Dict[str, Any]:
