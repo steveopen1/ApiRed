@@ -474,8 +474,100 @@ class APIRouter:
         return filtered
     
     @classmethod
+    def auto_classify_urls(cls, urls: List[str]) -> Dict[str, List[str]]:
+        """
+        自动从 URL 列表中分类提取组件
+        参考 0x727/ChkApi filter_data 函数逻辑
+        
+        自动识别策略：
+        1. tree_urls: 根路径 (scheme://netloc)
+        2. base_urls: 包含 API 关键词的完整路径
+        3. path_with_api_paths: API 路径段 (从 URL 中自动检测)
+        4. path_with_no_api_paths: 非 API 路径段
+        
+        自动检测规则（灵活，非写死）：
+        - 检测 URL 中是否包含 api_path 标识符
+        - 动态识别微服务路径段
+        - 智能拆分路径为 API 段和非 API 段
+        """
+        from urllib.parse import urlparse
+        
+        tree_urls = set()
+        base_urls = set()
+        all_api_paths = set()
+        path_with_api_paths = set()
+        path_with_no_api_paths = set()
+        
+        API_KEYWORDS = {'api', 'v1', 'v2', 'v3', 'rest', 'graphql', 'rpc', 'gateway', 'service'}
+        
+        for url in urls:
+            if not url:
+                continue
+            
+            if url.startswith('http://') or url.startswith('https://'):
+                parsed = urlparse(url)
+                netloc = parsed.netloc
+                path = parsed.path
+                
+                tree_url = f"{parsed.scheme}://{netloc}"
+                tree_urls.add(tree_url)
+                
+                if not path or path == '/':
+                    continue
+                
+                path_segments = [s for s in path.split('/') if s]
+                
+                if not path_segments:
+                    continue
+                
+                has_api_keyword = False
+                api_index = -1
+                
+                for i, segment in enumerate(path_segments):
+                    segment_lower = segment.lower()
+                    if segment_lower in API_KEYWORDS or any(kw in segment_lower for kw in API_KEYWORDS):
+                        has_api_keyword = True
+                        api_index = i
+                        break
+                
+                if has_api_keyword and api_index >= 0:
+                    api_prefix = '/' + '/'.join(path_segments[:api_index + 1])
+                    path_with_api_paths.add(api_prefix)
+                    
+                    base_url = tree_url + api_prefix
+                    base_urls.add(base_url)
+                    
+                    if api_index < len(path_segments) - 1:
+                        no_api_suffix = '/' + '/'.join(path_segments[api_index + 1:])
+                        path_with_no_api_paths.add(no_api_suffix)
+                    
+                    all_api_paths.add('/' + '/'.join(path_segments))
+                else:
+                    all_api_paths.add('/' + '/'.join(path_segments))
+                    path_with_no_api_paths.add('/' + '/'.join(path_segments))
+        
+        for url in urls:
+            if not url or (not url.startswith('http') and not url.startswith('/')):
+                continue
+            
+            path = url if url.startswith('/') else url
+            if '/' in path:
+                segments = [s for s in path.split('/') if s]
+                if segments:
+                    all_api_paths.add('/' + '/'.join(segments))
+        
+        path_with_no_api_paths.update(all_api_paths)
+        
+        return {
+            'tree_urls': list(tree_urls),
+            'base_urls': list(base_urls),
+            'path_with_api_paths': list(path_with_api_paths),
+            'path_with_no_api_paths': list(path_with_no_api_paths),
+        }
+    
+    @classmethod
     def build_api_urls(cls, base_urls: List[str], path_with_api_paths: List[str],
-                       path_with_no_api_paths: List[str], tree_urls: List[str] = None) -> List[str]:
+                       path_with_no_api_paths: List[str], tree_urls: Optional[List[str]] = None) -> List[str]:
         """
         构建完整的 API URL 列表
         参考 0x727/ChkApi 的 filter_data 函数逻辑
