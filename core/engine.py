@@ -208,7 +208,7 @@ class ScanEngine:
         )
         
         self._js_cache = JSFingerprintCache(self.db_storage)
-        self._api_aggregator = APIAggregator()
+        self._api_aggregator = APIAggregator(use_fusion=True)
         self._api_scorer = APIScorer(
             min_high_value_score=self.cfg.get('ai.thresholds.high_value_api_score', 5)
         )
@@ -1923,6 +1923,17 @@ class ScanEngine:
                 logger.info(f"Saved incremental snapshot: {snapshot_id}")
             except Exception as e:
                 logger.debug(f"Failed to save incremental snapshot: {e}")
+        
+        if self._api_aggregator and hasattr(self._api_aggregator, 'get_fusion_stats'):
+            try:
+                fusion_stats = self._api_aggregator.get_fusion_stats()
+                if fusion_stats.get('fusion_enabled'):
+                    logger.info(f"[Fusion] 端点融合统计: 总API={fusion_stats.get('total_apis', 0)}, 融合后={fusion_stats.get('after_fusion', 0)}, 高置信度={fusion_stats.get('high_confidence', 0)}, 运行时确认={fusion_stats.get('runtime_confirmed', 0)}")
+                    by_type = fusion_stats.get('by_type', {})
+                    if by_type:
+                        logger.info(f"[Fusion] 端点类型分布: {', '.join(f'{k}:{v}' for k,v in by_type.items())}")
+            except Exception as e:
+                logger.debug(f"Fusion stats error: {e}")
         
         return {
             'total_endpoints': len(final_endpoints),
