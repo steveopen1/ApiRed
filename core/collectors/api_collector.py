@@ -482,8 +482,11 @@ class APIRouter:
         算法原理：
         1. 收集所有路径段及其位置
         2. 对每个位置，找出出现频率最高的段
-        3. 如果某段在固定位置出现 >= 2 次，且该位置总 URL 数 > 1，则识别为 API 前缀
+        3. 如果某段在固定位置出现 >= 2 次，则识别为 API 前缀
         4. 用识别出的前缀分类路径
+        
+        注意：纯统计方法有局限性，如 auth 可能被误识别为 API 前缀
+        AI Agent 模式可以使用语义理解进一步优化此功能
         """
         from collections import Counter, defaultdict
         
