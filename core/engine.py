@@ -1918,6 +1918,9 @@ class ScanEngine:
             analyzer_results['sensitive'] = await self._detect_sensitive()
         
         self._analyzer_results = analyzer_results
+        
+        flux_results = await self._flux_enhanced_detection()
+        self._flux_results = flux_results
     
     async def _score_apis(self) -> Dict[str, Any]:
         """API评分"""
@@ -2041,6 +2044,143 @@ class ScanEngine:
             'sensitive_count': len(sensitive_findings),
             'findings': [f.to_dict() for f in sensitive_findings]
         }
+    
+    async def _flux_enhanced_detection(self):
+        """
+        FLUX增强检测 - 在分析阶段后运行，作为补充检测
+        保持现有模块不变，FLUX模块作为并行增强
+        """
+        flux_results = {
+            'fingerprints': [],
+            'waf_detected': None,
+            'flux_sensitive': [],
+            'ai_findings': [],
+            'k8s_findings': [],
+            'container_findings': [],
+            'cicd_findings': [],
+            'cloud_findings': [],
+            'fusion_endpoints': [],
+        }
+        
+        try:
+            flux_config = self.cfg.get('flux', {})
+            if not flux_config.get('enabled', True):
+                return flux_results
+            
+            target = self.config.target
+            if not target:
+                return flux_results
+            
+            logger.info("[FLUX] 开始FLUX增强检测...")
+            
+            if flux_config.get('fingerprint', {}).get('enabled', True) and self._fingerprint_engine:
+                try:
+                    fp_response = await self._http_client.request(target)
+                    fp_results = self._fingerprint_engine.match(fp_response)
+                    flux_results['fingerprints'] = [r.to_dict() for r in fp_results[:20]]
+                    logger.info(f"[FLUX] 指纹识别完成: 发现 {len(flux_results['fingerprints'])} 个组件")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 指纹识别失败: {e}")
+            
+            if flux_config.get('waf', {}).get('enabled', True) and self._waf_detector:
+                try:
+                    waf_response = await self._http_client.request(target)
+                    waf_result = self._waf_detector.detect(waf_response)
+                    if waf_result:
+                        flux_results['waf_detected'] = waf_result.waf_name
+                        logger.info(f"[FLUX] WAF检测: 发现 {waf_result.waf_name}")
+                except Exception as e:
+                    logger.debug(f"[FLUX] WAF检测失败: {e}")
+            
+            if flux_config.get('secret_matching', {}).get('enabled', True) and self._secret_matcher:
+                try:
+                    for js_result in (self._collector_results.get('js', {})).get('alive_js', []):
+                        if isinstance(js_result, dict) and 'content' in js_result:
+                            content = js_result['content']
+                            if isinstance(content, bytes):
+                                content = content.decode('utf-8', errors='ignore')
+                            matches = self._secret_matcher.scan_text(content, js_result.get('url', ''))
+                            for match in matches:
+                                if not match.is_likely_false_positive:
+                                    flux_results['flux_sensitive'].append(match.to_dict())
+                    logger.info(f"[FLUX] 敏感信息检测完成: 发现 {len(flux_results['flux_sensitive'])} 处")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 敏感信息检测失败: {e}")
+            
+            if flux_config.get('ai_security', {}).get('enabled', True) and self._ai_security_tester:
+                try:
+                    ai_findings = self._ai_security_tester.scan_ai_components(target)
+                    flux_results['ai_findings'] = [f.__dict__ for f in ai_findings]
+                    logger.info(f"[FLUX] AI安全检测完成: 发现 {len(ai_findings)} 个问题")
+                except Exception as e:
+                    logger.debug(f"[FLUX] AI安全检测失败: {e}")
+            
+            if flux_config.get('kubernetes_security', {}).get('enabled', True) and self._k8s_security_tester:
+                try:
+                    k8s_findings = self._k8s_security_tester.scan_k8s_components(target)
+                    flux_results['k8s_findings'] = [f.__dict__ for f in k8s_findings]
+                    logger.info(f"[FLUX] K8s安全检测完成: 发现 {len(k8s_findings)} 个问题")
+                except Exception as e:
+                    logger.debug(f"[FLUX] K8s安全检测失败: {e}")
+            
+            if flux_config.get('container_security', {}).get('enabled', True) and self._container_security_tester:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(target)
+                    container_findings = self._container_security_tester.scan_container_runtimes(parsed.hostname or parsed.path)
+                    flux_results['container_findings'] = [f.__dict__ for f in container_findings]
+                    logger.info(f"[FLUX] 容器安全检测完成: 发现 {len(container_findings)} 个问题")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 容器安全检测失败: {e}")
+            
+            if flux_config.get('cicd_security', {}).get('enabled', True) and self._cicd_scanner:
+                try:
+                    cicd_findings = self._cicd_scanner.scan_cicd_configs(target)
+                    flux_results['cicd_findings'] = [f.__dict__ for f in cicd_findings]
+                    logger.info(f"[FLUX] CI/CD安全检测完成: 发现 {len(cicd_findings)} 个问题")
+                except Exception as e:
+                    logger.debug(f"[FLUX] CI/CD安全检测失败: {e}")
+            
+            if flux_config.get('cloud_security', {}).get('enabled', True) and self._cloud_bucket_tester:
+                try:
+                    cloud_findings = self._cloud_bucket_tester.test_bucket_access(target)
+                    flux_results['cloud_findings'] = [f.__dict__ for f in cloud_findings]
+                    logger.info(f"[FLUX] 云安全检测完成: 发现 {len(cloud_findings)} 个问题")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 云安全检测失败: {e}")
+            
+            if self._endpoint_fusion_engine:
+                try:
+                    for endpoint in (self.result.api_endpoints if self.result else []):
+                        self._endpoint_fusion_engine.add_endpoint(
+                            url=endpoint.full_url,
+                            method=endpoint.method,
+                            source_type=getattr(endpoint, 'source_type', None),
+                            confidence='medium'
+                        )
+                    fusion_report = self._endpoint_fusion_engine.get_fusion_report()
+                    flux_results['fusion_endpoints'] = fusion_report
+                    logger.info(f"[FLUX] 端点融合完成: 融合后 {fusion_report.get('total_endpoints', 0)} 个端点")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 端点融合失败: {e}")
+            
+            if flux_config.get('vuln_prioritizer', {}).get('enabled', True) and self._vuln_prioritizer and self.result:
+                try:
+                    if self.result.vulnerabilities:
+                        vuln_dicts = [v.to_dict() if hasattr(v, 'to_dict') else v for v in self.result.vulnerabilities]
+                        candidates = self._vuln_prioritizer.analyze_findings(vuln_dicts)
+                        prioritized = [c.to_dict() for c in candidates[:30]]
+                        flux_results['prioritized_vulns'] = prioritized
+                        logger.info(f"[FLUX] 漏洞优先级排序完成: {len(prioritized)} 个漏洞")
+                except Exception as e:
+                    logger.debug(f"[FLUX] 漏洞优先级排序失败: {e}")
+            
+            logger.info("[FLUX] FLUX增强检测完成")
+            
+        except Exception as e:
+            logger.warning(f"[FLUX] 增强检测过程出错: {e}")
+        
+        return flux_results
     
     async def _run_testers(self):
         """运行测试阶段"""
