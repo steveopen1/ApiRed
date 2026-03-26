@@ -11,6 +11,7 @@ HybridFuzzer - 综合混合Fuzzing算法
    - 从HTTP响应中学习API模式
    - 分析请求-响应关系
    - 学习参数位置和类型
+   - 动态更新词表
 
 3. 智能探测 (FLUX启发)
    - TF-IDF URL分类
@@ -30,6 +31,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict, Counter
 from urllib.parse import urlparse, urljoin
 from enum import Enum
+import threading
 import json
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,205 @@ class DataSource(Enum):
     SWAGGER = "swagger"
     RESPONSE_LEARN = "response_learn"
     FUZZ_GEN = "fuzz_gen"
+
+
+class DynamicWordlist:
+    """
+    动态词表管理器
+    
+    特点:
+    - 线程安全
+    - 自动去重
+    - 按置信度排序
+    - 支持导出为列表
+    """
+    
+    def __init__(self, max_size: int = 10000):
+        self._resources: Set[str] = set()
+        self._actions: Set[str] = set()
+        self._prefixes: Set[str] = set()
+        self._suffixes: Set[str] = set()
+        self._full_paths: Set[str] = set()
+        self._params: Dict[str, Set[str]] = defaultdict(set)
+        self._confidence: Dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._max_size = max_size
+        self._update_count = 0
+    
+    def add_resource(self, resource: str, confidence: float = 0.5):
+        """添加资源词"""
+        if not resource or len(resource) < 2:
+            return
+        with self._lock:
+            if resource not in self._resources:
+                self._resources.add(resource)
+                self._confidence[f"res:{resource}"] = confidence
+                self._update_count += 1
+    
+    def add_action(self, action: str, confidence: float = 0.5):
+        """添加动作词"""
+        if not action or len(action) < 2:
+            return
+        with self._lock:
+            if action not in self._actions:
+                self._actions.add(action)
+                self._confidence[f"act:{action}"] = confidence
+                self._update_count += 1
+    
+    def add_prefix(self, prefix: str, confidence: float = 0.5):
+        """添加API前缀"""
+        if not prefix or len(prefix) < 2:
+            return
+        with self._lock:
+            if prefix not in self._prefixes:
+                self._prefixes.add(prefix)
+                self._confidence[f"pre:{prefix}"] = confidence
+                self._update_count += 1
+    
+    def add_suffix(self, suffix: str, confidence: float = 0.5):
+        """添加后缀"""
+        if not suffix or len(suffix) < 2:
+            return
+        with self._lock:
+            if suffix not in self._suffixes:
+                self._suffixes.add(suffix)
+                self._confidence[f"suf:{suffix}"] = confidence
+                self._update_count += 1
+    
+    def add_full_path(self, path: str, confidence: float = 0.5):
+        """添加完整路径"""
+        if not path or len(path) < 3:
+            return
+        with self._lock:
+            if path not in self._full_paths:
+                self._full_paths.add(path)
+                self._confidence[f"path:{path}"] = confidence
+                self._update_count += 1
+    
+    def add_param(self, param_name: str, example_value: str):
+        """添加参数"""
+        if not param_name or len(param_name) < 2:
+            return
+        with self._lock:
+            self._params[param_name].add(example_value)
+    
+    def learn_from_pattern(self, pattern: 'APIPattern'):
+        """从APIPattern学习"""
+        if pattern.resource:
+            self.add_resource(pattern.resource, pattern.confidence)
+        if pattern.action:
+            self.add_action(pattern.action, pattern.confidence)
+        if pattern.prefix:
+            self.add_prefix(pattern.prefix, pattern.confidence)
+        if pattern.suffix:
+            self.add_suffix(pattern.suffix, pattern.confidence)
+        if pattern.prefix and pattern.resource:
+            full = f"/{pattern.prefix}/{pattern.resource}"
+            self.add_full_path(full, pattern.confidence)
+    
+    def get_resources(self, min_confidence: float = 0.0) -> List[Tuple[str, float]]:
+        """获取资源词，按置信度排序"""
+        with self._lock:
+            result = [(r, self._confidence.get(f"res:{r}", 0.5)) 
+                     for r in self._resources
+                     if self._confidence.get(f"res:{r}", 0) >= min_confidence]
+        return sorted(result, key=lambda x: x[1], reverse=True)
+    
+    def get_actions(self, min_confidence: float = 0.0) -> List[Tuple[str, float]]:
+        """获取动作词，按置信度排序"""
+        with self._lock:
+            result = [(a, self._confidence.get(f"act:{a}", 0.5)) 
+                     for a in self._actions
+                     if self._confidence.get(f"act:{a}", 0) >= min_confidence]
+        return sorted(result, key=lambda x: x[1], reverse=True)
+    
+    def get_prefixes(self, min_confidence: float = 0.0) -> List[Tuple[str, float]]:
+        """获取前缀，按置信度排序"""
+        with self._lock:
+            result = [(p, self._confidence.get(f"pre:{p}", 0.5)) 
+                     for p in self._prefixes
+                     if self._confidence.get(f"pre:{p}", 0) >= min_confidence]
+        return sorted(result, key=lambda x: x[1], reverse=True)
+    
+    def get_suffixes(self, min_confidence: float = 0.0) -> List[Tuple[str, float]]:
+        """获取后缀，按置信度排序"""
+        with self._lock:
+            result = [(s, self._confidence.get(f"suf:{s}", 0.5)) 
+                     for s in self._suffixes
+                     if self._confidence.get(f"suf:{s}", 0) >= min_confidence]
+        return sorted(result, key=lambda x: x[1], reverse=True)
+    
+    def get_full_paths(self, min_confidence: float = 0.0) -> List[Tuple[str, float]]:
+        """获取完整路径，按置信度排序"""
+        with self._lock:
+            result = [(p, self._confidence.get(f"path:{p}", 0.5)) 
+                     for p in self._full_paths
+                     if self._confidence.get(f"path:{p}", 0) >= min_confidence]
+        return sorted(result, key=lambda x: x[1], reverse=True)
+    
+    def generate_fuzz_paths(self, top_n: int = 50) -> List[str]:
+        """生成Fuzzing路径"""
+        paths = []
+        
+        prefixes = [p for p, _ in self.get_prefixes()[:10]]
+        resources = [r for r, _ in self.get_resources()[:top_n]]
+        actions = [a for a, _ in self.get_actions()[:top_n]]
+        suffixes = [s for s, _ in self.get_suffixes()[:top_n]]
+        
+        full_paths = [p for p, _ in self.get_full_paths()[:top_n]]
+        paths.extend(full_paths)
+        
+        for prefix in prefixes:
+            for resource in resources:
+                paths.append(f"/{prefix}/{resource}")
+                for suffix in suffixes[:10]:
+                    paths.append(f"/{prefix}/{resource}/{suffix}")
+        
+        for resource in resources:
+            for action in actions[:20]:
+                paths.append(f"/{resource}/{action}")
+        
+        for suffix in suffixes[:30]:
+            paths.append(f"/{suffix}")
+        
+        return list(set(paths))[:500]
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        with self._lock:
+            return {
+                'resources': len(self._resources),
+                'actions': len(self._actions),
+                'prefixes': len(self._prefixes),
+                'suffixes': len(self._suffixes),
+                'full_paths': len(self._full_paths),
+                'params': len(self._params),
+                'total_updates': self._update_count
+            }
+    
+    def merge_from(self, other: 'DynamicWordlist'):
+        """合并另一个词表"""
+        with self._lock:
+            for resource, conf in other.get_resources():
+                if resource not in self._resources:
+                    self._resources.add(resource)
+                    self._confidence[f"res:{resource}"] = conf
+            for action, conf in other.get_actions():
+                if action not in self._actions:
+                    self._actions.add(action)
+                    self._confidence[f"act:{action}"] = conf
+            for prefix, conf in other.get_prefixes():
+                if prefix not in self._prefixes:
+                    self._prefixes.add(prefix)
+                    self._confidence[f"pre:{prefix}"] = conf
+            for suffix, conf in other.get_suffixes():
+                if suffix not in self._suffixes:
+                    self._suffixes.add(suffix)
+                    self._confidence[f"suf:{suffix}"] = conf
+            for path, conf in other.get_full_paths():
+                if path not in self._full_paths:
+                    self._full_paths.add(path)
+                    self._confidence[f"path:{path}"] = conf
 
 
 @dataclass
@@ -443,7 +644,7 @@ class HybridFuzzer:
     综合混合Fuzzer
     
     融合三个项目的优点:
-    1. Akto: 流量模式学习
+    1. Akto: 流量模式学习 + 动态词表更新
     2. urlfinder: 被动数据源
     3. FLUX: TF-IDF分类 + 自适应批处理
     """
@@ -455,9 +656,31 @@ class HybridFuzzer:
         self.rate_limiter = SmartRateLimiter(default_rate=30)
         self.tfidf_classifier = TFIDFClassifier()
         
+        self._wordlist = DynamicWordlist()
+        
         self.discovered_endpoints: List[DiscoveredEndpoint] = []
         self.all_urls: Set[str] = set()
+    
+    @property
+    def dynamic_wordlist(self) -> DynamicWordlist:
+        """获取动态词表"""
+        return self._wordlist
+    
+    def learn_and_update_wordlist(self, patterns: List[APIPattern]):
+        """
+        学习模式并更新动态词表
         
+        这是Akto算法的核心：不断从流量中学习，更新词表
+        """
+        for pattern in patterns:
+            self._wordlist.learn_from_pattern(pattern)
+        
+        logger.debug(f"Wordlist updated: {self._wordlist.get_stats()}")
+    
+    def get_dynamic_fuzz_paths(self) -> List[str]:
+        """获取动态生成的Fuzzing路径"""
+        return self._wordlist.generate_fuzz_paths()
+    
     async def discover(self, base_url: str, domain: str) -> List[DiscoveredEndpoint]:
         """综合发现入口"""
         logger.info(f"Starting hybrid discovery for {domain}")
@@ -473,8 +696,24 @@ class HybridFuzzer:
         
         await asyncio.gather(*discovery_tasks, return_exceptions=True)
         
+        self._update_wordlist_from_discoveries()
+        
         logger.info(f"Hybrid discovery complete: {len(self.discovered_endpoints)} endpoints")
         return self.discovered_endpoints
+    
+    def _update_wordlist_from_discoveries(self):
+        """从发现结果更新词表"""
+        for endpoint in self.discovered_endpoints:
+            path = endpoint.path.strip('/')
+            parts = path.split('/')
+            
+            for part in parts:
+                if self._is_api_prefix(part):
+                    self._wordlist.add_prefix(part, endpoint.confidence)
+                else:
+                    self._wordlist.add_resource(part, endpoint.confidence)
+            
+            self._wordlist.add_full_path(path, endpoint.confidence)
     
     async def _discover_from_passive_sources(self, domain: str):
         """从被动源发现"""
@@ -611,6 +850,11 @@ class HybridFuzzer:
         path_lower = path.lower()
         return any(ind in path_lower for ind in api_indicators) or '/' in path
     
+    def _is_api_prefix(self, segment: str) -> bool:
+        """判断是否是API前缀"""
+        prefixes = {'api', 'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'soap', 'rpc', 'gateway', 'openapi', 'swagger'}
+        return segment.lower() in prefixes
+    
     def get_endpoints(self) -> List[DiscoveredEndpoint]:
         """获取所有发现的端点"""
         return self.discovered_endpoints
@@ -624,8 +868,14 @@ class HybridFuzzer:
             'by_source': dict(source_counts),
             'learned_resources': len(self.traffic_learner.resource_counter),
             'learned_params': len(self.traffic_learner.param_patterns),
-            'passive_urls': len(self.all_urls)
+            'passive_urls': len(self.all_urls),
+            'dynamic_wordlist': self._wordlist.get_stats()
         }
+    
+    def get_fuzz_paths_preview(self, top_n: int = 20) -> List[str]:
+        """获取动态生成的Fuzzing路径预览"""
+        paths = self._wordlist.generate_fuzz_paths(top_n)
+        return paths[:top_n]
 
 
 async def hybrid_fuzz(base_url: str, http_client=None) -> Tuple[List[DiscoveredEndpoint], Dict[str, Any]]:
