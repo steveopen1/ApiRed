@@ -450,6 +450,216 @@ def ensemble_fuse_endpoints(
     return engine.get_all_endpoints(), engine.get_fusion_report()
 
 
+class HybridClassification:
+    """
+    混合分类 - 真正的并行多方法融合
+    
+    同时并行调用AI、知识库、统计三种方法：
+    - 任一方法成功即产出结果
+    - 多个方法都识别到了 → 高置信度
+    - 只有AI识别到了 → 考虑AI幻觉降权
+    - 只有知识库识别到了 → 标准置信度
+    - 只有统计识别到了 → 较低置信度
+    """
+    
+    def __init__(
+        self,
+        llm_client=None,
+        knowledge_base: Optional[Dict[str, Any]] = None,
+        statistical_weights: Optional[Dict[str, float]] = None
+    ):
+        self.llm_client = llm_client
+        self.knowledge_base = knowledge_base or {}
+        self.statistical_weights = statistical_weights or {}
+        self._cache: Dict[str, Any] = {}
+    
+    async def classify(self, urls: List[str]) -> Dict[str, Any]:
+        """
+        并行执行三种分类方法并融合结果
+        
+        Args:
+            urls: URL列表
+            
+        Returns:
+            融合后的分类结果
+        """
+        import asyncio
+        
+        ai_task = asyncio.create_task(self._ai_classify(urls))
+        kb_task = asyncio.create_task(self._kb_classify(urls))
+        stat_task = asyncio.create_task(self._stat_classify(urls))
+        
+        results = await asyncio.gather(
+            ai_task,
+            kb_task,
+            stat_task,
+            return_exceptions=True
+        )
+        
+        ai_result, kb_result, stat_result = results
+        
+        if isinstance(ai_result, Exception):
+            ai_result = {}
+        if isinstance(kb_result, Exception):
+            kb_result = {}
+        if isinstance(stat_result, Exception):
+            stat_result = {}
+        
+        return self._ensemble_fuse(ai_result, kb_result, stat_result, urls)
+    
+    async def _ai_classify(self, urls: List[str]) -> Dict[str, Any]:
+        """AI语义分类"""
+        if not self.llm_client:
+            return {}
+        
+        try:
+            from ..collectors.api_collector import LLMUrlClassifier
+            classifier = LLMUrlClassifier.get_instance("hybrid")
+            classifier.llm_client = self.llm_client
+            
+            api_prefixes, _, method = await classifier.classify(urls)
+            
+            if method == 'failed':
+                return {}
+            
+            return {'api_prefixes': api_prefixes, 'method': method}
+        except Exception as e:
+            logger.debug(f"AI classification failed: {e}")
+            return {}
+    
+    async def _kb_classify(self, urls: List[str]) -> Dict[str, Any]:
+        """知识库分类"""
+        return self._kb_classify_sync(urls)
+    
+    def _kb_classify_sync(self, urls: List[str]) -> Dict[str, Any]:
+        """知识库分类（同步版本）"""
+        api_prefixes = set()
+        
+        for url in urls:
+            segments = url.split('/')
+            for seg in segments:
+                if seg.lower() in self.knowledge_base:
+                    api_prefixes.add(seg)
+        
+        return {'api_prefixes': api_prefixes} if api_prefixes else {}
+    
+    async def _stat_classify(self, urls: List[str]) -> Dict[str, Any]:
+        """统计分类 - 频率分析"""
+        return self._stat_classify_sync(urls)
+    
+    def _stat_classify_sync(self, urls: List[str]) -> Dict[str, Any]:
+        """统计分类（同步版本）"""
+        from collections import Counter
+        
+        segment_freq = Counter()
+        segment_positions = defaultdict(set)
+        
+        for url in urls:
+            segments = url.split('/')
+            for i, seg in enumerate(segments):
+                if seg:
+                    segment_freq[seg] += 1
+                    segment_positions[seg].add(i)
+        
+        api_prefixes = set()
+        threshold = max(2, len(urls) * 0.1)
+        
+        for seg, freq in segment_freq.items():
+            if freq >= threshold:
+                positions = segment_positions[seg]
+                avg_pos = sum(positions) / len(positions)
+                if avg_pos <= 2:
+                    api_prefixes.add(seg)
+        
+        return {'api_prefixes': api_prefixes} if api_prefixes else {}
+    
+    def _ensemble_fuse(
+        self,
+        ai_result: Dict[str, Any],
+        kb_result: Dict[str, Any],
+        stat_result: Dict[str, Any],
+        urls: List[str]
+    ) -> Dict[str, Any]:
+        """融合三种方法的结果"""
+        ai_prefixes = ai_result.get('api_prefixes', set()) if isinstance(ai_result, dict) else set()
+        kb_prefixes = kb_result.get('api_prefixes', set()) if isinstance(kb_result, dict) else set()
+        stat_prefixes = stat_result.get('api_prefixes', set()) if isinstance(stat_result, dict) else set()
+        
+        all_prefixes = ai_prefixes | kb_prefixes | stat_prefixes
+        
+        prefix_confidence = {}
+        
+        for prefix in all_prefixes:
+            sources = 0
+            confidence = 0.0
+            
+            if prefix in ai_prefixes:
+                sources += 1
+                confidence += 0.9
+            
+            if prefix in kb_prefixes:
+                sources += 1
+                confidence += 0.8
+            
+            if prefix in stat_prefixes:
+                sources += 1
+                confidence += 0.3
+            
+            if sources >= 2:
+                confidence *= 1.2
+            elif sources == 1 and prefix in ai_prefixes:
+                confidence *= 0.8
+            
+            prefix_confidence[prefix] = min(1.0, confidence)
+        
+        identified_api_keywords = {
+            prefix for prefix, conf in prefix_confidence.items()
+            if conf >= 0.5
+        }
+        
+        method = 'hybrid'
+        if ai_prefixes and not kb_prefixes and not stat_prefixes:
+            method = 'ai_only'
+        elif kb_prefixes and not ai_prefixes and not stat_prefixes:
+            method = 'kb_only'
+        elif stat_prefixes and not ai_prefixes and not kb_prefixes:
+            method = 'stat_only'
+        elif not ai_prefixes and not kb_prefixes and not stat_prefixes:
+            method = 'none'
+        
+        return {
+            'api_prefixes': identified_api_keywords,
+            'prefix_confidence': prefix_confidence,
+            'method': method,
+            'sources': {
+                'ai': len(ai_prefixes),
+                'kb': len(kb_prefixes),
+                'stat': len(stat_prefixes),
+            }
+        }
+        
+        method = 'hybrid'
+        if ai_prefixes and not kb_prefixes and not stat_prefixes:
+            method = 'ai_only'
+        elif kb_prefixes and not ai_prefixes and not stat_prefixes:
+            method = 'kb_only'
+        elif stat_prefixes and not ai_prefixes and not kb_prefixes:
+            method = 'stat_only'
+        elif not ai_prefixes and not kb_prefixes and not stat_prefixes:
+            method = 'none'
+        
+        return {
+            'api_prefixes': identified_api_keywords,
+            'prefix_confidence': prefix_confidence,
+            'method': method,
+            'sources': {
+                'ai': len(ai_prefixes),
+                'kb': len(kb_prefixes),
+                'stat': len(stat_prefixes),
+            }
+        }
+
+
 __all__ = [
     'UnifiedFusionEngine',
     'FusedEndpoint',
@@ -458,4 +668,5 @@ __all__ = [
     'EndpointType',
     'ConfidenceLevel',
     'ensemble_fuse_endpoints',
+    'HybridClassification',
 ]
