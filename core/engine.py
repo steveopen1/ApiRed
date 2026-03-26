@@ -49,7 +49,7 @@ from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
 from .observability import RunProfiler
 
 from .fingerprint import FingerprintEngine, FingerprintResult
-from .collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator, EnhancedEndpoint, SourceType, EndpointType
+from .unified_fusion import UnifiedFusionEngine, FusedEndpoint, SourceType, EndpointType, ConfidenceLevel
 from .secret_matcher import SecretMatcher, SecretMatch, SecretType, RiskLevel
 from .vuln_prioritizer import VulnPrioritizer, VulnCandidate, VulnPriority, VulnCategory
 from .waf_detector import WAFDetector, WAFBypass, WAFResult
@@ -264,7 +264,7 @@ class ScanEngine:
         )
         
         self._fingerprint_engine: Optional[FingerprintEngine] = None
-        self._endpoint_fusion_engine: Optional[EnhancedEndpointAggregator] = None
+        self._endpoint_fusion_engine: Optional[UnifiedFusionEngine] = None
         self._secret_matcher: Optional[SecretMatcher] = None
         self._vuln_prioritizer: Optional[VulnPrioritizer] = None
         self._waf_detector: Optional[WAFDetector] = None
@@ -372,7 +372,7 @@ class ScanEngine:
             self._fingerprint_engine = FingerprintEngine(session=requests_session)
             logger.info(f"指纹引擎已加载: {len(self._fingerprint_engine.get_fingerprints())} 条规则")
             
-            self._endpoint_fusion_engine = EnhancedEndpointAggregator()
+            self._endpoint_fusion_engine = UnifiedFusionEngine()
             self._secret_matcher = SecretMatcher()
             self._vuln_prioritizer = VulnPrioritizer()
             self._waf_detector = WAFDetector()

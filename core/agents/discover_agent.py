@@ -13,7 +13,7 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint
 from ..collectors.api_collector import APIRouter, BaseURLAnalyzer, COMMON_API_PATHS
 from ..collectors.js_collector import JSParser, WebpackAnalyzer
 from ..collectors.browser_collector import HeadlessBrowserCollector
-from ..collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator, SourceType
+from ..unified_fusion import UnifiedFusionEngine, HybridClassification, SourceType
 from ..framework import FrameworkDetector
 from ..analyzers.response_cluster import ResponseCluster
 from ..utils.api_spec_parser import APISpecParser
@@ -38,17 +38,23 @@ class DiscoverAgent(AgentInterface):
         self._api_spec_parser = None
         self._http_client = None
         self._fusion_engine = None
+        self._hybrid_classifier = None
     
     async def initialize(self, context: ScanContext) -> None:
         """初始化发现代理"""
         await super().initialize(context)
         from ..collectors.browser_collector import create_browser_collector
-        from ..collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator
         
         self._browser = await create_browser_collector({'target': context.target})
         self._framework_detector = FrameworkDetector()
         self._response_cluster = ResponseCluster()
-        self._fusion_engine = EnhancedEndpointAggregator()
+        self._fusion_engine = UnifiedFusionEngine()
+        
+        if context.ai_enabled:
+            self._hybrid_classifier = HybridClassification(
+                llm_client=getattr(context, 'llm_client', None),
+                knowledge_base={k.lower(): True for k in COMMON_API_PATHS}
+            )
     
     async def execute(self, context: ScanContext) -> List[APIEndpoint]:
         """
@@ -101,30 +107,35 @@ class DiscoverAgent(AgentInterface):
                         try:
                             source_type_enum = SourceType(source_type_val)
                         except ValueError:
-                            source_type_enum = None
+                            source_type_enum = SourceType.UNKNOWN
                     else:
-                        source_type_enum = source_type_val
+                        source_type_enum = source_type_val or SourceType.UNKNOWN
+                    
+                    full_url = endpoint.full_url or (target.rstrip('/') + '/' + endpoint.path.lstrip('/'))
                     
                     self._fusion_engine.add_endpoint(
-                        url=endpoint.full_url or (target.rstrip('/') + '/' + endpoint.path.lstrip('/')),
+                        url=full_url,
                         method=endpoint.method,
                         source_type=source_type_enum,
                         source_url=endpoint.source or '',
-                        confidence=getattr(endpoint, 'confidence', 'low'),
+                        confidence=0.5,
                         runtime_observed=False,
                     )
                 
-                fused_endpoints = self._fusion_engine.get_all()
+                fused_endpoints = self._fusion_engine.get_all_endpoints()
                 logger.info(f"DiscoverAgent: Fusion reduced {len(unique_endpoints)} endpoints to {len(fused_endpoints)} unique endpoints")
                 
                 api_endpoints = []
                 for fused_ep in fused_endpoints:
+                    parsed = urlparse(fused_ep.url)
+                    path = parsed.path or '/'
+                    
                     api_ep = APIEndpoint(
-                        path=fused_ep.path,
+                        path=path,
                         method=fused_ep.method,
                         source=fused_ep.primary_source.value if fused_ep.primary_source else 'fusion',
-                        full_url=fused_ep.full_url,
-                        tags=['fusion'] + (fused_ep.tags if hasattr(fused_ep, 'tags') else [])
+                        full_url=fused_ep.url,
+                        tags=['fusion'] + fused_ep.tags
                     )
                     api_endpoints.append(api_ep)
                     self.knowledge_base.add_endpoint(api_ep)
