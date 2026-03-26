@@ -3,6 +3,10 @@
 端点融合聚合器 - ApiRed + FLUX 深度融合
 结合 APIAggregator 的简洁性与 EndpointFusionEngine 的智能评分
 
+.. deprecated::
+    此模块已被 core.unified_fusion.UnifiedFusionEngine 替代。
+    请使用 UnifiedFusionEngine 获取更好的混合模式支持和置信度评分。
+
 设计原则:
 1. 保留 APIAggregator 接口兼容性 - 现有代码无缝迁移
 2. 集成 EndpointFusionEngine 置信度评分 - ROI提升
@@ -10,6 +14,13 @@
 4. 集成运行时确认 - 优先测试存活端点
 5. 添加自动端点分类 - 高价值目标优先
 """
+
+import warnings
+warnings.warn(
+    "enhanced_endpoint_aggregator.py is deprecated, use core.unified_fusion.UnifiedFusionEngine instead",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import re
 import hashlib

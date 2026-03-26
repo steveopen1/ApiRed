@@ -2,7 +2,18 @@
 """
 端点融合引擎 - 基于 FLUX v5.2.1
 整合多种来源的端点发现，统一去重和置信度评分
+
+.. deprecated::
+    此模块已被 core.unified_fusion.UnifiedFusionEngine 替代。
+    请使用 UnifiedFusionEngine 获取更好的混合模式支持和置信度评分。
 """
+
+import warnings
+warnings.warn(
+    "endpoint_fusion.py is deprecated, use core.unified_fusion.UnifiedFusionEngine instead",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import re
 import hashlib
