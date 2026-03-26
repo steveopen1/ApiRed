@@ -485,12 +485,12 @@ class ScanEngine:
         from .agents.base import AgentConfig, BaseAgent
         
         missing_config = check_ai_config()
-        ai_client = None
         
         if missing_config:
             logger.warning("Agent 模式: AI API Key 未配置，将使用纯规则模式")
             logger.info("如需启用 AI 模式，请配置以下环境变量:")
             print_ai_config_guide()
+            ai_client = None
             self.result = ScanResult(
                 target_url=self.config.target,
                 start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -498,9 +498,8 @@ class ScanEngine:
                 errors=["AI API key not configured - using rule-based mode"]
             )
         else:
-            if ai_client is None:
-                from .ai import LLMClient
-                ai_client = LLMClient()
+            from .ai import LLMClient
+            ai_client = LLMClient()
             self.result = ScanResult(
                 target_url=self.config.target,
                 start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
