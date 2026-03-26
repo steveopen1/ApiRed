@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 class TesterAgent(BaseAgent):
     """测试Agent - 负责执行漏洞测试"""
     
-    def __init__(self, config: AgentConfig):
-        super().__init__(config)
+    def __init__(self, config: AgentConfig, llm_client: Optional[Any] = None):
+        super().__init__(config, llm_client)
         self.test_results = []
         self.test_suite = "OWASP Top10"
     

@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 class AnalyzerAgent(BaseAgent):
     """分析Agent - 负责漏洞分析和推理"""
     
-    def __init__(self, config: AgentConfig):
-        super().__init__(config)
+    def __init__(self, config: AgentConfig, llm_client: Optional[Any] = None):
+        super().__init__(config, llm_client)
         self.vulnerabilities = []
         self.risk_level = "low"
     
