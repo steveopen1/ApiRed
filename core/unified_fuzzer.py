@@ -14,7 +14,7 @@ Unified Fuzzer - 统一Fuzzing入口
 
 import asyncio
 import logging
-from typing import Dict, List, Any, Optional, Callable, Set
+from typing import Dict, List, Any, Optional, Callable, Set, Tuple
 from dataclasses import dataclass
 
 from .testers.enhanced_payloads import EnhancedPayloadManager, create_payload_manager
