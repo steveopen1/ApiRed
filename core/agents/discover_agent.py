@@ -13,6 +13,7 @@ from ..knowledge_base import KnowledgeBase, APIEndpoint
 from ..collectors.api_collector import APIRouter, BaseURLAnalyzer, COMMON_API_PATHS
 from ..collectors.js_collector import JSParser, WebpackAnalyzer
 from ..collectors.browser_collector import HeadlessBrowserCollector
+from ..collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator, SourceType
 from ..framework import FrameworkDetector
 from ..analyzers.response_cluster import ResponseCluster
 from ..utils.api_spec_parser import APISpecParser
@@ -36,14 +37,18 @@ class DiscoverAgent(AgentInterface):
         self._response_cluster = None
         self._api_spec_parser = None
         self._http_client = None
+        self._fusion_engine = None
     
     async def initialize(self, context: ScanContext) -> None:
         """初始化发现代理"""
         await super().initialize(context)
         from ..collectors.browser_collector import create_browser_collector
+        from ..collectors.enhanced_endpoint_aggregator import EnhancedEndpointAggregator
+        
         self._browser = await create_browser_collector({'target': context.target})
         self._framework_detector = FrameworkDetector()
         self._response_cluster = ResponseCluster()
+        self._fusion_engine = EnhancedEndpointAggregator()
     
     async def execute(self, context: ScanContext) -> List[APIEndpoint]:
         """
@@ -88,6 +93,44 @@ class DiscoverAgent(AgentInterface):
             logger.info(f"DiscoverAgent: Found {len(fuzzed_endpoints)} endpoints from Fuzz")
             
             unique_endpoints = self._deduplicate_endpoints(all_endpoints)
+            
+            if self._fusion_engine:
+                for endpoint in unique_endpoints:
+                    source_type_val = getattr(endpoint, 'source_type', None)
+                    if isinstance(source_type_val, str):
+                        try:
+                            source_type_enum = SourceType(source_type_val)
+                        except ValueError:
+                            source_type_enum = None
+                    else:
+                        source_type_enum = source_type_val
+                    
+                    self._fusion_engine.add_endpoint(
+                        url=endpoint.full_url or (target.rstrip('/') + '/' + endpoint.path.lstrip('/')),
+                        method=endpoint.method,
+                        source_type=source_type_enum,
+                        source_url=endpoint.source or '',
+                        confidence=getattr(endpoint, 'confidence', 'low'),
+                        runtime_observed=False,
+                    )
+                
+                fused_endpoints = self._fusion_engine.get_all()
+                logger.info(f"DiscoverAgent: Fusion reduced {len(unique_endpoints)} endpoints to {len(fused_endpoints)} unique endpoints")
+                
+                api_endpoints = []
+                for fused_ep in fused_endpoints:
+                    api_ep = APIEndpoint(
+                        path=fused_ep.path,
+                        method=fused_ep.method,
+                        source=fused_ep.primary_source.value if fused_ep.primary_source else 'fusion',
+                        full_url=fused_ep.full_url,
+                        tags=['fusion'] + (fused_ep.tags if hasattr(fused_ep, 'tags') else [])
+                    )
+                    api_endpoints.append(api_ep)
+                    self.knowledge_base.add_endpoint(api_ep)
+                
+                self.discovered_endpoints = api_endpoints
+                return api_endpoints
             
             for endpoint in unique_endpoints:
                 self.knowledge_base.add_endpoint(endpoint)
