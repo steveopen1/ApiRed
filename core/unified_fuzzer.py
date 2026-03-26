@@ -5,6 +5,7 @@ Unified Fuzzer - 统一Fuzzing入口
 1. SensitivePathFuzzer - 敏感路径探测
 2. FuzzTester - 参数模糊测试
 3. EnhancedPayloadManager - 智能Payload选择
+4. HybridFuzzer - 综合混合Fuzzing算法 (Akto+urlfinder+FLUX)
 
 智能Payload选择策略：
 - 根据响应Content-Type选择最合适的Payload
@@ -20,6 +21,7 @@ from dataclasses import dataclass
 from .testers.enhanced_payloads import EnhancedPayloadManager, create_payload_manager
 from .fuzzing.sensitive_path_fuzzer import SensitivePathFuzzer, PathFuzzFinding
 from .testers.fuzz_tester import FuzzTester, FuzzResult
+from .fuzzing.hybrid_fuzzer import HybridFuzzer, hybrid_fuzz, DiscoveredEndpoint
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ class UnifiedFuzzer:
     - SSRF测试
     - 命令注入测试
     - 路径遍历测试
+    - 综合混合Fuzzing (HybridFuzzer)
     """
     
     def __init__(self, http_client=None):
@@ -55,6 +58,7 @@ class UnifiedFuzzer:
         self._payload_manager = create_payload_manager()
         self._path_fuzzer = SensitivePathFuzzer(http_client)
         self._fuzz_tester = FuzzTester(http_client) if http_client else None
+        self._hybrid_fuzzer = HybridFuzzer(http_client)
         self._results: List[UnifiedFuzzResult] = []
         self._vuln_count = 0
     
@@ -64,6 +68,7 @@ class UnifiedFuzzer:
             'total_results': len(self._results),
             'vulnerabilities_found': self._vuln_count,
             'payload_stats': self._payload_manager.statistics,
+            'hybrid_stats': self._hybrid_fuzzer.get_stats(),
         }
     
     async def fuzz_all(
@@ -257,6 +262,51 @@ class UnifiedFuzzer:
                 self._vuln_count += 1
         
         return self._results
+    
+    async def fuzz_hybrid(
+        self,
+        base_url: str,
+        callback: Optional[Callable] = None
+    ) -> List[DiscoveredEndpoint]:
+        """
+        综合混合Fuzzing (Akto + urlfinder + FLUX)
+        
+        融合三个项目的算法优点:
+        1. Akto: 流量模式学习
+        2. urlfinder: 被动数据源
+        3. FLUX: TF-IDF分类 + 自适应批处理
+        
+        Args:
+            base_url: 目标URL
+            callback: 结果回调
+            
+        Returns:
+            发现的端点列表
+        """
+        from urllib.parse import urlparse
+        
+        parsed = urlparse(base_url)
+        domain = parsed.netloc
+        
+        endpoints = await self._hybrid_fuzzer.discover(base_url, domain)
+        
+        for endpoint in endpoints:
+            result = UnifiedFuzzResult(
+                url=f"{base_url.rstrip('/')}/{endpoint.path.lstrip('/')}",
+                method=endpoint.method,
+                payload=endpoint.path,
+                vul_type='discovered_endpoint',
+                severity='info',
+                status_code=0,
+                confidence=endpoint.confidence,
+                source=f'hybrid_{endpoint.source.value}'
+            )
+            self._results.append(result)
+        
+        if callback:
+            callback(endpoints)
+        
+        return endpoints
     
     def get_vulnerabilities_by_severity(self, severity: str) -> List[UnifiedFuzzResult]:
         """按严重程度获取漏洞"""

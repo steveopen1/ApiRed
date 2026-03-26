@@ -24,7 +24,6 @@ from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester, APIRequestTester, APIBypassTester
-from .unified_fuzzer import UnifiedFuzzer
 from .testers.idor_tester import IDORTester
 from .utils.url_greper import URLGreper
 from .utils.gf import GFLibrary
@@ -236,6 +235,7 @@ class ScanEngine:
         )
         
         self._fuzz_tester = FuzzTester(self._http_client)
+        from .unified_fuzzer import UnifiedFuzzer
         self._unified_fuzzer = UnifiedFuzzer(self._http_client)
         
         patterns_dir = os.path.join(os.path.dirname(__file__), 'utils', 'patterns')
