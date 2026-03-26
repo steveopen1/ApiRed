@@ -1787,16 +1787,63 @@ class ScanEngine:
     
     def _generate_cross_fuzz_targets(self, path_segments: set, suffixes: set) -> List[Tuple[str, str]]:
         """
-        生成跨来源Fuzzing目标组合 - 智能权重策略
+        生成跨来源Fuzzing目标组合 - 扩展词表策略
         
-        策略:
-        1. 高权重：资源+CRUD操作 (/user/list, /user/detail, /user/add)
-        2. 中权重：API前缀+资源 (/api/users, /v1/orders)
-        3. 低权重：路径+路径 (/user/profile)
-        4. 过滤：无意义组合
+        覆盖：认证/搜索/支付/状态/社交/配置/媒体/位置等场景
         """
         targets = []
         priority_targets = []
+        
+        segments = sorted(list(path_segments), key=len, reverse=True)
+        
+        ACTION_SUFFIXES = {
+            'login', 'logout', 'register', 'signup', 'signin', 'signout',
+            'forgot', 'reset', 'verify', 'validate', 'confirm', 'authorize',
+            'oauth', 'sso', 'token', 'refresh', 'revoke',
+            'search', 'query', 'suggest', 'autocomplete', 'lookup',
+            'filter', 'sort', 'order', 'page', 'paginate',
+            'hot', 'trending', 'recommend', 'related', 'similar',
+            'export', 'import', 'download', 'upload', 'batch', 'sync',
+            'backup', 'restore', 'migrate', 'clone', 'duplicate',
+            'subscribe', 'unsubscribe', 'follow', 'unfollow', 'like', 'unlike',
+            'share', 'comment', 'forward', 'bookmark', 'favorite',
+            'pay', 'refund', 'cancel', 'close', 'checkout', 'status', 'history',
+            'enable', 'disable', 'activate', 'deactivate', 'lock', 'unlock',
+            'open', 'start', 'stop', 'pause', 'resume', 'reset',
+            'submit', 'approve', 'reject', 'accept', 'deny',
+            'settings', 'preference', 'options', 'setup', 'init', 'permission',
+            'list', 'detail', 'info', 'profile', 'view', 'read', 'fetch',
+            'add', 'create', 'edit', 'update', 'delete', 'remove',
+            'get', 'set', 'save', 'load', 'submit',
+            'stat', 'stats', 'statistics', 'report', 'summary', 'total',
+            'callback', 'notify', 'notice', 'alert', 'push', 'pull',
+            'image', 'video', 'audio', 'file', 'avatar', 'thumbnail', 'stream',
+            'location', 'map', 'geo', 'nearby', 'distance', 'route',
+            'call', 'send', 'receive', 'fetch', 'check', 'check'
+        }
+        
+        RESOURCE_WORDS = {
+            'user', 'users', 'account', 'order', 'orders', 'product', 'products',
+            'item', 'items', 'admin', 'auth', 'token', 'role', 'roles',
+            'menu', 'config', 'system', 'log', 'monitor', 'tool', 'file', 'files',
+            'category', 'categories', 'tag', 'tags', 'article', 'articles',
+            'customer', 'customers', 'employee', 'payment', 'payments',
+            'address', 'addresses', 'notification', 'notifications',
+            'message', 'messages', 'device', 'gateway', 'sensor', 'alarm', 'rule',
+            'warehouse', 'delivery', 'driver', 'route', 'server', 'character',
+            'guild', 'mail', 'rank', 'hospital', 'department', 'doctor',
+            'appointment', 'patient', 'license', 'permit', 'news', 'document', 'service'
+        }
+        
+        def get_segment_priority(seg: str) -> int:
+            seg_lower = seg.lower()
+            if seg_lower in ACTION_SUFFIXES:
+                return 3
+            if seg_lower in RESOURCE_WORDS:
+                return 2
+            if any(kw in seg_lower for kw in ['user', 'order', 'product', 'account', 'admin']):
+                return 1
+            return 0
         
         segments = sorted(list(path_segments), key=len, reverse=True)
         
@@ -1834,7 +1881,7 @@ class ScanEngine:
             for suffix in list(suffixes)[:30]:
                 suffix_lower = suffix.lower().lstrip('/')
                 
-                if suffix_lower in CRUD_SUFFIXES:
+                if suffix_lower in ACTION_SUFFIXES:
                     if seg_priority >= 1:
                         target = (segment, '/' + suffix)
                         priority_targets.append((3, target))
