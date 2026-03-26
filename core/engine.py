@@ -2190,49 +2190,117 @@ class ScanEngine:
         
         all_responses: List[Any] = []
         
+        RESTFUL_METHODS = {'PUT', 'DELETE', 'PATCH'}
+        
         for endpoint in endpoints:
-            try:
-                response = await self._http_client.request(
-                    endpoint.full_url,
-                    method=endpoint.method
-                )
-                from .utils.http_client import TaskResult
-                task_result = TaskResult(
-                    url=endpoint.full_url,
-                    method=endpoint.method,
-                    status_code=response.status_code,
-                    content=response.content,
-                    content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
-                    content_hash=getattr(response, 'content_hash', '')
-                )
-                all_responses.append(task_result)
-                
-                from .analyzers.response_cluster import TaskResult as RCTaskResult
-                rc_task_result = RCTaskResult(
-                    status_code=response.status_code,
-                    content=response.content.encode() if isinstance(response.content, str) else response.content,
-                    content_hash=response.content_hash
-                )
-                self._response_cluster.add_response(endpoint.api_id, rc_task_result)
-                
-                if not self._response_cluster.is_baseline_404(endpoint.api_id):
-                    is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+            methods_to_try = ['GET', 'POST']
+            
+            path_lower = endpoint.path.lower()
+            if any(kw in path_lower for kw in ['user', 'account', 'profile', 'item', 'order', 'product', 'admin', 'manage', 'config', 'setting']):
+                methods_to_try.extend(['PUT', 'DELETE', 'PATCH'])
+            
+            if endpoint.path.endswith('/{id}') or '/{id}' in endpoint.path:
+                methods_to_try.extend(['PUT', 'DELETE', 'PATCH'])
+            
+            endpoint_found = False
+            
+            for method in methods_to_try:
+                try:
+                    response = await self._http_client.request(
+                        endpoint.full_url,
+                        method=method
+                    )
                     
-                    if is_valid:
-                        from .models import APIStatus
-                        endpoint.status = APIStatus.ALIVE
+                    if response.status_code and 200 <= response.status_code < 400:
+                        endpoint.method = method
                         endpoint.status_code = response.status_code
                         endpoint.response_type = self._detect_response_type(response)
                         
-                        if self._api_scorer:
-                            self._api_scorer.add_evidence(
-                                endpoint.full_url,
-                                'http_test',
-                                {},
-                                http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
-                            )
-            except Exception as e:
-                logger.debug(f"API scoring error: {e}")
+                        from .utils.http_client import TaskResult
+                        task_result = TaskResult(
+                            url=endpoint.full_url,
+                            method=method,
+                            status_code=response.status_code,
+                            content=response.content,
+                            content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
+                            content_hash=getattr(response, 'content_hash', '')
+                        )
+                        all_responses.append(task_result)
+                        
+                        from .analyzers.response_cluster import TaskResult as RCTaskResult
+                        rc_task_result = RCTaskResult(
+                            status_code=response.status_code,
+                            content=response.content.encode() if isinstance(response.content, str) else response.content,
+                            content_hash=response.content_hash
+                        )
+                        self._response_cluster.add_response(endpoint.api_id, rc_task_result)
+                        
+                        if not self._response_cluster.is_baseline_404(endpoint.api_id):
+                            is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+                            
+                            if is_valid:
+                                from .models import APIStatus
+                                endpoint.status = APIStatus.ALIVE
+                                endpoint_found = True
+                                
+                                if self._api_scorer:
+                                    self._api_scorer.add_evidence(
+                                        endpoint.full_url,
+                                        'http_test',
+                                        {},
+                                        http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
+                                    )
+                                break
+                    else:
+                        from .utils.http_client import TaskResult
+                        task_result = TaskResult(
+                            url=endpoint.full_url,
+                            method=method,
+                            status_code=response.status_code,
+                            content=response.content if hasattr(response, 'content') else None,
+                            content_bytes=b'',
+                            content_hash=''
+                        )
+                        all_responses.append(task_result)
+                        
+                except Exception:
+                    continue
+            
+            if not endpoint_found:
+                try:
+                    response = await self._http_client.request(
+                        endpoint.full_url,
+                        method=endpoint.method
+                    )
+                    from .utils.http_client import TaskResult
+                    task_result = TaskResult(
+                        url=endpoint.full_url,
+                        method=endpoint.method,
+                        status_code=response.status_code,
+                        content=response.content,
+                        content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
+                        content_hash=getattr(response, 'content_hash', '')
+                    )
+                    all_responses.append(task_result)
+                    
+                    from .analyzers.response_cluster import TaskResult as RCTaskResult
+                    rc_task_result = RCTaskResult(
+                        status_code=response.status_code,
+                        content=response.content.encode() if isinstance(response.content, str) else response.content,
+                        content_hash=response.content_hash
+                    )
+                    self._response_cluster.add_response(endpoint.api_id, rc_task_result)
+                    
+                    if not self._response_cluster.is_baseline_404(endpoint.api_id):
+                        is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+                        
+                        if is_valid:
+                            from .models import APIStatus
+                            endpoint.status = APIStatus.ALIVE
+                            endpoint.status_code = response.status_code
+                            endpoint.response_type = self._detect_response_type(response)
+                except Exception:
+                    pass
         
         if self._response_baseline and all_responses:
             try:
