@@ -27,6 +27,18 @@ from .testers import FuzzTester, VulnerabilityTester, APIRequestTester, APIBypas
 from .testers.idor_tester import IDORTester
 from .utils.url_greper import URLGreper
 from .utils.gf import GFLibrary
+from .utils.adaptive_scheduler import AdaptiveBatchScheduler
+from .utils.error_handler import (
+    ErrorSeverity,
+    FuzzingError,
+    NetworkError,
+    DNSError,
+    HTTPError,
+    ConfigurationError,
+    FatalError,
+    ErrorHandler,
+    CircuitBreaker
+)
 from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
 from .agents.orchestrator import ScanContext
@@ -237,6 +249,19 @@ class ScanEngine:
         self._api_request_tester = APIRequestTester(self._http_client)
         self._bypass_tester = APIBypassTester(self._http_client)
         self._profiler = RunProfiler()
+        self._fuzz_batch_scheduler = AdaptiveBatchScheduler(
+            initial_batch_size=50,
+            min_batch_size=10,
+            max_batch_size=100,
+            fast_threshold=0.5,
+            slow_threshold=2.0
+        )
+        self._error_handler = ErrorHandler(max_retries=3)
+        self._fuzz_circuit_breaker = CircuitBreaker(
+            failure_threshold=10,
+            recovery_timeout=60.0,
+            expected_exception=Exception
+        )
         
         self._fingerprint_engine: Optional[FingerprintEngine] = None
         self._endpoint_fusion_engine: Optional[EnhancedEndpointAggregator] = None
@@ -1393,30 +1418,36 @@ class ScanEngine:
                         seen_targets.add(param_combo2)
                         fuzz_targets.append((api_base, f"/{param_clean}/1"))
         
-        async def probe_target(base: str, suffix: str) -> Optional[Tuple[str, str]]:
+        async def probe_target(base: str, suffix: str) -> Optional[Tuple[str, str, float]]:
             full_url = base_url + base + suffix
+            start_time = time.time()
             try:
                 response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                elapsed = time.time() - start_time
                 if response.status_code and 200 <= response.status_code < 400:
-                    return (base, suffix)
+                    self._fuzz_batch_scheduler.record_success(elapsed)
+                    return (base, suffix, elapsed)
             except Exception:
+                elapsed = time.time() - start_time
                 try:
                     response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    elapsed = time.time() - start_time
                     if response.status_code and 200 <= response.status_code < 400:
-                        return (base, suffix)
+                        self._fuzz_batch_scheduler.record_success(elapsed)
+                        return (base, suffix, elapsed)
                 except Exception:
+                    self._fuzz_batch_scheduler.record_failure()
                     pass
             return None
         
-        batch_size = 50
-        for i in range(0, len(fuzz_targets), batch_size):
-            batch = fuzz_targets[i:i+batch_size]
+        for i in range(0, len(fuzz_targets), self._fuzz_batch_scheduler.batch_size):
+            batch = fuzz_targets[i:i+self._fuzz_batch_scheduler.batch_size]
             tasks = [probe_target(base, suffix) for base, suffix in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             for result in results:
-                if result and isinstance(result, tuple):
-                    parent_path, found_suffix = result
+                if result and isinstance(result, tuple) and len(result) == 3:
+                    parent_path, found_suffix, elapsed = result
                     found_path = parent_path + found_suffix
                     if found_path not in fuzzed_results:
                         fuzzed_results[found_path] = set()
@@ -1461,30 +1492,37 @@ class ScanEngine:
         
         logger.info(f"Generated {len(fuzz_targets)} fuzz targets")
         
-        async def probe_target(base: str, path: str) -> Optional[str]:
+        async def probe_target(base: str, path: str) -> Optional[Tuple[str, float]]:
             full_url = base_url + base + path
+            start_time = time.time()
             try:
                 response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                elapsed = time.time() - start_time
                 if response.status_code and 200 <= response.status_code < 400:
-                    return base + path
+                    self._fuzz_batch_scheduler.record_success(elapsed)
+                    return (base + path, elapsed)
             except Exception:
+                elapsed = time.time() - start_time
                 try:
                     response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    elapsed = time.time() - start_time
                     if response.status_code and 200 <= response.status_code < 400:
-                        return base + path
+                        self._fuzz_batch_scheduler.record_success(elapsed)
+                        return (base + path, elapsed)
                 except Exception:
+                    self._fuzz_batch_scheduler.record_failure()
                     pass
             return None
         
-        batch_size = 50
-        for i in range(0, len(fuzz_targets), batch_size):
-            batch = fuzz_targets[i:i+batch_size]
+        for i in range(0, len(fuzz_targets), self._fuzz_batch_scheduler.batch_size):
+            batch = fuzz_targets[i:i+self._fuzz_batch_scheduler.batch_size]
             tasks = [probe_target(base, path) for base, path in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             for result in results:
-                if result and isinstance(result, str):
-                    fuzzed_results[result] = {'source': 'cross_fuzz'}
+                if result and isinstance(result, tuple) and len(result) == 2:
+                    found_path, elapsed = result
+                    fuzzed_results[found_path] = {'source': 'cross_fuzz'}
         
         return fuzzed_results
     

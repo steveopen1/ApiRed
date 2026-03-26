@@ -25,6 +25,177 @@ class APIFindResult:
     url_type: str = "api_path"
 
 
+class TFIDFUrlClassifier:
+    """
+    基于TF-IDF的URL分类器
+    
+    使用TF-IDF风格的评分机制替代硬阈值判断API前缀：
+    - TF: 词频（该段在所有URL中出现的频率）
+    - IDF: 逆文档频率（log(总URL数 / 包含该段的URL数)）
+    - 位置权重：越靠前的段越可能是API前缀
+    """
+    
+    def __init__(self, known_prefixes: Set[str] = None, known_resources: Set[str] = None):
+        self.known_prefixes = known_prefixes or set()
+        self.known_resources = known_resources or set()
+        self.segment_freq: Dict[str, int] = {}
+        self.doc_freq: Dict[str, int] = {}
+        self.total_docs = 0
+        self.segment_at_position: Dict[int, List[str]] = {}
+        self.segment_positions: Dict[str, Set[int]] = {}
+    
+    def fit(self, urls: List[str]) -> 'TFIDFUrlClassifier':
+        """
+        从URL列表学习统计信息
+        
+        Args:
+            urls: URL列表
+            
+        Returns:
+            self
+        """
+        from collections import Counter, defaultdict
+        
+        segment_urls = {}
+        segment_at_position = defaultdict(list)
+        segment_positions = defaultdict(set)
+        segment_count = Counter()
+        doc_freq = Counter()
+        
+        for url in urls:
+            if not url:
+                continue
+            
+            if url.startswith('http://') or url.startswith('https://'):
+                parsed = urlparse(url)
+                path = parsed.path
+            elif url.startswith('/'):
+                path = url
+            else:
+                continue
+            
+            if not path or path == '/':
+                continue
+            
+            segments = [s for s in path.split('/') if s]
+            if not segments:
+                continue
+            
+            full_path = '/' + '/'.join(segments)
+            segment_urls[full_path] = segments
+            
+            for seg in set(segments):
+                doc_freq[seg] += 1
+            
+            for i, seg in enumerate(segments):
+                segment_at_position[i].append(seg)
+                segment_count[seg] += 1
+                segment_positions[seg].add(i)
+        
+        self.total_docs = len(segment_urls)
+        self.segment_freq = dict(segment_count)
+        self.doc_freq = dict(doc_freq)
+        self.segment_at_position = dict(segment_at_position)
+        self.segment_positions = dict(segment_positions)
+        
+        return self
+    
+    def score_segment(self, segment: str, positions: Set[int]) -> float:
+        """
+        计算段是否是API前缀的TF-IDF评分
+        
+        Args:
+            segment: 要评分的段
+            positions: 该段出现的位置集合
+            
+        Returns:
+            TF-IDF评分（越高越可能是API前缀）
+        """
+        import math
+        
+        if self.total_docs == 0 or segment not in self.segment_freq:
+            return 0.0
+        
+        tf = self.segment_freq[segment] / self.total_docs
+        
+        docs_with_segment = self.doc_freq.get(segment, 1)
+        if docs_with_segment == 0:
+            idf = 0.0
+        else:
+            idf = math.log(self.total_docs / docs_with_segment)
+        
+        avg_pos = sum(positions) / len(positions) if positions else 0
+        pos_weight = 1.0 / (avg_pos + 1)
+        
+        return tf * idf * pos_weight
+    
+    def classify_prefixes(self, urls: List[str], dynamic_threshold: bool = True, 
+                          static_threshold: float = 0.1) -> Tuple[Set[str], Set[str]]:
+        """
+        从URL列表中分类API前缀和资源路径
+        
+        Args:
+            urls: URL列表
+            dynamic_threshold: 是否使用动态阈值（基于TF-IDF分布）
+            static_threshold: 如果不使用动态阈值，则使用此固定阈值
+            
+        Returns:
+            (identified_api_keywords, resource_candidates)
+        """
+        if self.total_docs == 0:
+            self.fit(urls)
+        
+        identified_api_keywords = set()
+        resource_candidates = set()
+        
+        for seg, positions in self.segment_positions.items():
+            if seg.lower() in self.known_prefixes:
+                identified_api_keywords.add(seg)
+                continue
+            
+            if seg.lower() in self.known_resources:
+                resource_candidates.add(seg)
+                continue
+            
+            score = self.score_segment(seg, positions)
+            
+            if dynamic_threshold:
+                threshold = self._calculate_dynamic_threshold()
+            else:
+                threshold = static_threshold
+            
+            if score > threshold:
+                identified_api_keywords.add(seg)
+        
+        return identified_api_keywords, resource_candidates
+    
+    def _calculate_dynamic_threshold(self) -> float:
+        """
+        基于TF-IDF分布计算动态阈值
+        
+        使用所有段评分的25%分位数作为阈值，
+        这样可以自适应地根据数据分布来确定阈值。
+        """
+        import math
+        
+        if not self.segment_freq:
+            return 0.1
+        
+        scores = []
+        for seg, positions in self.segment_positions.items():
+            if seg.lower() not in self.known_prefixes and seg.lower() not in self.known_resources:
+                score = self.score_segment(seg, positions)
+                if score > 0:
+                    scores.append(score)
+        
+        if not scores:
+            return 0.1
+        
+        scores.sort()
+        q1_index = len(scores) // 4
+        return max(0.05, scores[q1_index] if q1_index < len(scores) else 0.1)
+
+
 class ContentTypeDetector:
     """
     Content-Type 检测器
@@ -843,20 +1014,28 @@ class APIRouter:
                         if seg_lower not in known_resources:
                             identified_api_keywords.add(most_common_seg)
         
+        tfidf_classifier = TFIDFUrlClassifier(
+            known_prefixes=known_prefixes,
+            known_resources=known_resources
+        )
+        tfidf_classifier.fit(urls)
+        
         for pos, segs in segment_at_position.items():
             if len(segs) < 2:
                 continue
             
             unique_segments = set(segs)
-            unique_ratio = len(unique_segments) / len(segs)
             
-            if unique_ratio < 0.4:
-                for seg in unique_segments:
-                    seg_lower = seg.lower()
-                    if seg_lower not in known_resources:
-                        freq = segs.count(seg)
-                        if freq / total_urls >= 0.2:
-                            identified_api_keywords.add(seg)
+            for seg in unique_segments:
+                seg_lower = seg.lower()
+                if seg_lower in known_resources:
+                    continue
+                
+                score = tfidf_classifier.score_segment(seg, tfidf_classifier.segment_positions.get(seg, {pos}))
+                threshold = tfidf_classifier._calculate_dynamic_threshold()
+                
+                if score > threshold:
+                    identified_api_keywords.add(seg)
         
         base_urls = set()
         def get_api_prefix(segments, identified_keywords, known_prefixes):

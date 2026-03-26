@@ -9,12 +9,16 @@ import asyncio
 import logging
 import socket
 import re
+import time
+import logging
 from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass
 import dns.resolver
 import dns.query
 import dns.zone
 from urllib.parse import urlparse
+
+from ..utils.adaptive_scheduler import AdaptiveDNSResolver
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +90,13 @@ class SubdomainEnumerator:
         self.resolver = dns.resolver.Resolver()
         self.resolver.timeout = 3.0
         self.resolver.lifetime = 5.0
+        self._dns_scheduler = AdaptiveDNSResolver(
+            base_concurrency=concurrency,
+            min_concurrency=10,
+            max_concurrency=100,
+            fast_threshold=0.1,
+            slow_threshold=2.0
+        )
     
     async def enumerate(
         self,
@@ -135,36 +146,49 @@ class SubdomainEnumerator:
         domain: str,
         wordlist: List[str]
     ) -> List[SubdomainFinding]:
-        """DNS 字典爆破"""
+        """DNS 字典爆破（自适应并发）"""
         findings = []
+        loop = asyncio.get_event_loop()
         
-        async def check_subdomain(subdomain: str) -> Optional[SubdomainFinding]:
-            try:
-                full_domain = f"{subdomain}.{domain}"
-                answers = self.resolver.resolve(full_domain, 'A')
-                ips = [rdata.address for rdata in answers]
-                
-                if ips:
-                    self.discovered.add(full_domain)
-                    return SubdomainFinding(
-                        subdomain=full_domain,
-                        ip_address=', '.join(ips),
-                        source='dns_bruteforce'
+        async def check_subdomain(semaphore: asyncio.Semaphore, subdomain: str) -> Optional[SubdomainFinding]:
+            async with semaphore:
+                start_time = time.time()
+                try:
+                    full_domain = f"{subdomain}.{domain}"
+                    answers = await loop.run_in_executor(
+                        None, 
+                        lambda: self.resolver.resolve(full_domain, 'A')
                     )
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-                pass
-            except Exception as e:
-                logger.debug(f"DNS check failed for {subdomain}.{domain}: {e}")
-            
-            return None
+                    elapsed = time.time() - start_time
+                    ips = [rdata.address for rdata in answers]
+                    
+                    if ips:
+                        self.discovered.add(full_domain)
+                        self._dns_scheduler.record_response_time(elapsed)
+                        return SubdomainFinding(
+                            subdomain=full_domain,
+                            ip_address=', '.join(ips),
+                            source='dns_bruteforce'
+                        )
+                    self._dns_scheduler.record_response_time(elapsed)
+                except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+                    self._dns_scheduler.record_response_time(time.time() - start_time)
+                    pass
+                except Exception as e:
+                    self._dns_scheduler.record_timeout()
+                    logger.debug(f"DNS check failed for {subdomain}.{domain}: {e}")
+                
+                return None
         
-        tasks = [check_subdomain(sub) for sub in wordlist]
+        semaphore = asyncio.Semaphore(self._dns_scheduler.concurrency)
+        tasks = [check_subdomain(semaphore, sub) for sub in wordlist]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         for result in results:
             if isinstance(result, SubdomainFinding):
                 findings.append(result)
         
+        logger.debug(f"DNS bruteforce completed with concurrency: {self._dns_scheduler.concurrency}")
         return findings
     
     async def _zone_transfer(self, domain: str) -> List[SubdomainFinding]:
