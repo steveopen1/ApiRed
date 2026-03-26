@@ -604,8 +604,7 @@ class ScanEngine:
             model="deepseek-chat",
             system_prompt="你是一个专业的 API 安全分析专家，负责评估漏洞风险等级和提出修复建议。"
         )
-        analyzer_agent = AnalyzerAgent(analyzer_config)
-        analyzer_agent.llm_client = ai_client
+        analyzer_agent = AnalyzerAgent(analyzer_config, ai_client)
         
         logger.info(f"Phase 2b: AnalyzerAgent 分析漏洞")
         for endpoint in endpoints[:20]:
@@ -626,8 +625,7 @@ class ScanEngine:
             model="deepseek-chat",
             system_prompt="你是一个专业的渗透测试专家，负责生成有效的攻击载荷。"
         )
-        tester_agent = TesterAgent(tester_config)
-        tester_agent.llm_client = ai_client
+        tester_agent = TesterAgent(tester_config, ai_client)
         
         logger.info(f"Phase 2c: TesterAgent 生成智能载荷")
         for endpoint in endpoints[:10]:
