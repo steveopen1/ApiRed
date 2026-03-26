@@ -12,6 +12,8 @@ from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse, urljoin
 
+from .enhanced_payloads import EnhancedPayloadManager, create_payload_manager
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,12 +126,29 @@ class FuzzTester:
         http_client,
         sql_payloads: Optional[List[str]] = None,
         xss_payloads: Optional[List[str]] = None,
-        command_payloads: Optional[List[str]] = None
+        command_payloads: Optional[List[str]] = None,
+        use_enhanced_payloads: bool = True
     ):
         self.http_client = http_client
-        self.sql_payloads = sql_payloads or self.SQLI_PAYLOADS
-        self.xss_payloads = xss_payloads or self.XSS_PAYLOADS
-        self.command_payloads = command_payloads or self.COMMAND_PAYLOADS
+        self.use_enhanced_payloads = use_enhanced_payloads
+        
+        if use_enhanced_payloads:
+            self._payload_manager = create_payload_manager()
+            if sql_payloads:
+                self._payload_manager.add_custom_payloads('sql_injection', sql_payloads)
+            if xss_payloads:
+                self._payload_manager.add_custom_payloads('xss', xss_payloads)
+            if command_payloads:
+                self._payload_manager.add_custom_payloads('command_injection', command_payloads)
+            self.sql_payloads = self._payload_manager.get_payloads('sql_injection', count=20)
+            self.xss_payloads = self._payload_manager.get_payloads('xss', count=20)
+            self.command_payloads = self._payload_manager.get_payloads('command_injection', count=20)
+        else:
+            self._payload_manager = None
+            self.sql_payloads = sql_payloads or self.SQLI_PAYLOADS
+            self.xss_payloads = xss_payloads or self.XSS_PAYLOADS
+            self.command_payloads = command_payloads or self.COMMAND_PAYLOADS
+        
         self._baseline_responses: Dict[str, Dict] = {}
     
     def set_baseline(self, url: str, method: str, response: Dict):
@@ -334,12 +353,16 @@ class FuzzTester:
     ) -> List[FuzzResult]:
         """时间盲注测试"""
         results = []
-        time_payloads = [
-            "1' AND SLEEP(5)--",
-            "1' AND BENCHMARK(5000000,SHA1('test'))--",
-            "1'; WAITFOR DELAY '00:00:05'--",
-            "1' OR SLEEP(5)--"
-        ]
+        
+        if self.use_enhanced_payloads:
+            time_payloads = self._payload_manager.get_payloads('sql_injection', 'time_based', count=10)
+        else:
+            time_payloads = [
+                "1' AND SLEEP(5)--",
+                "1' AND BENCHMARK(5000000,SHA1('test'))--",
+                "1'; WAITFOR DELAY '00:00:05'--",
+                "1' OR SLEEP(5)--"
+            ]
         
         baseline_start = time.time()
         try:
@@ -390,7 +413,11 @@ class FuzzTester:
     ) -> List[FuzzResult]:
         """SSRF模糊测试"""
         results = []
-        ssrf_payloads = self.FUZZ_PAYLOADS['ssrf']
+        
+        if self.use_enhanced_payloads:
+            ssrf_payloads = self._payload_manager.get_payloads('ssrf', count=20)
+        else:
+            ssrf_payloads = self.FUZZ_PAYLOADS['ssrf']
         
         for payload in ssrf_payloads:
             test_url = f"{url}{'?url=' if '?' not in url else '&url='}{payload}"
@@ -440,7 +467,11 @@ class FuzzTester:
     ) -> List[FuzzResult]:
         """路径遍历测试"""
         results = []
-        path_payloads = self.FUZZ_PAYLOADS['path_traversal']
+        
+        if self.use_enhanced_payloads:
+            path_payloads = self._payload_manager.get_payloads('path_traversal', count=20)
+        else:
+            path_payloads = self.FUZZ_PAYLOADS['path_traversal']
         
         for payload in path_payloads:
             test_url = f"{url}{'?file=' if '?' not in url else '&file='}{payload}"

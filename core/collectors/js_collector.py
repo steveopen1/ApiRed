@@ -1231,12 +1231,14 @@ class JSParser:
             logger.warning(f"AST解析异常: {e}")
             return []
     
-    def _traverse_ast(self, nodes: List) -> List[str]:
+    def _traverse_ast(self, nodes: List, depth: int = 0, max_depth: int = 8) -> List[str]:
         """
         遍历 AST 节点提取调用表达式
         
         Args:
             nodes: AST 节点列表
+            depth: 当前深度
+            max_depth: 最大递归深度
             
         Returns:
             提取的 URL 列表（去重）
@@ -1245,114 +1247,91 @@ class JSParser:
         seen = set()
         
         for node in nodes:
-            for url in self._extract_from_node(node):
+            for url in self._extract_from_node(node, depth, max_depth):
                 if url not in seen:
                     seen.add(url)
                     urls.append(url)
         
         return urls
     
-    def _extract_from_node(self, node) -> List[str]:
-        """从单个 AST 节点提取 URL"""
+    def _extract_from_node(self, node, depth: int = 0, max_depth: int = 8) -> List[str]:
+        """
+        从单个 AST 节点提取 URL
+        
+        Args:
+            node: AST 节点
+            depth: 当前深度
+            max_depth: 最大递归深度，避免深层嵌套导致性能问题
+        """
         urls = []
         
-        if not node:
+        if not node or depth > max_depth:
             return urls
         
         if hasattr(node, 'type'):
-            if node.type == 'ExpressionStatement' and hasattr(node, 'expression'):
-                urls.extend(self._extract_from_node(node.expression))
+            node_type = node.type
             
-            elif node.type in ('CallExpression', 'OptionalCallExpression'):
+            if node_type in ('CallExpression', 'OptionalCallExpression'):
                 urls.extend(self._extract_call_expr(node))
             
-            elif node.type == 'VariableDeclaration' and hasattr(node, 'declarations'):
+            elif node_type == 'ExpressionStatement' and hasattr(node, 'expression'):
+                urls.extend(self._extract_from_node(node.expression, depth + 1, max_depth))
+            
+            elif node_type == 'VariableDeclaration' and hasattr(node, 'declarations'):
                 for decl in node.declarations:
                     if hasattr(decl, 'init') and decl.init:
-                        urls.extend(self._extract_from_node(decl.init))
+                        urls.extend(self._extract_from_node(decl.init, depth + 1, max_depth))
             
-            elif node.type == 'VariableDeclarator' and hasattr(node, 'init') and node.init:
-                urls.extend(self._extract_from_node(node.init))
+            elif node_type == 'VariableDeclarator' and hasattr(node, 'init') and node.init:
+                urls.extend(self._extract_from_node(node.init, depth + 1, max_depth))
             
-            elif node.type == 'AssignmentExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
+            elif node_type == 'AssignmentExpression' and hasattr(node, 'right'):
+                urls.extend(self._extract_from_node(node.right, depth + 1, max_depth))
             
-            elif node.type == 'SequenceExpression' and hasattr(node, 'expressions'):
+            elif node_type == 'SequenceExpression' and hasattr(node, 'expressions'):
                 for expr in node.expressions:
-                    urls.extend(self._extract_from_node(expr))
+                    urls.extend(self._extract_from_node(expr, depth + 1, max_depth))
             
-            elif node.type == 'LogicalExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
+            elif node_type == 'LogicalExpression' and hasattr(node, 'right'):
+                urls.extend(self._extract_from_node(node.right, depth + 1, max_depth))
             
-            elif node.type == 'ConditionalExpression':
+            elif node_type == 'ConditionalExpression':
                 if hasattr(node, 'consequent') and node.consequent:
-                    urls.extend(self._extract_from_node(node.consequent))
+                    urls.extend(self._extract_from_node(node.consequent, depth + 1, max_depth))
                 if hasattr(node, 'alternate') and node.alternate:
-                    urls.extend(self._extract_from_node(node.alternate))
+                    urls.extend(self._extract_from_node(node.alternate, depth + 1, max_depth))
             
-            elif node.type == 'Literal' and hasattr(node, 'value') and isinstance(node.value, str):
+            elif node_type == 'Literal' and hasattr(node, 'value') and isinstance(node.value, str):
                 val = node.value
                 if self._is_api_path(val) or self._is_likely_api_string(val):
                     urls.append(val)
             
-            elif node.type == 'TemplateLiteral':
+            elif node_type == 'TemplateLiteral':
                 if hasattr(node, 'quasis') and node.quasis:
                     for quasi in node.quasis:
                         val = getattr(quasi, 'value', {}).get('raw', '') or ''
                         if val and (self._is_api_path(val) or self._is_likely_api_string(val)):
                             urls.append(val)
             
-            elif node.type == 'BinaryExpression' and hasattr(node, 'left') and hasattr(node, 'right'):
-                left = self._extract_from_node(node.left)
-                right = self._extract_from_node(node.right)
+            elif node_type == 'BinaryExpression' and hasattr(node, 'left') and hasattr(node, 'right'):
+                left = self._extract_from_node(node.left, depth + 1, max_depth)
+                right = self._extract_from_node(node.right, depth + 1, max_depth)
                 if left: urls.extend(left)
                 if right: urls.extend(right)
             
-            elif hasattr(node, 'body'):
-                if isinstance(node.body, list):
-                    urls.extend(self._traverse_ast(node.body))
-                elif node.body:
-                    urls.extend(self._extract_from_node(node.body))
-                
-                if hasattr(node, 'consequent') and node.consequent:
-                    urls.extend(self._extract_from_node(node.consequent))
-                if hasattr(node, 'alternate') and node.alternate:
-                    urls.extend(self._extract_from_node(node.alternate))
-        
-        return urls
-        
-        if hasattr(node, 'type'):
-            if node.type == 'ExpressionStatement' and hasattr(node, 'expression'):
-                urls.extend(self._extract_from_node(node.expression))
-            
-            elif node.type in ('CallExpression', 'OptionalCallExpression'):
-                urls.extend(self._extract_call_expr(node))
-            
-            elif node.type == 'VariableDeclaration' and hasattr(node, 'declarations'):
-                for decl in node.declarations:
-                    if hasattr(decl, 'init') and decl.init:
-                        urls.extend(self._extract_from_node(decl.init))
-            
-            elif node.type == 'AssignmentExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
-            
-            elif node.type == 'SequenceExpression' and hasattr(node, 'expressions'):
-                for expr in node.expressions:
-                    urls.extend(self._extract_from_node(expr))
-            
-            elif node.type == 'LogicalExpression' and hasattr(node, 'right'):
-                urls.extend(self._extract_from_node(node.right))
+            elif node_type == 'MemberExpression' and hasattr(node, 'object'):
+                urls.extend(self._extract_from_node(node.object, depth + 1, max_depth))
             
             elif hasattr(node, 'body'):
                 if isinstance(node.body, list):
                     urls.extend(self._traverse_ast(node.body))
                 elif node.body:
-                    urls.extend(self._extract_from_node(node.body))
+                    urls.extend(self._extract_from_node(node.body, depth + 1, max_depth))
                 
                 if hasattr(node, 'consequent') and node.consequent:
-                    urls.extend(self._extract_from_node(node.consequent))
+                    urls.extend(self._extract_from_node(node.consequent, depth + 1, max_depth))
                 if hasattr(node, 'alternate') and node.alternate:
-                    urls.extend(self._extract_from_node(node.alternate))
+                    urls.extend(self._extract_from_node(node.alternate, depth + 1, max_depth))
         
         return urls
     

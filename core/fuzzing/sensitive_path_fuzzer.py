@@ -291,6 +291,146 @@ class SensitivePathFuzzer:
     def get_all_findings(self) -> List[PathFuzzFinding]:
         """获取所有发现"""
         return self.findings
+    
+    async def fuzz_with_recursion(
+        self,
+        base_url: str,
+        max_depth: int = 2,
+        current_depth: int = 0,
+        severity_filter: str = 'all',
+        discovered_paths: Optional[Set[str]] = None
+    ) -> List[PathFuzzFinding]:
+        """
+        递归Fuzz敏感路径
+        
+        发现敏感路径后，如果是目录则递归探查其中的内容。
+        
+        Args:
+            base_url: 目标 URL
+            max_depth: 最大递归深度
+            current_depth: 当前深度
+            severity_filter: 严重程度过滤
+            discovered_paths: 已发现的路径集合（用于去重）
+            
+        Returns:
+            List[PathFuzzFinding]: 发现的问题
+        """
+        if discovered_paths is None:
+            discovered_paths = set()
+        
+        if current_depth >= max_depth:
+            return self.findings
+        
+        if self.http_client is None:
+            return self.findings
+        
+        paths_to_check = (
+            self.SENSITIVE_PATHS +
+            self.ADMIN_PATHS +
+            self.BACKUP_PATHS +
+            self.CONFIG_PATHS +
+            self.API_CONFIGS
+        )
+        
+        async def check_and_extend(path: str) -> Optional[PathFuzzFinding]:
+            if path in discovered_paths:
+                return None
+            
+            discovered_paths.add(path)
+            url = urljoin(base_url.rstrip('/') + '/', path.lstrip('/'))
+            
+            try:
+                response = await self.http_client.request(url, 'GET', timeout=5)
+                if response and response.status_code == 200:
+                    is_sensitive = self._is_sensitive(path)
+                    severity = self._get_severity(path, is_sensitive)
+                    
+                    if severity_filter != 'all' and severity != severity_filter:
+                        return None
+                    
+                    finding = PathFuzzFinding(
+                        path=path,
+                        status_code=response.status_code,
+                        content_length=len(response.content) if response.content else 0,
+                        is_sensitive=is_sensitive,
+                        severity=severity
+                    )
+                    self.findings.append(finding)
+                    
+                    if self._is_directory_index(response, path):
+                        sub_paths = self._extract_sub_paths_from_index(response.content, path)
+                        for sub_path in sub_paths:
+                            if sub_path not in discovered_paths:
+                                await check_and_extend(sub_path)
+                    
+                    return finding
+                    
+            except Exception as e:
+                logger.debug(f"Recursive path fuzz error for {path}: {e}")
+            
+            return None
+        
+        tasks = [check_and_extend(p) for p in paths_to_check]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        return self.findings
+    
+    def _is_directory_index(self, response, path: str) -> bool:
+        """判断响应是否是目录索引"""
+        if hasattr(response, 'headers'):
+            content_type = response.headers.get('content-type', '').lower()
+            if 'text/html' in content_type:
+                return True
+        
+        if hasattr(response, 'content'):
+            content = response.content.lower()
+            if b'directory listing' in content or b'<title>index of' in content:
+                return True
+        
+        return False
+    
+    def _extract_sub_paths_from_index(self, content: bytes, parent_path: str) -> List[str]:
+        """从目录索引提取子路径"""
+        import re
+        
+        sub_paths = []
+        content_str = content.decode('utf-8', errors='ignore').lower()
+        
+        link_pattern = re.compile(r'href=["\'](/?[^"\']+)["\']')
+        for match in link_pattern.findall(content_str):
+            if match.startswith('?') or match.startswith('#'):
+                continue
+            if match.endswith('/') or '.' not in match.split('/')[-1]:
+                sub_path = f"{parent_path.rstrip('/')}/{match.lstrip('/')}"
+                sub_paths.append(sub_path)
+        
+        return sub_paths[:20]
+    
+    async def fuzz_smart(
+        self,
+        base_url: str,
+        use_recursion: bool = True,
+        max_depth: int = 2,
+        severity_filter: str = 'all'
+    ) -> List[PathFuzzFinding]:
+        """
+        智能Fuzz：先快速扫描单层，再根据响应特征决定是否递归
+        
+        Args:
+            base_url: 目标 URL
+            use_recursion: 是否使用递归
+            max_depth: 最大递归深度
+            severity_filter: 严重程度过滤
+            
+        Returns:
+            List[PathFuzzFinding]: 发现的问题
+        """
+        if use_recursion:
+            return await self.fuzz_with_recursion(
+                base_url, max_depth, 0, severity_filter
+            )
+        else:
+            return await self.fuzz(base_url, severity_filter=severity_filter)
 
 
 async def fuzz_sensitive_paths(base_url: str, http_client=None) -> List[PathFuzzFinding]:
