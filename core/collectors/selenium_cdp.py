@@ -118,7 +118,7 @@ class SeleniumCDPCollector:
                     request = params.get('request', {})
                     resource = CDPResource(
                         url=request.get('url', ''),
-                        resource_type=self._check_url_type(request.get('url', ''),
+                        resource_type=self._check_url_type(request.get('url', '')),
                         referer=request.get('headers', {}).get('Referer', ''),
                         method=request.get('method', 'GET'),
                         post_data=request.get('postData', '')
