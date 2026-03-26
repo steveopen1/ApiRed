@@ -196,6 +196,193 @@ class TFIDFUrlClassifier:
         return max(0.05, scores[q1_index] if q1_index < len(scores) else 0.1)
 
 
+class LLMUrlClassifier:
+    """
+    LLM辅助URL分类器
+    
+    特性：
+    - 使用LLM进行语义分析
+    - 结果缓存避免重复调用
+    - 自动降级到TF-IDF方法
+    - 支持批量URL分类
+    """
+    
+    _instance_cache: Dict[str, 'LLMUrlClassifier'] = {}
+    _result_cache: Dict[str, Any] = {}
+    _cache_max_size = 1000
+    _cache_ttl = 3600
+    
+    def __init__(
+        self,
+        llm_client=None,
+        use_cache: bool = True,
+        batch_size: int = 50,
+        fallback_threshold: float = 0.8
+    ):
+        self.llm_client = llm_client
+        self.use_cache = use_cache
+        self.batch_size = batch_size
+        self.fallback_threshold = fallback_threshold
+        self._call_count = 0
+        self._cache_hit_count = 0
+    
+    @classmethod
+    def get_instance(cls, cache_key: str = "default") -> 'LLMUrlClassifier':
+        """获取单例实例"""
+        if cache_key not in cls._instance_cache:
+            cls._instance_cache[cache_key] = LLMUrlClassifier()
+        return cls._instance_cache[cache_key]
+    
+    def _generate_cache_key(self, urls: List[str]) -> str:
+        """生成URL列表的缓存键"""
+        import hashlib
+        url_str = '|'.join(sorted(urls[:100]))
+        return hashlib.md5(url_str.encode()).hexdigest()[:16]
+    
+    def _parse_llm_response(self, response: Any) -> Optional[Dict[str, Any]]:
+        """解析LLM响应"""
+        import json
+        
+        try:
+            result_text = response
+            if hasattr(response, 'result'):
+                result_text = response.result
+            elif not isinstance(response, str):
+                result_text = str(response)
+            
+            result_text = result_text.strip()
+            if result_text.startswith('```json'):
+                result_text = result_text[7:]
+            if result_text.startswith('```'):
+                result_text = result_text[3:]
+            if result_text.endswith('```'):
+                result_text = result_text[:-3]
+            
+            result_text = result_text.strip()
+            return json.loads(result_text)
+        except (json.JSONDecodeError, AttributeError) as e:
+            logger.debug(f"LLM response parse failed: {e}")
+            return None
+    
+    async def classify(self, urls: List[str]) -> Tuple[Set[str], Set[str], str]:
+        """
+        使用LLM对URL进行分类
+        
+        Args:
+            urls: URL列表
+            
+        Returns:
+            (api_prefixes, resource_paths, method)
+        """
+        if not urls:
+            return set(), set(), "empty"
+        
+        if not self.llm_client:
+            return self._classify_with_tfidf(urls)
+        
+        cache_key = self._generate_cache_key(urls) if self.use_cache else None
+        
+        if cache_key and cache_key in self._result_cache:
+            self._cache_hit_count += 1
+            cached = self._result_cache[cache_key]
+            if time.time() - cached.get('_timestamp', 0) < self._cache_ttl:
+                return (
+                    set(cached.get('api_prefixes', [])),
+                    set(cached.get('resource_paths', [])),
+                    'ai_cached'
+                )
+        
+        try:
+            url_samples = urls[:self.batch_size] if len(urls) > self.batch_size else urls
+            
+            prompt = self._build_prompt(url_samples)
+            
+            response = await self.llm_client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                system="你是一个专业的 API 安全分析助手，擅长分析 URL 结构语义。"
+            )
+            
+            if not response:
+                return self._classify_with_tfidf(urls)
+            
+            ai_result = self._parse_llm_response(response)
+            
+            if not ai_result:
+                return self._classify_with_tfidf(urls)
+            
+            self._call_count += 1
+            
+            api_prefixes = set(ai_result.get('api_prefixes', []))
+            resource_paths = set(ai_result.get('resource_paths', []))
+            
+            if cache_key:
+                self._result_cache[cache_key] = {
+                    'api_prefixes': list(api_prefixes),
+                    'resource_paths': list(resource_paths),
+                    '_timestamp': time.time()
+                }
+                
+                if len(self._result_cache) > self._cache_max_size:
+                    oldest_key = min(
+                        self._result_cache.keys(),
+                        key=lambda k: self._result_cache[k].get('_timestamp', 0)
+                    )
+                    del self._result_cache[oldest_key]
+            
+            return api_prefixes, resource_paths, 'ai'
+            
+        except Exception as e:
+            logger.warning(f"LLM classification failed: {e}")
+            return self._classify_with_tfidf(urls)
+    
+    def _classify_with_tfidf(self, urls: List[str]) -> Tuple[Set[str], Set[str], str]:
+        """降级到TF-IDF方法"""
+        classifier = TFIDFUrlClassifier()
+        
+        try:
+            api_prefixes, resource_paths = classifier.classify_prefixes(urls)
+            return api_prefixes, resource_paths, 'tfidf_fallback'
+        except Exception:
+            return set(), set(), 'failed'
+    
+    def _build_prompt(self, url_samples: List[str]) -> str:
+        """构建LLM提示词"""
+        return f"""分析以下 URL 列表，识别哪些路径段是 API 前缀（如 gateway、api、v1、service、prod-api），哪些是资源路径（如 users、orders、auth、login）。
+
+URL 列表：
+{chr(10).join(url_samples)}
+
+请以 JSON 格式返回分析结果：
+{{
+    "api_prefixes": ["api前缀段1", "api前缀段2"],
+    "resource_paths": ["资源路径1", "资源路径2"],
+    "reasoning": "分析理由"
+}}
+
+注意：
+- API 前缀通常是服务名、网关、版本标识等
+- 资源路径通常是具体业务操作如 users、orders、auth 等"""
+    
+    @property
+    def stats(self) -> Dict[str, Any]:
+        """获取分类器统计信息"""
+        return {
+            'total_calls': self._call_count,
+            'cache_hits': self._cache_hit_count,
+            'cache_hit_rate': self._cache_hit_count / max(1, self._call_count + self._cache_hit_count),
+            'cache_size': len(self._result_cache)
+        }
+    
+    @classmethod
+    def clear_cache(cls):
+        """清空全局缓存"""
+        cls._result_cache.clear()
+        cls._instance_cache.clear()
+
+
+import time
+
+
 class ContentTypeDetector:
     """
     Content-Type 检测器
@@ -1099,6 +1286,11 @@ class APIRouter:
         使用 AI 语义理解进行 URL 分类
         AI Agent 模式增强版：使用 LLM 分析 URL 结构语义
         
+        特性：
+        - LLMUrlClassifier缓存避免重复调用
+        - 自动降级到TF-IDF方法
+        - 支持批量URL分类
+        
         Args:
             urls: URL 列表
             llm_client: LLM 客户端，如果为 None 则回退到纯统计方法
@@ -1106,7 +1298,74 @@ class APIRouter:
         Returns:
             分类后的 URL 组件字典
         """
-        if not urls or not llm_client:
+        if not urls:
+            return cls.auto_classify_urls_enhanced(urls)
+        
+        if not llm_client:
+            return cls.auto_classify_urls_enhanced(urls)
+        
+        classifier = LLMUrlClassifier.get_instance("api_classifier")
+        classifier.llm_client = llm_client
+        classifier.use_cache = True
+        classifier.batch_size = 50
+        
+        try:
+            api_prefixes, resource_paths, method = await classifier.classify(urls)
+            
+            if method == 'failed':
+                return cls.auto_classify_urls_enhanced(urls)
+            
+            identified_api_keywords = api_prefixes
+            tree_urls = set()
+            segment_urls = {}
+            
+            for url in urls:
+                if url.startswith('http://') or url.startswith('https://'):
+                    parsed = urlparse(url)
+                    tree_url = f"{parsed.scheme}://{parsed.netloc}"
+                    tree_urls.add(tree_url)
+                    segments = [s for s in parsed.path.split('/') if s]
+                elif url.startswith('/'):
+                    segments = [s for s in url.split('/') if s]
+                else:
+                    continue
+                
+                if segments:
+                    segment_urls['/' + '/'.join(segments)] = segments
+            
+            path_with_api_paths = set()
+            path_with_no_api_paths = set()
+            base_urls = set()
+            
+            for full_path, segments in segment_urls.items():
+                has_api_prefix = False
+                for i, seg in enumerate(segments):
+                    if seg in identified_api_keywords:
+                        has_api_prefix = True
+                        api_prefix = '/' + '/'.join(segments[:i+1])
+                        path_with_api_paths.add(api_prefix)
+                        if tree_urls:
+                            base_urls.add(list(tree_urls)[0] + api_prefix)
+                        break
+                
+                if not has_api_prefix:
+                    path_with_no_api_paths.add(full_path)
+                else:
+                    suffix = '/' + '/'.join([s for s in segments if s not in identified_api_keywords])
+                    if suffix != '/':
+                        path_with_no_api_paths.add(suffix)
+            
+            return {
+                'tree_urls': list(tree_urls),
+                'base_urls': sorted(list(base_urls)),
+                'path_with_api_paths': sorted(list(path_with_api_paths)),
+                'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
+                '_identified_keywords': sorted(list(identified_api_keywords)),
+                '_method': method
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI classification failed: {e}, falling back to enhanced method")
             return cls.auto_classify_urls_enhanced(urls)
         
         try:

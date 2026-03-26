@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field
 
 from .api_collector import APIRouter
+from ..cache import LRUCache, LFUCache, TwoLevelCache, MultiLevelCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -31,41 +32,52 @@ class ParsedJSResult:
 
 
 class JSFingerprintCache:
-    """JS文件指纹缓存"""
+    """
+    JS文件指纹缓存 (多级缓存架构)
     
-    def __init__(self, storage):
+    L1: 进程内LRU缓存 (快速访问)
+    L2: Storage持久化 (数据库/文件)
+    """
+    
+    def __init__(self, storage, max_memory_items: int = 1000, use_lfu: bool = False):
         self.storage = storage
-        self._memory_cache: Dict[str, ParsedJSResult] = {}
-        self._max_memory_items = 1000
+        self._max_memory_items = max_memory_items
+        
+        cache_class = LFUCache if use_lfu else LRUCache
+        self._memory_cache: cache_class = cache_class(max_size=max_memory_items, ttl=3600)
     
     def get_cache_key(self, content: bytes) -> str:
         """计算内容哈希作为缓存键"""
         return hashlib.sha256(content).hexdigest()[:32]
     
+    def _deserialize_result(self, cache_key: str, cached: dict, content: bytes) -> ParsedJSResult:
+        """反序列化缓存结果"""
+        ast_cache = cached.get('ast', {})
+        return ParsedJSResult(
+            apis=ast_cache.get('apis', []),
+            urls=ast_cache.get('urls', []),
+            dynamic_imports=ast_cache.get('dynamic_imports', []),
+            base_urls=cached.get('regex', {}).get('base_urls', []),
+            content_hash=cache_key,
+            file_size=len(content),
+            parent_paths=ast_cache.get('parent_paths', {}),
+            path_templates=ast_cache.get('path_templates', []),
+            extracted_suffixes=ast_cache.get('extracted_suffixes', []),
+            resource_fragments=ast_cache.get('resource_fragments', [])
+        )
+    
     def get(self, content: bytes) -> Optional[ParsedJSResult]:
         """从缓存获取解析结果"""
         cache_key = self.get_cache_key(content)
         
-        if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
+        cached_result = self._memory_cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
         
         cached = self.storage.get_js_cache(cache_key)
         if cached:
-            ast_cache = cached.get('ast', {})
-            result = ParsedJSResult(
-                apis=ast_cache.get('apis', []),
-                urls=ast_cache.get('urls', []),
-                dynamic_imports=ast_cache.get('dynamic_imports', []),
-                base_urls=cached.get('regex', {}).get('base_urls', []),
-                content_hash=cache_key,
-                file_size=len(content),
-                parent_paths=ast_cache.get('parent_paths', {}),
-                path_templates=ast_cache.get('path_templates', []),
-                extracted_suffixes=ast_cache.get('extracted_suffixes', []),
-                resource_fragments=ast_cache.get('resource_fragments', [])
-            )
-            
-            self._add_to_memory(cache_key, result)
+            result = self._deserialize_result(cache_key, cached, content)
+            self._memory_cache.set(cache_key, result)
             return result
         
         return None
@@ -76,7 +88,7 @@ class JSFingerprintCache:
         result.content_hash = cache_key
         result.file_size = len(content)
         
-        self._add_to_memory(cache_key, result)
+        self._memory_cache.set(cache_key, result)
         
         ast_data = {
             'apis': result.apis,
@@ -95,29 +107,18 @@ class JSFingerprintCache:
             cache_key, js_url, ast_data, regex_data, len(content)
         )
     
-    def _add_to_memory(self, key: str, result: ParsedJSResult):
-        """添加到内存缓存"""
-        if len(self._memory_cache) >= self._max_memory_items:
-            first_key = next(iter(self._memory_cache))
-            del self._memory_cache[first_key]
-        
-        self._memory_cache[key] = result
-    
     def clear_memory(self):
         """清空内存缓存"""
         self._memory_cache.clear()
     
     def get_all(self) -> List[ParsedJSResult]:
         """获取所有缓存的解析结果"""
-        results = []
-        seen_hashes = set()
-        
-        for cache_key, result in self._memory_cache.items():
-            if cache_key not in seen_hashes:
-                seen_hashes.add(cache_key)
-                results.append(result)
-        
-        return results
+        return list(self._memory_cache._cache.values())
+    
+    @property
+    def cache_stats(self) -> Dict[str, Any]:
+        """获取缓存统计信息"""
+        return self._memory_cache.stats
 
 
 class WebpackAnalyzer:
