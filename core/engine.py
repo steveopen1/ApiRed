@@ -330,16 +330,6 @@ class ScanEngine:
                         self._browser_collector = None
                         break
         
-        if self.config.ai_enabled:
-            from .ai.ai_engine import AIEngine
-            llm_client = AIEngine()
-            scanner_config = AgentConfig(name="ScannerAgent")
-            analyzer_config = AgentConfig(name="AnalyzerAgent")
-            tester_config = AgentConfig(name="TesterAgent")
-            self.scanner_agent = ScannerAgent(scanner_config, llm_client)
-            self.analyzer_agent = AnalyzerAgent(analyzer_config, llm_client)
-            self.tester_agent = TesterAgent(tester_config, llm_client)
-        
         self._incremental_scanner = None
         self._url_deduplicator = None
         if getattr(self.config, 'resume', False) or getattr(self.config, 'incremental', False):
