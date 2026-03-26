@@ -1787,55 +1787,96 @@ class ScanEngine:
     
     def _generate_cross_fuzz_targets(self, path_segments: set, suffixes: set) -> List[Tuple[str, str]]:
         """
-        生成跨来源Fuzzing目标组合
+        生成跨来源Fuzzing目标组合 - 智能权重策略
         
         策略:
-        1. 路径片段 + RESTful后缀 (/user + /list -> /user/list)
-        2. API前缀 + 路径片段 (/api + /users -> /api/users)
-        3. 完整路径拼接 (/users + /profile -> /users/profile)
-        4. 去重单复数组合 (user <-> users)
+        1. 高权重：资源+CRUD操作 (/user/list, /user/detail, /user/add)
+        2. 中权重：API前缀+资源 (/api/users, /v1/orders)
+        3. 低权重：路径+路径 (/user/profile)
+        4. 过滤：无意义组合
         """
-        targets = set()
+        targets = []
+        priority_targets = []
         
         segments = sorted(list(path_segments), key=len, reverse=True)
         
-        for i, seg1 in enumerate(segments):
-            for seg2 in segments[i+1:]:
-                if seg1 == seg2:
-                    continue
-                
-                if '/' not in seg1 and '/' not in seg2:
-                    continue
-                
-                candidates = [
-                    (seg1, '/' + seg2),
-                    (seg2, '/' + seg1),
-                ]
-                
-                if self._is_likely_api_segment(seg1) and not self._is_likely_api_segment(seg2):
-                    candidates.append((seg1, '/' + seg2))
-                elif self._is_likely_api_segment(seg2) and not self._is_likely_api_segment(seg1):
-                    candidates.append((seg2, '/' + seg1))
-                
-                for base, path in candidates:
-                    if base and path:
-                        targets.add((base, path))
+        CRUD_SUFFIXES = {
+            'list', 'detail', 'add', 'create', 'edit', 'update', 'delete', 'remove',
+            'get', 'set', 'info', 'profile', 'settings', 'config', 'index',
+            'search', 'query', 'fetch', 'load', 'save', 'submit', 'submit'
+        }
+        
+        RESOURCE_WORDS = {
+            'user', 'users', 'account', 'order', 'orders', 'product', 'products',
+            'item', 'items', 'admin', 'login', 'logout', 'auth', 'token',
+            'role', 'roles', 'permission', 'menu', 'config', 'system',
+            'dict', 'dept', 'log', 'monitor', 'tool', 'file', 'files',
+            'category', 'categories', 'tag', 'tags', 'article', 'articles',
+            'customer', 'customers', 'employee', 'employees', 'organization',
+            'payment', 'payments', 'transaction', 'transactions', 'invoice', 'invoices',
+            'address', 'addresses', 'notification', 'notifications', 'message', 'messages'
+        }
+        
+        def get_segment_priority(seg: str) -> int:
+            seg_lower = seg.lower()
+            if seg_lower in CRUD_SUFFIXES:
+                return 3
+            if seg_lower in RESOURCE_WORDS:
+                return 2
+            if any(kw in seg_lower for kw in ['user', 'order', 'product', 'account', 'admin']):
+                return 1
+            return 0
         
         for segment in segments:
-            for suffix in list(suffixes)[:50]:
-                if suffix.startswith('/'):
-                    targets.add((segment, suffix))
-                else:
-                    targets.add((segment, '/' + suffix))
+            seg_lower = segment.lower()
+            seg_priority = get_segment_priority(segment)
+            
+            for suffix in list(suffixes)[:30]:
+                suffix_lower = suffix.lower().lstrip('/')
+                
+                if suffix_lower in CRUD_SUFFIXES:
+                    if seg_priority >= 1:
+                        target = (segment, '/' + suffix)
+                        priority_targets.append((3, target))
+                        continue
+                
+                if segment and suffix.startswith('/'):
+                    targets.append((segment, suffix))
+                elif segment:
+                    targets.append((segment, '/' + suffix))
         
-        api_prefixes = ['api', 'v1', 'v2', 'v3', 'rest', 'rpc', 'graphql']
+        api_prefixes = ['api', 'v1', 'v2', 'v3', 'rest', 'rpc', 'graphql', 'svc', 'service', 'gateway']
         for prefix in api_prefixes:
             for segment in segments:
-                if prefix not in segment and not segment.startswith(prefix):
-                    targets.add(('', '/' + prefix + '/' + segment))
-                    targets.add(('api', '/' + prefix + '/' + segment))
+                if prefix not in segment.lower() and not segment.lower().startswith(prefix):
+                    target1 = ('', '/' + prefix + '/' + segment.lstrip('/'))
+                    target2 = ('/' + prefix, '/' + segment.lstrip('/'))
+                    
+                    if get_segment_priority(segment) >= 1:
+                        priority_targets.append((2, target1))
+                        priority_targets.append((2, target2))
+                    else:
+                        targets.append(target1)
+                        targets.append(target2)
         
-        return list(targets)[:5000]
+        all_targets = []
+        seen = set()
+        
+        priority_targets.sort(key=lambda x: -x[0])
+        
+        for _, target in priority_targets[:1000]:
+            key = target[0] + target[1]
+            if key not in seen:
+                seen.add(key)
+                all_targets.append(target)
+        
+        for target in targets[:3000]:
+            key = target[0] + target[1]
+            if key not in seen:
+                seen.add(key)
+                all_targets.append(target)
+        
+        return all_targets[:5000]
     
     def _is_likely_api_segment(self, segment: str) -> bool:
         """判断路径片段是否是API相关"""
