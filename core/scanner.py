@@ -431,7 +431,7 @@ class ChkApiScanner:
         error_count = 0
         
         for endpoint in endpoints:
-            for method in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+            for method in ['GET', 'POST']:
                 try:
                     response = await self.http_client.request(
                         endpoint.full_url,
