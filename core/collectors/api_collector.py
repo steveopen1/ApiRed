@@ -1862,14 +1862,14 @@ class APIAggregator:
         
         if use_fusion:
             try:
-                from .enhanced_endpoint_aggregator import EnhancedEndpointAggregator, EnhancedEndpoint, SourceType, EndpointType
-                self._fusion_engine = EnhancedEndpointAggregator()
-                self._enhanced_endpoint_class = EnhancedEndpoint
+                from ..unified_fusion import UnifiedFusionEngine, FusedEndpoint, SourceType, EndpointType
+                self._fusion_engine = UnifiedFusionEngine()
+                self._enhanced_endpoint_class = FusedEndpoint
                 self._source_type_enum = SourceType
                 self._endpoint_type_enum = EndpointType
             except ImportError:
                 self._fusion_engine = None
-                logger.warning("EnhancedEndpointAggregator not available, fusion disabled")
+                logger.warning("UnifiedFusionEngine not available, fusion disabled")
         else:
             self._fusion_engine = None
     
