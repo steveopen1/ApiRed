@@ -2190,18 +2190,8 @@ class ScanEngine:
         
         all_responses: List[Any] = []
         
-        RESTFUL_METHODS = {'PUT', 'DELETE', 'PATCH'}
-        
         for endpoint in endpoints:
             methods_to_try = ['GET', 'POST']
-            
-            path_lower = endpoint.path.lower()
-            if any(kw in path_lower for kw in ['user', 'account', 'profile', 'item', 'order', 'product', 'admin', 'manage', 'config', 'setting']):
-                methods_to_try.extend(['PUT', 'DELETE', 'PATCH'])
-            
-            if endpoint.path.endswith('/{id}') or '/{id}' in endpoint.path:
-                methods_to_try.extend(['PUT', 'DELETE', 'PATCH'])
-            
             endpoint_found = False
             
             for method in methods_to_try:
