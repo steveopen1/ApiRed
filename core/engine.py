@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 from .utils.config import Config
-from .storage import DBStorage, FileStorage
+from .storage import DBStorage, FileStorage, RealtimeOutput
 from .collectors import JSFingerprintCache, JSParser, APIAggregator, HeadlessBrowserCollector
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
@@ -145,6 +145,7 @@ class ScanEngine:
         
         self._orchestrator: Optional[Orchestrator] = None
         self._knowledge_base: Optional[KnowledgeBase] = None
+        self._realtime_output: Optional[RealtimeOutput] = None
         
         self.result: Optional[ScanResult] = None
         self._current_stage = 0
@@ -210,6 +211,8 @@ class ScanEngine:
         )
         
         self.file_storage = FileStorage(base_dir=results_dir)
+        
+        self._realtime_output = RealtimeOutput(output_dir=results_dir)
         
         from .utils.http_client import AsyncHttpClient
         self._http_client = AsyncHttpClient(
@@ -667,7 +670,10 @@ class ScanEngine:
         browser_api_endpoints = []
         
         inline_parser = InlineJSParser()
-        response_discovery = ResponseBasedAPIDiscovery(target_domain=self.config.target)
+        response_discovery = ResponseBasedAPIDiscovery(
+            target_domain=self.config.target,
+            realtime_output=self._realtime_output
+        )
         api_path_finder = ApiPathFinder()
         api_combiner = ApiPathCombiner()
         

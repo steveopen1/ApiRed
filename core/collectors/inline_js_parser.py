@@ -527,12 +527,17 @@ class ResponseBasedAPIDiscovery:
     INVALID_KEYWORDS = PathValidationConstants.INVALID_KEYWORDS
     CONTENT_TYPE_INDICATORS = PathValidationConstants.CONTENT_TYPE_INDICATORS
     
-    def __init__(self, target_domain: str = ""):
+    def __init__(self, target_domain: str = "", realtime_output=None):
         self.discovered_paths: Set[str] = set()
         self.discovered_sensitive_resources: Set[str] = set()
         self.discovered_ips: Set[str] = set()
         self.discovered_domains: Set[str] = set()
         self.target_domain = target_domain
+        self._realtime = realtime_output
+        self._seen_ips: Set[str] = set()
+        self._seen_domains: Set[str] = set()
+        self._seen_apis: Set[str] = set()
+        self._seen_urls: Set[str] = set()
     
     def discover_from_response(self, url: str, content: str, content_type: str) -> Dict[str, Set[str]]:
         """
@@ -570,11 +575,38 @@ class ResponseBasedAPIDiscovery:
         result['ips'].update(ips)
         result['domains'].update(domains)
         
+        self._output_discoveries(result, url)
+        
         self.discovered_paths.update(result['api_paths'])
         self.discovered_sensitive_resources.update(result['sensitive_resources'])
         self.discovered_ips.update(result['ips'])
         self.discovered_domains.update(result['domains'])
         return result
+    
+    def _output_discoveries(self, result: Dict[str, Set[str]], source_url: str):
+        """输出发现的内容到终端和文件"""
+        if not self._realtime:
+            return
+        
+        for ip_port in result['ips']:
+            if ip_port not in self._seen_ips:
+                self._seen_ips.add(ip_port)
+                ip, port = ip_port.rsplit(':', 1) if ':' in ip_port else (ip_port, "")
+                self._realtime.output_ip(ip, port, source=source_url)
+        
+        for domain in result['domains']:
+            if domain not in self._seen_domains:
+                self._seen_domains.add(domain)
+                domain_type = "internal" if domain.endswith(self.target_domain) else "external"
+                self._realtime.output_domain(domain, domain_type=domain_type)
+        
+        for api_path in result['api_paths']:
+            if api_path not in self._seen_apis:
+                self._seen_apis.add(api_path)
+                self._realtime.output_api(api_path, source=source_url)
+        
+        for sensitive in result['sensitive_resources']:
+            self._realtime.output_sensitive("resource", sensitive, source=source_url)
     
     def _extract_ips_and_domains(self, content: str, source_url: str) -> Tuple[Set[str], Set[str]]:
         """
