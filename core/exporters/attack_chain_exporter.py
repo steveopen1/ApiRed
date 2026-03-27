@@ -264,8 +264,10 @@ class AttackChainExporter:
         lines.append('    subgraph Attack_Chain')
         
         for chain in chains:
-            chain_node = f"C{hash(chain.get("chain_id", "unknown") % 10000}"
-            vuln_node = f"V{hash(chain.get("vulnerable_endpoint", "unknown") % 10000}"
+            chain_id = chain.get("chain_id", "unknown")
+            vuln_ep = chain.get("vulnerable_endpoint", "unknown")
+            chain_node = f"C{hash(chain_id) % 10000}"
+            vuln_node = f"V{hash(vuln_ep) % 10000}"
             severity = chain.get('severity', 'low')
             severity_icons = {
                 'critical': '🔴',
@@ -273,13 +275,18 @@ class AttackChainExporter:
                 'medium': '🟡',
                 'low': '🟢'
             }
-            icon = severity_icons.get(severity, '⚪️)
+            icon = severity_icons.get(severity, '⚪️')
             
-            lines.append(f'    {chain_node}{icon}["{chain.get("attack_vector", "unknown"): {chain.get("entry_point", "N/A"}]')
+            attack_vector = chain.get('attack_vector', 'unknown')
+            entry_point = chain.get('entry_point', 'N/A')
+            lines.append(f'    {chain_node}{icon}["{attack_vector}: {entry_point}"]')
             
             for step in chain.get('steps', []):
-                step_node = f"S{hash(step.get("id", "unknown") % 10000}"
-                lines.append(f'    {step_node}["{step.get("type", "step")}: {step.get("endpoint", "N/A"}"]')
+                step_id = step.get("id", "unknown")
+                step_type = step.get("type", "step")
+                step_ep = step.get("endpoint", "N/A")
+                step_node = f"S{hash(step_id) % 10000}"
+                lines.append(f'    {step_node}["{step_type}: {step_ep}"]')
                 lines.append(f'    {chain_node} --> {step_node}')
                 
             lines.append(f'    {chain_node} --> {vuln_node}')
@@ -433,10 +440,13 @@ class AttackChainExporter:
             <h4>Attack Steps:</h4>
 '''
             for step in chain.get('steps', []):
+                method = step.get('method', 'GET')
+                endpoint = step.get('endpoint', 'N/A')
+                desc = step.get('description', '')
                 html_template += f'''
             <div class="step">
-                <span class="step-type">[{step.get('method', 'GET'}]</span> {step.get('endpoint', 'N/A')}
-                <br><small>{step.get('description', '')}</small>
+                <span class="step-type">[{method}]</span> {endpoint}
+                <br><small>{desc}</small>
             </div>
 '''
             

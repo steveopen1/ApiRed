@@ -13,8 +13,11 @@ from .report_exporter import (
 )
 from .attack_chain_exporter import (
     AttackChainExporter,
-    AttackChainNode,
-    AttackChainEdge
+    AttackChainAnalyzer,
+    AttackChain,
+    AttackStep,
+    AttackVector,
+    AttackSeverity,
 )
 
 __all__ = [
@@ -25,6 +28,9 @@ __all__ = [
     'ReportExporter',
     'ExportConfig',
     'AttackChainExporter',
-    'AttackChainNode',
-    'AttackChainEdge'
+    'AttackChainAnalyzer',
+    'AttackChain',
+    'AttackStep',
+    'AttackVector',
+    'AttackSeverity',
 ]
