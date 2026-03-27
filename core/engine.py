@@ -164,6 +164,10 @@ class ScanEngine:
         
         self._active_tasks: Set[asyncio.Task] = set()
         self._tasks_lock = asyncio.Lock()
+        self._last_progress_time: float = 0
+        self._progress_interval: float = 5.0
+        self._total_apis_found: int = 0
+        self._vulns_found: int = 0
     
     def _register_task(self, task: asyncio.Task):
         """注册进行中的任务"""
@@ -186,6 +190,57 @@ class ScanEngine:
                 callback(data)
             except Exception as e:
                 logger.warning(f"Callback error for event '{event}': {e}")
+
+    def _emit_progress(self, stage: str = "", phase: str = ""):
+        """触发进度更新事件"""
+        now = time.time()
+        if now - self._last_progress_time < self._progress_interval:
+            return
+        self._last_progress_time = now
+
+        total_apis = 0
+        alive_apis = 0
+        high_value_apis = 0
+        vulnerabilities = 0
+
+        if self.result:
+            total_apis = getattr(self.result, 'total_apis', 0)
+            alive_apis = getattr(self.result, 'alive_apis', 0)
+            high_value_apis = getattr(self.result, 'high_value_apis', 0)
+            vulnerabilities = len(getattr(self.result, 'vulnerabilities', []))
+
+        stage_progress = 0
+        if stage == 'collect':
+            stage_progress = 25
+        elif stage == 'analyze':
+            stage_progress = 50
+        elif stage == 'test':
+            stage_progress = 75
+        elif stage == 'reporting':
+            stage_progress = 95
+
+        progress_data = {
+            'stage': stage or self.current_stage_name,
+            'current_phase': phase,
+            'progress': stage_progress,
+            'total_apis': total_apis,
+            'alive_apis': alive_apis,
+            'high_value_apis': high_value_apis,
+            'vulnerabilities_found': vulnerabilities,
+            'sensitive_found': 0,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        self._emit('progress_update', progress_data)
+
+    def _emit_finding(self, finding_type: str, data: Dict[str, Any]):
+        """触发发现事件"""
+        finding_data = {
+            'type': finding_type,
+            'data': data,
+            'timestamp': datetime.now().isoformat()
+        }
+        self._emit('finding', finding_data)
     
     @property
     def current_stage_name(self) -> str:
@@ -412,40 +467,49 @@ class ScanEngine:
         no_api_scan = getattr(self.config, 'no_api_scan', False)
         
         self._emit('stage_start', {'stage': 'initialization', 'status': 'complete'})
-        
+        self._last_progress_time = time.time()
+
         try:
             if attack_mode in ['collect', 'all']:
+                self._emit('stage_start', {'stage': 'collect', 'status': 'running'})
                 if self._profiler:
                     self._profiler.tracker.start_stage('js_collection', input_count=0)
                 await self._run_collectors()
+                self._emit_progress('collect', 'js_collection')
                 if self._profiler:
                     self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'collect', 'status': 'complete'})
-            
+
             if attack_mode in ['scan', 'all'] and not no_api_scan:
+                self._emit('stage_start', {'stage': 'analyze', 'status': 'running'})
                 if self._profiler:
                     self._profiler.tracker.start_stage('api_scoring', input_count=0)
                 await self._run_analyzers()
+                self._emit_progress('analyze', 'api_scoring')
                 if self._profiler:
                     self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'analyze', 'status': 'complete'})
-                
+
+                self._emit('stage_start', {'stage': 'test', 'status': 'running'})
                 if self._profiler:
                     self._profiler.tracker.start_stage('vuln_testing', input_count=0)
                 await self._run_testers()
+                self._emit_progress('test', 'vuln_testing')
                 if self._profiler:
                     self._profiler.tracker.finish_stage()
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'test', 'status': 'complete'})
-            
+
+            self._emit('stage_start', {'stage': 'reporting', 'status': 'running'})
             if self._profiler:
                 self._profiler.tracker.start_stage('reporting', input_count=0)
             await self._stage_reporting()
+            self._emit_progress('reporting', 'report_generation')
             if self._profiler:
                 self._profiler.tracker.finish_stage()
             self._emit('stage_complete', {'stage': 'reporting', 'status': 'complete'})
