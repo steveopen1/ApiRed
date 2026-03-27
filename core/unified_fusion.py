@@ -375,68 +375,289 @@ class UnifiedFusionEngine:
 
         return api_path
 
+    API_PREFIXES = [
+        'api', 'prod-api', 'test-api', 'dev-api',
+        'v1', 'v2', 'v3', 'v4', 'v5',
+        'rest', 'graphql', 'rpc', 'soap', 'grpc',
+        'gateway', 'proxy', 'service',
+        'admin', 'manage', 'system',
+    ]
+
     @staticmethod
-    def generate_path_variants(api_path: str) -> Dict[str, str]:
+    def find_api_prefix_index(path: str) -> Optional[int]:
         """
-        生成路径变体 - 基于父路径 + 资源路径组合
+        查找路径中 API 前缀的位置
 
-        输入: /inspect/login/checkCode/getCheckCode
+        例如: /inspect/prod-api/checkCode/getCheckCode
+        返回: 1 (prod-api 在 parts[1])
+        """
+        if not path:
+            return None
 
-        返回:
-        {
-            'original': /inspect/login/checkCode/getCheckCode,
-            'parent_paths': ['/inspect/login/checkCode', '/inspect/login', '/inspect'],
-            'resource_path': /checkCode/getCheckCode,
-            'v1': /checkCode/getCheckCode,
-            'v2': /inspect/checkCode/getCheckCode,
-        }
+        parts = path.strip('/').split('/')
+
+        for i, part in enumerate(parts):
+            if part.lower() in UnifiedFusionEngine.API_PREFIXES:
+                return i
+
+        return None
+
+    COMMON_RESOURCES = [
+        'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+        'role', 'roles', 'menu', 'menus', 'category', 'categories',
+        'config', 'configuration', 'settings', 'system', 'admin', 'auth',
+        'department', 'dept', 'employee', 'customer', 'customers',
+        'account', 'accounts', 'permission', 'permissions',
+        'file', 'files', 'image', 'images', 'video', 'videos',
+        'payment', 'transaction', 'invoice', 'receipt',
+        'address', 'notification', 'message', 'msg',
+        'device', 'devices', 'gateway', 'sensor', 'alarm',
+        'tag', 'tags', 'comment', 'comments', 'article', 'articles',
+        'checkCode', 'captcha', 'captchas',
+    ]
+
+    COMMON_METHODS = [
+        'list', 'add', 'create', 'delete', 'remove', 'detail', 'info', 'update', 'edit',
+        'get', 'set', 'save', 'query', 'search', 'filter', 'export', 'import',
+        'login', 'logout', 'register', 'reset', 'verify', 'refresh',
+        'enable', 'disable', 'status', 'config', 'upload', 'download',
+        'getCheckCode', 'getCheckcode', 'check', 'validate',
+    ]
+
+    PREFIX_PATTERNS = [
+        r'/([a-zA-Z][a-zA-Z0-9_-]+)/',
+        r'/([a-zA-Z]+_[a-zA-Z0-9_]+)/',
+        r'["\']/([a-zA-Z][a-zA-Z0-9_-]+)/',
+        r'baseUrl\s*[=:+]\s*["\']/([^"\']+)',
+        r'API_PREFIX\s*[=:+]\s*["\']/([^"\']+)',
+        r'BASE_URL\s*[=:+]\s*["\']/([^"\']+)',
+        r'prefix\s*[=:+]\s*["\']/([^"\']+)',
+        r'"([a-zA-Z]+-[a-zA-Z]+)"\s*:\s*["\']/([^"\']+)',
+    ]
+
+    @staticmethod
+    def discover_prefixes_from_js(js_content: str) -> List[str]:
+        """
+        从 JS 内容中发现所有可能的前缀模式
+
+        使用多种正则模式匹配：
+        1. /xxx/ 或 /xxx-xxx/ 模式
+        2. /xxx_xxx/ 模式
+        3. baseUrl = "/api" 模式
+        4. API_PREFIX = "/prod-api" 模式
+        5. 前缀拼接如 baseUrl + '/api'
+        """
+        prefixes = set()
+
+        prefix_patterns = [
+            r'/([a-zA-Z][a-zA-Z0-9_-]+)/',
+            r'/([a-zA-Z]+_[a-zA-Z0-9_]+)/',
+            r'baseUrl\s*[=:+]\s*["\']/([^"\']+)',
+            r'API_PREFIX\s*[=:+]\s*["\']/([^"\']+)',
+            r'BASE_URL\s*[=:+]\s*["\']/([^"\']+)',
+            r'prefix\s*[=:+]\s*["\']/([^"\']+)',
+            r'"([a-zA-Z]+-[a-zA-Z]+)"\s*:\s*["\']/([^"\']+)',
+        ]
+
+        for pattern in prefix_patterns:
+            matches = re.findall(pattern, js_content, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    prefix = match[0] if len(match) > 0 else match
+                else:
+                    prefix = match
+                if prefix and len(prefix) > 1:
+                    prefixes.add(f'/{prefix}')
+
+        prefix_patterns2 = [
+            r'\+\s*["\']/([a-zA-Z][a-zA-Z0-9_-]+)["\']',
+            r'["\']/([a-zA-Z][a-zA-Z0-9_-]+)["\']\s*\+',
+        ]
+
+        for pattern in prefix_patterns2:
+            matches = re.findall(pattern, js_content, re.IGNORECASE)
+            for match in matches:
+                if match and len(match) > 1:
+                    prefixes.add(f'/{match}')
+
+        return list(prefixes)
+
+    VERSION_PREFIXES = ['v1', 'v2', 'v3', 'v4', 'v5']
+
+    @staticmethod
+    def validate_api_prefix(prefix: str, js_content: str = "") -> bool:
+        """
+        验证是否为真正的 API 前缀
+
+        使用混合算法：知识库 + 模式匹配 + 频率统计
+
+        注意：v1, v2, v3 等版本号不能单独作为前缀，需要和其他前缀结合
+        """
+        if not prefix:
+            return False
+
+        prefix_clean = prefix.strip('/').lower()
+
+        if prefix_clean in [p.lower() for p in UnifiedFusionEngine.VERSION_PREFIXES]:
+            return False
+
+        if prefix_clean in [p.lower() for p in UnifiedFusionEngine.API_PREFIXES]:
+            return True
+
+        if re.match(r'^[a-zA-Z]+(-[a-zA-Z]+)+$', prefix_clean):
+            return True
+
+        if re.match(r'^[a-zA-Z]+(_[a-zA-Z0-9]+)+$', prefix_clean):
+            return True
+
+        if js_content:
+            count = js_content.count(prefix) + js_content.count(prefix.lower()) + js_content.count(prefix.upper())
+            if count >= 2:
+                return True
+
+        return False
+
+    @staticmethod
+    def is_version_prefix(prefix: str) -> bool:
+        """判断是否为版本号前缀"""
+        return prefix.strip('/').lower() in [p.lower() for p in UnifiedFusionEngine.VERSION_PREFIXES]
+
+    @staticmethod
+    def generate_path_variants(api_path: str, base_url_path: str = "") -> Dict[str, Any]:
+        """
+        生成路径变体 - 基于正确的语义组合
+
+        对于 /inspect/prod-api/checkCode/getCheckCode，base_url_path = /inspect/：
+        - base_url 路径 = /inspect/
+        - 相对路径 = /prod-api/checkCode/getCheckCode
+        - 微服务前缀 (api_prefix) = prod-api
+        - 资源路径 = /checkCode/getCheckCode
+
+        生成 fuzzing 变体:
+        1. 原始相对路径: /prod-api/checkCode/getCheckCode
+        2. 微服务前缀 + 常见资源 + 常见方法: /prod-api/user/add, /prod-api/order/list
+        3. 尝试 /api 前缀: /api/checkCode/getCheckCode
+        4. 去掉微服务前缀: /checkCode/getCheckCode
         """
         if not api_path:
             return {}
 
-        parent_paths = UnifiedFusionEngine.generate_parent_paths(api_path, max_depth=3)
-        resource_path = UnifiedFusionEngine.extract_resource_path(api_path)
+        path = api_path.strip('/')
+        parts = path.split('/')
 
-        if resource_path is None:
-            resource_path = api_path
+        api_prefix_index = UnifiedFusionEngine.find_api_prefix_index(api_path)
+
+        if api_prefix_index is not None:
+            if api_prefix_index == 0:
+                first_parent = None
+                api_prefix = parts[0]
+                resource_path = '/' + '/'.join(parts[1:]) if len(parts) > 1 else api_path
+            elif api_prefix_index > 0:
+                first_parent = '/' + '/'.join(parts[:api_prefix_index])
+                api_prefix = parts[api_prefix_index]
+                resource_path = '/' + '/'.join(parts[api_prefix_index + 1:])
+        else:
+            first_parent = '/' + parts[0] if parts else None
+            api_prefix = None
+            resource_path = '/' + '/'.join(parts[1:]) if len(parts) > 1 else api_path
+
+        base_path_parts = base_url_path.strip('/').split('/') if base_url_path else []
+        relative_parts = []
+        i = 0
+        for bp in base_path_parts:
+            if i < len(parts) and parts[i] == bp:
+                i += 1
+            else:
+                break
+        relative_parts = parts[i:]
+        relative_path = '/' + '/'.join(relative_parts) if relative_parts else api_path
+
+        api_prefixes = UnifiedFusionEngine.API_PREFIXES
+        common_resources = UnifiedFusionEngine.COMMON_RESOURCES
+        common_methods = UnifiedFusionEngine.COMMON_METHODS
+
+        fuzzing_variants = []
+        if api_prefix:
+            for resource in common_resources[:15]:
+                for method in common_methods[:10]:
+                    fuzzing_variants.append(f'/{api_prefix}/{resource}/{method}')
+                    fuzzing_variants.append(f'/{api_prefix}/{resource}/{method}s')
 
         variants: Dict[str, Any] = {
             'original': api_path,
-            'parent_paths': parent_paths,
+            'relative_path': relative_path,
+            'first_parent': first_parent,
+            'api_prefix': api_prefix,
+            'api_prefix_index': api_prefix_index,
             'resource_path': resource_path,
+            'v1': f'/{api_prefix}{resource_path}' if api_prefix else relative_path,
+            'v2': f'/{api_prefix}' if api_prefix else None,
+            'v3': f'/api{resource_path}' if api_prefix else f'/api{relative_path}',
+            'v4': resource_path,
+            'fuzzing_variants': fuzzing_variants,
         }
 
-        rp = resource_path
-        if rp:
-            variants['v1'] = rp
-
-        if len(parent_paths) >= 1:
-            variants['v2'] = parent_paths[0] + rp if rp.startswith('/') else '/' + parent_paths[0] + rp
-        else:
-            variants['v2'] = rp
-
         return variants
+
+    @staticmethod
+    def extract_resource_path(api_path: str) -> Optional[str]:
+        """
+        提取资源路径（去掉第一段后的所有部分）
+
+        例如: /inspect/login/checkCode/getCheckCode
+        返回: /login/checkCode/getCheckCode
+        """
+        if not api_path:
+            return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        if len(parts) >= 2:
+            return '/' + '/'.join(parts[1:])
+
+        return api_path
 
     def _normalize_and_fuse_url(self, raw_path: str, base_url: str = "") -> List[str]:
         """
         规范化并融合 URL - 生成多版本完整 URL
 
-        使用 base_path + resource_path 组合方式生成变体
+        使用新的变体语义，支持版本号前缀结合
         """
         full_urls = []
         variants = self.generate_path_variants(raw_path)
 
-        resource_path = variants.get('resource_path', raw_path)
-        base_paths = variants.get('base_paths', [])
+        v1 = variants.get('v1', '')
+        v2 = variants.get('v2', '')
+        first_parent = variants.get('first_parent', '')
+        parents = variants.get('parents', {})
 
-        for bp in base_paths:
-            full_url = f"{bp}{resource_path}"
-            full_urls.append(full_url)
-
-        if resource_path != raw_path:
-            full_urls.append(resource_path)
-
+        if v1:
+            full_urls.append(v1)
+        if v2:
+            full_urls.append(v2)
         full_urls.append(raw_path)
+
+        if first_parent and base_url:
+            parsed = urlparse(base_url)
+            base_path = parsed.path
+
+            version_prefixes = ['/v1', '/v2', '/v3', '/v4', '/v5']
+            api_prefixes = ['/api', '/rest', '/graphql', '/rpc']
+
+            for parent, resource in parents.items():
+                for version in version_prefixes:
+                    for api_prefix in api_prefixes:
+                        full_url = f"{parsed.scheme}://{parsed.netloc}{parent}{base_path}{api_prefix}{version}{resource}"
+                        full_urls.append(full_url)
+
+                full_url = f"{parsed.scheme}://{parsed.netloc}{parent}{base_path}{resource}"
+                full_urls.append(full_url)
+
+            for api_prefix in api_prefixes:
+                for version in version_prefixes:
+                    full_url = f"{parsed.scheme}://{parsed.netloc}{first_parent}{api_prefix}{version}{v2 if v2 else '/user/list'}"
+                    full_urls.append(full_url)
 
         return list(set(full_urls))
 

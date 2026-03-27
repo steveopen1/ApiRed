@@ -159,31 +159,39 @@ class HeadlessBrowserCollector:
         async def handle_response(response):
             """拦截 JS 响应并捕获正文"""
             url = response.url
-            resource_type = response.resource_type
 
-            if resource_type == 'script' or url.endswith('.js') or '.js?' in url or '.chunk.js' in url:
-                content_hash = str(hash(url))
+            is_js_url = (
+                url.endswith('.js') or
+                '.js?' in url or
+                '.chunk.js' in url or
+                url.endswith('.jsx')
+            )
 
-                if content_hash in self._js_content_set:
-                    return
+            if not is_js_url:
+                return
 
-                self._js_content_set.add(content_hash)
+            content_hash = str(hash(url))
 
-                try:
-                    body = await response.body()
-                    if body and len(body) > 0:
-                        js_content = body.decode('utf-8', errors='ignore')
+            if content_hash in self._js_content_set:
+                return
 
-                        self.js_contents.append({
-                            'url': url,
-                            'content': js_content,
-                            'size': len(body),
-                            'content_hash': content_hash
-                        })
+            self._js_content_set.add(content_hash)
 
-                        logger.debug(f"JS content captured: {url} ({len(body)} bytes)")
-                except Exception as e:
-                    logger.warning(f"Failed to capture JS content {url}: {e}")
+            try:
+                body = await response.body()
+                if body and len(body) > 0:
+                    js_content = body.decode('utf-8', errors='ignore')
+
+                    self.js_contents.append({
+                        'url': url,
+                        'content': js_content,
+                        'size': len(body),
+                        'content_hash': content_hash
+                    })
+
+                    logger.debug(f"JS content captured: {url} ({len(body)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to capture JS content {url}: {e}")
 
         if self.page:
             self.page.on("request", handle_request)
