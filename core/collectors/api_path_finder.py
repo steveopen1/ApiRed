@@ -5,7 +5,9 @@ ApiPathFinder Module
 """
 
 import re
+import hashlib
 import logging
+from collections import defaultdict
 from typing import List, Dict, Set, Tuple, Optional, Any
 from urllib.parse import urlparse, urljoin
 from dataclasses import dataclass, field
@@ -199,9 +201,97 @@ CONTENT_TYPE_LIST = [
     {'key': 'text/typescript', 'tag': 'typescript'},
     {'key': 'text/javascript', 'tag': 'javascript'},
     {'key': 'text/x-lua', 'tag': 'lua'},
+    {'key': 'application/x-www-form-urlencoded', 'tag': 'post'},
+    {'key': 'application/vnd.tcpdump.pcap', 'tag': 'pcap'},
+    {'key': 'application/mbox', 'tag': 'mbox'},
+    {'key': 'text/x-gpsql', 'tag': 'x-gpsql'},
+    {'key': 'text/x-chdr', 'tag': 'x-chdr'},
+    {'key': 'text/x-modelica', 'tag': 'x-modelica'},
+    {'key': 'text/babel$', 'tag': 'babel$'},
+    {'key': 'text/x-sparksql', 'tag': 'x-sparksql'},
+    {'key': 'text/x-octave', 'tag': 'x-octave'},
+    {'key': 'x-shader/x-fragment', 'tag': 'x-fragment'},
+    {'key': 'text/x-haml', 'tag': 'x-haml'},
+    {'key': 'text/x-c++hdr', 'tag': 'x-c++hdr'},
+    {'key': 'text/x-gfm', 'tag': 'x-gfm'},
+    {'key': 'text/x-esper', 'tag': 'x-esper'},
+    {'key': 'text/sass/i', 'tag': 'i'},
+    {'key': 'text/vbscript', 'tag': 'vbscript'},
+    {'key': 'text/jsx', 'tag': 'jsx'},
+    {'key': 'text/x-rpm-spec', 'tag': 'x-rpm-spec'},
+    {'key': 'application/x-powershell', 'tag': 'x-powershell'},
+    {'key': 'text/x-elm', 'tag': 'x-elm'},
+    {'key': 'text/x-cmake', 'tag': 'x-cmake'},
+    {'key': 'text/x-erlang', 'tag': 'x-erlang'},
+    {'key': 'text/x-fsharp', 'tag': 'x-fsharp'},
+    {'key': 'text/x-livescript', 'tag': 'x-livescript'},
+    {'key': 'text/x-pig', 'tag': 'x-pig'},
+    {'key': 'text/x-json', 'tag': 'x-json'},
+    {'key': 'text/x-objectivec', 'tag': 'x-objectivec'},
+    {'key': 'video/ogg', 'tag': 'ogg'},
+    {'key': 'text/x-webidl', 'tag': 'x-webidl'},
+    {'key': 'application/x-cypher-query', 'tag': 'x-cypher-query'},
+    {'key': 'text/x-sas', 'tag': 'x-sas'},
+    {'key': 'text/x-rst', 'tag': 'x-rst'},
+    {'key': 'text/x-properties', 'tag': 'x-properties'},
+    {'key': 'text/x-fortran', 'tag': 'x-fortran'},
+    {'key': 'text/x-verilog', 'tag': 'x-verilog'},
+    {'key': 'text/x-ttcn-cfg', 'tag': 'x-ttcn-cfg'},
+    {'key': 'text/x-oz', 'tag': 'x-oz'},
+    {'key': 'text/x-diff', 'tag': 'x-diff'},
+    {'key': 'application/javascript', 'tag': 'javascript'},
+    {'key': 'text/x-fcl', 'tag': 'x-fcl'},
+    {'key': 'text/x-sqlite', 'tag': 'x-sqlite'},
+    {'key': 'text/x-ecl', 'tag': 'x-ecl'},
+    {'key': 'text/x-scss', 'tag': 'x-scss'},
+    {'key': 'text/jinja2', 'tag': 'jinja2'},
+    {'key': 'application/sparql-query', 'tag': 'sparql-query'},
+    {'key': 'text/x-julia', 'tag': 'x-julia'},
+    {'key': 'text/x-dockerfile', 'tag': 'x-dockerfile'},
+    {'key': 'text/x-mariadb', 'tag': 'x-mariadb'},
+    {'key': 'text/yaml', 'tag': 'yaml'},
+    {'key': 'application/x-jsp', 'tag': 'x-jsp'},
+    {'key': 'application/x-httpd-php', 'tag': 'x-httpd-php'},
+    {'key': 'text/x-perl', 'tag': 'x-perl'},
+    {'key': 'application/x-json', 'tag': 'x-json'},
+    {'key': 'text/x-csharp', 'tag': 'x-csharp'},
+    {'key': 'text/x-cobol', 'tag': 'x-cobol'},
+    {'key': 'text/x-groovy', 'tag': 'x-groovy'},
+    {'key': 'text/x-squirrel', 'tag': 'x-squirrel'},
+    {'key': 'text/markdown', 'tag': 'markdown'},
+    {'key': 'application/pgp-encrypted', 'tag': 'pgp-encrypted'},
+    {'key': 'text/x-latex', 'tag': 'x-latex'},
+    {'key': 'application/dart', 'tag': 'dart'},
+    {'key': 'application/x-aspx', 'tag': 'x-aspx'},
+    {'key': 'text/x-gas', 'tag': 'x-gas'},
+    {'key': 'text/x-protobuf', 'tag': 'x-protobuf'},
+    {'key': 'text/x-literate-haskell', 'tag': 'x-literate-haskell'},
+    {'key': 'text/x-django', 'tag': 'x-django'},
+    {'key': 'text/x-smarty', 'tag': 'x-smarty'},
+    {'key': 'application/edn', 'tag': 'edn'},
+    {'key': 'application/n-triples', 'tag': 'n-triples'},
+    {'key': 'auth/forge-password', 'tag': 'forge-password'},
+    {'key': 'text/x-sml', 'tag': 'x-sml'},
+    {'key': 'text/x-brainfuck', 'tag': 'x-brainfuck'},
+    {'key': 'application/pgp', 'tag': 'pgp'},
+    {'key': 'text/x-d', 'tag': 'x-d'},
+    {'key': 'text/x-gss', 'tag': 'x-gss'},
+    {'key': 'application/x-javascript', 'tag': 'x-javascript'},
+    {'key': 'text/troff', 'tag': 'troff'},
+    {'key': 'application/x-httpd', 'tag': 'x-httpd'},
+    {'key': 'text/x-idl', 'tag': 'x-idl'},
+    {'key': 'text/x-clojure', 'tag': 'x-clojure'},
+    {'key': 'text/x-xu', 'tag': 'x-xu'},
+    {'key': 'text/x-hive', 'tag': 'x-hive'},
+    {'key': 'text/x-gql', 'tag': 'x-gql'},
+    {'key': 'text/x-pug', 'tag': 'x-pug'},
+    {'key': 'text/apl', 'tag': 'apl'},
+    {'key': 'application/xquery', 'tag': 'xquery'},
+    {'key': 'audio/wav', 'tag': 'wav'},
+    {'key': 'application/x-php', 'tag': 'x-php'},
+    {'key': 'video/mp4', 'tag': 'mp4'},
+    {'key': 'application/spring-json', 'tag': 'spring-json'},
 ]
-
-CONTENT_TYPE_PURE = [x['key'] for x in CONTENT_TYPE_LIST]
 
 STATIC_FILE_EXT_BLACK_LIST = [
     "pdf", "docx", "doc", "exe", "apk", "mp4", "mkv", "mp3", "flv",
@@ -1199,5 +1289,131 @@ class ApiPathCombiner:
             
             for suffix in suffixes[:20]:
                 probe_urls.append(f"{full_base}/{suffix}")
-        
+
         return list(set(probe_urls))
+
+
+class ResponseDiffer:
+    """
+    响应差异化分析器
+    使用 SHA256 对响应内容去重，发现差异化响应
+    """
+
+    @staticmethod
+    def compute_content_hash(content: bytes) -> str:
+        """计算响应内容的 SHA256 哈希值"""
+        return hashlib.sha256(content).hexdigest()
+
+    @staticmethod
+    def diff_responses(responses: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        对响应列表进行差异化分析
+
+        Args:
+            responses: 响应列表，每个元素包含 url, content, status_code, content_type 等
+
+        Returns:
+            按 content_hash 分组的响应字典
+            {
+                'hash1': [{url, content, status_code, ...}, ...],
+                'hash2': [...],
+            }
+        """
+        hash_map = defaultdict(list)
+
+        for resp in responses:
+            content = resp.get('content', b'')
+            if isinstance(content, str):
+                content = content.encode('utf-8')
+
+            content_hash = ResponseDiffer.compute_content_hash(content)
+            resp['content_hash'] = content_hash
+            hash_map[content_hash].append(resp)
+
+        return dict(hash_map)
+
+    @staticmethod
+    def filter_unique_responses(
+        responses: List[Dict[str, Any]],
+        min_group_size: int = 1
+    ) -> List[Dict[str, Any]]:
+        """
+        过滤出唯一的响应（按内容hash去重）
+
+        Args:
+            responses: 响应列表
+            min_group_size: 最小分组大小，用于过滤常见响应
+
+        Returns:
+            唯一响应列表
+        """
+        hash_map = ResponseDiffer.diff_responses(responses)
+
+        unique = []
+        for content_hash, group in hash_map.items():
+            if len(group) >= min_group_size:
+                group[0]['response_count'] = len(group)
+                unique.append(group[0])
+
+        return unique
+
+    @staticmethod
+    def find_different_responses(
+        baseline: Dict[str, Any],
+        responses: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        找出与基线不同的响应
+
+        Args:
+            baseline: 基线响应
+            responses: 待比较的响应列表
+
+        Returns:
+            与基线不同的响应列表
+        """
+        baseline_hash = baseline.get('content_hash')
+        if not baseline_hash:
+            baseline_content = baseline.get('content', b'')
+            if isinstance(baseline_content, str):
+                baseline_content = baseline_content.encode('utf-8')
+            baseline_hash = ResponseDiffer.compute_content_hash(baseline_content)
+
+        different = []
+        for resp in responses:
+            resp_hash = resp.get('content_hash')
+            if not resp_hash:
+                content = resp.get('content', b'')
+                if isinstance(content, str):
+                    content = content.encode('utf-8')
+                resp_hash = ResponseDiffer.compute_content_hash(content)
+                resp['content_hash'] = resp_hash
+
+            if resp_hash != baseline_hash:
+                different.append(resp)
+
+        return different
+
+    @staticmethod
+    def get_rare_responses(
+        responses: List[Dict[str, Any]],
+        threshold: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        找出稀有响应（出现次数少于阈值的响应）
+
+        Args:
+            responses: 响应列表
+            threshold: 阈值，默认10
+
+        Returns:
+            稀有响应列表
+        """
+        hash_map = ResponseDiffer.diff_responses(responses)
+
+        rare = []
+        for content_hash, group in hash_map.items():
+            if len(group) < threshold:
+                rare.extend(group)
+
+        return rare
