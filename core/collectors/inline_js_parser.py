@@ -7,7 +7,6 @@ Inline JavaScript Parser
 import re
 import json
 import logging
-import socket
 from typing import Dict, List, Set, Any, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 from functools import lru_cache
@@ -855,46 +854,6 @@ class ResponseBasedAPIDiscovery:
     def get_domains(self) -> List[str]:
         """获取所有发现的域名"""
         return list(self.discovered_domains)
-    
-    async def check_ips_alive(self, ips: List[str] = None) -> Dict[str, bool]:
-        """
-        检查IP:port是否存活
-        
-        Args:
-            ips: 要检查的IP:port列表，如果为None则检查所有发现的IP
-            
-        Returns:
-            {ip: is_alive} 字典
-        """
-        if ips is None:
-            ips = list(self.discovered_ips)
-        
-        results = {}
-        
-        for ip_port in ips:
-            results[ip_port] = await self._check_single_ip(ip_port)
-        
-        return results
-    
-    async def _check_single_ip(self, ip_port: str) -> bool:
-        """检查单个IP:port是否存活"""
-        try:
-            if ':' not in ip_port:
-                return False
-            
-            ip, port_str = ip_port.rsplit(':', 1)
-            try:
-                port = int(port_str)
-            except ValueError:
-                return False
-            
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            result = sock.connect_ex((ip, port))
-            sock.close()
-            return result == 0
-        except Exception:
-            return False
     
     def clear(self):
         """清空所有发现的数据"""
