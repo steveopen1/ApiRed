@@ -243,7 +243,7 @@ class StatsUpdateMessage(WSMessage):
 @dataclass
 class HealthCheckMessage(WSMessage):
     """健康检查消息"""
-    def __init__(self, status: str = "healthy", components: Dict[str, Any] = None):
+    def __init__(self, status: str = "healthy", components: Optional[Dict[str, Any]] = None):
         super().__init__(
             type=EventType.HEALTH_CHECK.value,
             task_id="",
