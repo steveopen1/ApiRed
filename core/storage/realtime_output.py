@@ -43,22 +43,21 @@ class RealtimeOutput:
         self.vulns_file = None
         self.js_file = None
         
+        self._timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._init_files()
     
     def _init_files(self):
         """初始化输出文件"""
         os.makedirs(self.output_dir, exist_ok=True)
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        self.urls_file = os.path.join(self.output_dir, f"realtime_urls_{timestamp}.txt")
-        self.subdomains_file = os.path.join(self.output_dir, f"realtime_subdomains_{timestamp}.txt")
-        self.rootdomains_file = os.path.join(self.output_dir, f"realtime_rootdomains_{timestamp}.txt")
-        self.apis_file = os.path.join(self.output_dir, f"realtime_apis_{timestamp}.txt")
-        self.ips_file = os.path.join(self.output_dir, f"realtime_ips_{timestamp}.txt")
-        self.sensitive_file = os.path.join(self.output_dir, f"realtime_sensitive_{timestamp}.txt")
-        self.vulns_file = os.path.join(self.output_dir, f"realtime_vulns_{timestamp}.txt")
-        self.js_file = os.path.join(self.output_dir, f"realtime_js_{timestamp}.txt")
+        self.urls_file = os.path.join(self.output_dir, f"realtime_urls_{self._timestamp}.txt")
+        self.subdomains_file = os.path.join(self.output_dir, f"realtime_subdomains_{self._timestamp}.txt")
+        self.rootdomains_file = os.path.join(self.output_dir, f"realtime_rootdomains_{self._timestamp}.txt")
+        self.apis_file = os.path.join(self.output_dir, f"realtime_apis_{self._timestamp}.txt")
+        self.ips_file = os.path.join(self.output_dir, f"realtime_ips_{self._timestamp}.txt")
+        self.sensitive_file = os.path.join(self.output_dir, f"realtime_sensitive_{self._timestamp}.txt")
+        self.vulns_file = os.path.join(self.output_dir, f"realtime_vulns_{self._timestamp}.txt")
+        self.js_file = os.path.join(self.output_dir, f"realtime_js_{self._timestamp}.txt")
         
         for f in [self.urls_file, self.subdomains_file, self.rootdomains_file, 
                   self.apis_file, self.ips_file, self.sensitive_file, 
@@ -219,11 +218,6 @@ class RealtimeOutput:
     def close(self):
         """关闭并刷新所有文件"""
         logger.info(f"Realtime output files saved to: {self.output_dir}/")
-        for f in [self.urls_file, self.subdomains_file, self.rootdomains_file,
-                  self.apis_file, self.ips_file, self.sensitive_file,
-                  self.vulns_file, self.js_file]:
-            if f and os.path.exists(f):
-                pass
 
 
 _realtime_output_instance: Optional[RealtimeOutput] = None

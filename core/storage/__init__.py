@@ -784,10 +784,14 @@ class MySQLStorage:
 
 
 from .realtime_output import RealtimeOutput, get_realtime_output
+from .output_manager import OutputManager, get_output_manager, setup_output_for_target
 
 __all__ = [
     'DBStorage',
     'FileStorage',
     'RealtimeOutput',
     'get_realtime_output',
+    'OutputManager',
+    'get_output_manager',
+    'setup_output_for_target',
 ]

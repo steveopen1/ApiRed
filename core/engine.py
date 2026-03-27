@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 from .utils.config import Config
-from .storage import DBStorage, FileStorage, RealtimeOutput
+from .storage import DBStorage, FileStorage, RealtimeOutput, OutputManager, get_output_manager
 from .collectors import JSFingerprintCache, JSParser, APIAggregator, HeadlessBrowserCollector
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
@@ -199,20 +199,23 @@ class ScanEngine:
         self._running = True
         
         target_parsed = urlparse(self.config.target)
-        folder_name = self.config.target.replace('://', '_').replace('/', '_').replace('.', '_')
-        results_dir = os.path.join(self.config.output_dir, folder_name)
         
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir, exist_ok=True)
+        self._output_manager = get_output_manager(self.config.output_dir)
+        self._output_manager.setup_for_target(self.config.target)
+        
+        target_dir = os.path.join(self.config.output_dir, self._output_manager.target_name)
+        
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
         
         self.db_storage = DBStorage(
-            db_path=os.path.join(results_dir, "results.db"),
+            db_path=self._output_manager.get_checkpoint_db_path(),
             wal_mode=True
         )
         
-        self.file_storage = FileStorage(base_dir=results_dir)
+        self.file_storage = FileStorage(base_dir=target_dir)
         
-        self._realtime_output = RealtimeOutput(output_dir=results_dir)
+        self._realtime_output = RealtimeOutput(output_dir=self._output_manager.real_time_dir)
         
         from .utils.http_client import AsyncHttpClient
         self._http_client = AsyncHttpClient(
@@ -336,7 +339,7 @@ class ScanEngine:
         self._incremental_scanner = None
         self._url_deduplicator = None
         if getattr(self.config, 'resume', False) or getattr(self.config, 'incremental', False):
-            storage_path = os.path.join(results_dir, "incremental.db")
+            storage_path = self._output_manager.get_checkpoint_db_path() if hasattr(self, '_output_manager') else os.path.join(self.config.output_dir, "incremental.db")
             try:
                 from .incremental_scanner import IncrementalScanner, URLDeduplicator
                 self._incremental_scanner = IncrementalScanner(storage_path)
@@ -3421,7 +3424,10 @@ class ScanEngine:
         
         self.file_storage.save_json(scan_dict, 'scan_result.json')
         
-        report_exporter = ReportExporter(output_dir=self.config.output_dir)
+        output_mgr = self._output_manager if hasattr(self, '_output_manager') else None
+        results_base = output_mgr.results_dir if output_mgr else self.config.output_dir
+        
+        report_exporter = ReportExporter(output_dir=results_base)
         formats = getattr(self.config, 'report_formats', ['json', 'html'])
         
         try:
@@ -3435,15 +3441,14 @@ class ScanEngine:
         
         try:
             attack_chain_exporter = AttackChainExporter()
-            folder_name = self.result.target_url.replace('://', '_').replace('/', '_').replace('.', '_')
-            html_path = os.path.join(self.config.output_dir, folder_name, 'attack_chain.html')
+            html_path = self._output_manager.get_attack_chain_path() if output_mgr else os.path.join(self.config.output_dir, 'attack_chain.html')
             attack_chain_exporter.generate_html_report(self.result, html_path)
         except Exception as e:
                 logger.error(f"Attack chain export error: {e}")
         
         try:
             from .exporters.report_exporter import FLUXHtmlReporter
-            flux_html_path = os.path.join(self.config.output_dir, folder_name, 'flux_report.html')
+            flux_html_path = self._output_manager.get_flux_report_path() if output_mgr else os.path.join(self.config.output_dir, 'flux_report.html')
             flux_reporter = FLUXHtmlReporter()
             flux_reporter.export(scan_dict, flux_html_path)
             logger.info(f"[FLUX] FLUX HTML 报告已生成: {flux_html_path}")
