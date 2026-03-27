@@ -293,6 +293,8 @@ CONTENT_TYPE_LIST = [
     {'key': 'application/spring-json', 'tag': 'spring-json'},
 ]
 
+CONTENT_TYPE_PURE = frozenset(item['key'] for item in CONTENT_TYPE_LIST)
+
 STATIC_FILE_EXT_BLACK_LIST = [
     "pdf", "docx", "doc", "exe", "apk", "mp4", "mkv", "mp3", "flv",
     "css", "less", "woff", "woff2", "vue", "svg", "png", "jpg",
