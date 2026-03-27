@@ -3149,6 +3149,16 @@ class ScanEngine:
                             )
                             if self.result:
                                 self.result.vulnerabilities.append(vuln)
+                            
+                            if self._realtime_output:
+                                severity_str = result.severity.upper() if isinstance(result.severity, str) else 'medium'
+                                self._realtime_output.output_vulnerability(
+                                    vuln_type=result.vuln_type.value if hasattr(result.vuln_type, 'value') else str(result.vuln_type),
+                                    endpoint=endpoint.full_url,
+                                    severity=severity_str,
+                                    details=result.evidence[:200] if result.evidence else '',
+                                    payload=result.payload
+                                )
                     except Exception as e:
                         logger.debug(f"Test {selection.test_name} failed for {endpoint.path}: {e}")
             except Exception as e:
@@ -3367,6 +3377,15 @@ class ScanEngine:
                                 remediation=f"Implement bypass protection for {finding.category} techniques"
                             )
                             self.result.vulnerabilities.append(vuln)
+                            
+                            if self._realtime_output:
+                                self._realtime_output.output_vulnerability(
+                                    vuln_type='bypass',
+                                    endpoint=endpoint.full_url,
+                                    severity='medium',
+                                    details=finding.details,
+                                    payload=finding.technique
+                                )
                             
             except Exception as e:
                 logger.debug(f"Bypass test error for {endpoint.full_url}: {e}")

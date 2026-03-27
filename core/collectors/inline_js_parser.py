@@ -597,8 +597,26 @@ class ResponseBasedAPIDiscovery:
         for domain in result['domains']:
             if domain not in self._seen_domains:
                 self._seen_domains.add(domain)
-                domain_type = "internal" if domain.endswith(self.target_domain) else "external"
-                self._realtime.output_domain(domain, domain_type=domain_type)
+                
+                if HAS_TLDEXTRACT and self.target_domain:
+                    try:
+                        extracted_domain = tldextract.extract(domain)
+                        extracted_target = tldextract.extract(self.target_domain)
+                        if extracted_domain.subdomain:
+                            self._realtime.output_subdomain(domain, source=source_url)
+                        if extracted_domain.domain == extracted_target.domain and extracted_domain.suffix == extracted_target.suffix:
+                            if not extracted_domain.subdomain:
+                                self._realtime.output_rootdomain(domain, source=source_url)
+                        continue
+                    except Exception:
+                        pass
+                
+                if domain.endswith(self.target_domain) and '.' in domain.replace(self.target_domain, ''):
+                    self._realtime.output_subdomain(domain, source=source_url)
+                elif self.target_domain in domain:
+                    pass
+                else:
+                    self._realtime.output_subdomain(domain, source=source_url)
         
         for api_path in result['api_paths']:
             if api_path not in self._seen_apis:
