@@ -1755,8 +1755,16 @@ class BaseURLAnalyzer:
     @classmethod
     def extract_base_from_api_path(cls, api_path: str) -> Optional[str]:
         """
-        从API路径提取Base URL
+        从API路径提取Base URL（使用混合算法）
+
         例如: /ophApi/checkCode/getCheckCode -> ophApi 是 Base URL
+        例如: /inspect/login/checkCode/getCheckCode -> inspect 是 Base URL
+
+        使用知识库+ID检测混合算法：
+        - NON_RESOURCE_SEGMENTS: 代理/网关前缀
+        - COMMON_SUFFIXES: 常见后缀
+        - COMMON_RESOURCES: 常见资源
+        - ID检测: 数字、UUID等
         """
         if not api_path:
             return None
@@ -1764,10 +1772,65 @@ class BaseURLAnalyzer:
         path = api_path.strip('/')
         parts = path.split('/')
 
-        if len(parts) >= 2:
-            return parts[0]
+        if len(parts) < 2:
+            return None
 
-        return None
+        NON_RESOURCE = frozenset({
+            'inspect', 'proxy', 'gateway', 'api', 'service', 'web', 'www',
+            'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'rpc',
+            'internal', 'external', 'open', 'public', 'private',
+            'mobile', 'app', 'client', 'cdn', 'static', 'assets',
+        })
+
+        COMMON_SUFFIXES = frozenset([
+            'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+            'get', 'set', 'save', 'query', 'search', 'filter', 'sort', 'page',
+            'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+            'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+            'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+        ])
+
+        COMMON_RESOURCES = frozenset([
+            'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+            'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+            'config', 'configuration', 'settings', 'system', 'admin', 'auth',
+            'department', 'dept', 'organization', 'org', 'employee',
+            'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+        ])
+
+        def is_id(s: str) -> bool:
+            return (
+                s.isdigit() or
+                bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+                (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+                (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            )
+
+        def is_meaningful(s: str) -> bool:
+            s_lower = s.lower()
+            if s_lower in NON_RESOURCE:
+                return False
+            if s_lower in COMMON_SUFFIXES:
+                return True
+            if s_lower in COMMON_RESOURCES:
+                return True
+            if is_id(s):
+                return False
+            return len(s) >= 2
+
+        for i, part in enumerate(parts):
+            if part.lower() in NON_RESOURCE:
+                if i == 0:
+                    return None
+                return parts[i]
+
+        for i in range(len(parts) - 1, -1, -1):
+            if is_meaningful(parts[i]):
+                if i > 0:
+                    return parts[i - 1] if i > 0 else None
+                return None
+
+        return parts[0] if parts else None
 
     @classmethod
     def extract_base_from_paths(cls, paths: List[str]) -> List[str]:

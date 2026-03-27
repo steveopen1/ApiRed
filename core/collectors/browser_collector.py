@@ -61,6 +61,7 @@ class HeadlessBrowserCollector:
     3. 拦截 API 请求
     4. 采集隐藏的 API 端点
     5. 页面截图
+    6. 捕获 JS 文件响应正文用于解析
     """
     
     def __init__(self, config: Optional[Dict] = None):
@@ -71,7 +72,9 @@ class HeadlessBrowserCollector:
         self.collected_resources: List[BrowserResource] = []
         self.api_endpoints: Set[str] = set()
         self.js_files: Set[str] = set()
+        self.js_contents: List[Dict[str, Any]] = []
         self.screenshots: List[str] = []
+        self._js_content_set: Set[str] = set()
         self._api_url_patterns = [
             r'/(?:api|rest|v\d+)/[a-zA-Z0-9_/-]+',
             r'/callComponent/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',
@@ -132,26 +135,59 @@ class HeadlessBrowserCollector:
             return False
     
     async def _setup_interceptors(self):
-        """设置请求拦截器"""
+        """设置请求和响应拦截器"""
+        self._js_content_set = set()
+
         async def handle_request(request):
             url = request.url
             resource_type = request.resource_type
-            
-            if resource_type == 'script' or url.endswith('.js'):
+
+            if resource_type == 'script' or url.endswith('.js') or '.js?' in url or '.chunk.js' in url:
                 self.js_files.add(url)
-            
+                logger.debug(f"JS file requested: {url}")
+
             for pattern in self._api_url_patterns:
                 if re.search(pattern, url):
                     self.api_endpoints.add(url)
-            
+
             self.collected_resources.append(BrowserResource(
                 url=url,
                 resource_type=resource_type,
                 content=""
             ))
-        
+
+        async def handle_response(response):
+            """拦截 JS 响应并捕获正文"""
+            url = response.url
+            resource_type = response.resource_type
+
+            if resource_type == 'script' or url.endswith('.js') or '.js?' in url or '.chunk.js' in url:
+                content_hash = str(hash(url))
+
+                if content_hash in self._js_content_set:
+                    return
+
+                self._js_content_set.add(content_hash)
+
+                try:
+                    body = await response.body()
+                    if body and len(body) > 0:
+                        js_content = body.decode('utf-8', errors='ignore')
+
+                        self.js_contents.append({
+                            'url': url,
+                            'content': js_content,
+                            'size': len(body),
+                            'content_hash': content_hash
+                        })
+
+                        logger.debug(f"JS content captured: {url} ({len(body)} bytes)")
+                except Exception as e:
+                    logger.warning(f"Failed to capture JS content {url}: {e}")
+
         if self.page:
             self.page.on("request", handle_request)
+            self.page.on("response", handle_response)
     
     async def navigate(self, url: str, wait_until: str = "networkidle") -> bool:
         """导航到指定 URL"""
@@ -357,15 +393,16 @@ class HeadlessBrowserCollector:
         """收集页面内容"""
         if not self.page:
             return {}
-        
+
         content = await self.page.content()
         title = await self.page.title()
-        
+
         return {
             'url': self.page.url,
             'title': title,
             'content': content,
             'js_files': list(self.js_files),
+            'js_contents': list(self.js_contents),
             'api_endpoints': list(self.api_endpoints),
             'routes': await self.discover_spa_routes(),
             'screenshots': self.screenshots
@@ -457,6 +494,14 @@ class HeadlessBrowserCollector:
     def get_js_urls(self) -> List[str]:
         """获取收集到的 JS 文件 URLs"""
         return list(self.js_files)
+
+    def get_js_contents(self) -> List[Dict[str, Any]]:
+        """获取捕获的 JS 文件内容"""
+        return list(self.js_contents)
+
+    def get_js_count(self) -> int:
+        """获取捕获的 JS 文件数量"""
+        return len(self.js_contents)
     
     async def cleanup(self) -> None:
         """清理资源"""

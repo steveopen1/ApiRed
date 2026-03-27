@@ -343,7 +343,14 @@ class JSParser:
         'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
         'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
     ])
-    
+
+    NON_RESOURCE_SEGMENTS = frozenset({
+        'inspect', 'proxy', 'gateway', 'api', 'service', 'web', 'www',
+        'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'rpc',
+        'internal', 'external', 'open', 'public', 'private',
+        'mobile', 'app', 'client', 'cdn', 'static', 'assets',
+    })
+
     FILE_EXTENSIONS = {
         '.js', '.css', '.html', '.htm', '.json', '.xml',
         '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
@@ -540,8 +547,14 @@ class JSParser:
             
             filtered_parts = []
             for i, part in enumerate(parts):
-                if i > 0 and self._is_likely_id(part):
-                    break
+                if i > 0:
+                    if self._is_likely_id(part):
+                        break
+                    part_lower = part.lower()
+                    if (part_lower not in self._COMMON_SUFFIXES_SET and
+                        part_lower not in self._COMMON_RESOURCES_SET and
+                        part_lower not in self.NON_RESOURCE_SEGMENTS):
+                        break
                 filtered_parts.append(part)
             
             if len(filtered_parts) >= 1:
@@ -627,8 +640,14 @@ class JSParser:
             
             filtered_parts = []
             for i, part in enumerate(parts):
-                if i > 0 and self._is_likely_id(part):
-                    break
+                if i > 0:
+                    if self._is_likely_id(part):
+                        break
+                    part_lower = part.lower()
+                    if (part_lower not in self._COMMON_SUFFIXES_SET and
+                        part_lower not in self._COMMON_RESOURCES_SET and
+                        part_lower not in self.NON_RESOURCE_SEGMENTS):
+                        break
                 filtered_parts.append(part)
             
             if len(filtered_parts) >= 1:

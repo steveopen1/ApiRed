@@ -216,24 +216,79 @@ class APISpecParser:
     
     def _extract_base_paths_from_url(self, url: str) -> List[str]:
         """
-        从 URL 中提取可能的 base_path 列表
-        
+        从 URL 中提取可能的 base_path 列表（使用混合算法）
+
         例如: http://xxx.com/admin/jiankon-action/xxx.asp
         返回: ['/admin/jiankon-action/', '/admin/']
+
+        使用知识库+ID检测混合算法
         """
+        import re
+        from urllib.parse import urlparse
+
         parsed = urlparse(url)
         path = parsed.path
-        
+
         if not path or path == '/':
             return []
-        
+
+        NON_RESOURCE = frozenset({
+            'inspect', 'proxy', 'gateway', 'api', 'service', 'web', 'www',
+            'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'rpc',
+            'internal', 'external', 'open', 'public', 'private',
+            'mobile', 'app', 'client', 'cdn', 'static', 'assets',
+        })
+
+        COMMON_SUFFIXES = frozenset([
+            'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+            'get', 'set', 'save', 'query', 'search', 'filter', 'sort', 'page',
+            'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+            'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+            'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+        ])
+
+        COMMON_RESOURCES = frozenset([
+            'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+            'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+            'config', 'configuration', 'settings', 'system', 'admin', 'auth',
+            'department', 'dept', 'organization', 'org', 'employee',
+            'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+        ])
+
+        def is_id(s: str) -> bool:
+            return (
+                s.isdigit() or
+                bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+                (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+                (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            )
+
+        def is_meaningful(s: str) -> bool:
+            s_lower = s.lower()
+            if s_lower in NON_RESOURCE:
+                return False
+            if s_lower in COMMON_SUFFIXES:
+                return True
+            if s_lower in COMMON_RESOURCES:
+                return True
+            if is_id(s):
+                return False
+            return len(s) >= 2
+
         base_paths = []
         parts = path.strip('/').split('/')
-        
+
+        for i in range(len(parts) - 1, 0, -1):
+            if is_meaningful(parts[i]):
+                bp = '/' + '/'.join(parts[:i]) + '/'
+                if bp not in base_paths:
+                    base_paths.append(bp)
+
         for i in range(len(parts) - 1, 0, -1):
             bp = '/' + '/'.join(parts[:i]) + '/'
-            base_paths.append(bp)
-        
+            if bp not in base_paths:
+                base_paths.append(bp)
+
         return base_paths
     
     async def _discover_api_base_path(self, target_url: str) -> Optional[str]:

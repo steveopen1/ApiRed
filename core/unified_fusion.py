@@ -154,26 +154,60 @@ class UnifiedFusionEngine:
     
     同时运行多种发现方法，结果合并后统一评分排序
     """
-    
+
     API_PATTERNS = [
         r'/api/', r'/v\d+/', r'/graphql', r'/rest/',
         r'/swagger', r'/openapi', r'/rpc/',
     ]
-    
+
     ADMIN_PATTERNS = [
         r'/admin', r'/manage', r'/dashboard', r'/console',
         r'/backend', r'/system',
     ]
-    
+
     AI_PATTERNS = [
         r'/ai/', r'/llm/', r'/chat/', r'/embed',
         r'/vector', r'/model', r'/predict', r'/inference',
     ]
-    
+
     STATIC_PATTERNS = [
         r'\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|ico|map)$',
         r'/static/', r'/assets/', r'/images/', r'/fonts/',
     ]
+
+    NON_RESOURCE_SEGMENTS = frozenset({
+        'inspect', 'proxy', 'gateway', 'api', 'service', 'web', 'www',
+        'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'rpc',
+        'internal', 'external', 'open', 'public', 'private',
+        'mobile', 'app', 'client', 'cdn', 'static', 'assets',
+    })
+
+    _UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', re.IGNORECASE)
+    _ALPHANUM_DASH_UNDERSCORE_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+    _COMMON_SUFFIXES_SET = frozenset([
+        'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+        'get', 'set', 'save', 'query', 'search', 'filter', 'sort', 'page',
+        'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+        'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+        'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+        'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
+        'approve', 'reject', 'cancel', 'close', 'open', 'check',
+        'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
+    ])
+
+    _COMMON_RESOURCES_SET = frozenset([
+        'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+        'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+        'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
+        'department', 'dept', 'organization', 'org', 'employee',
+        'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+        'profile', 'permission', 'permissions', 'resource', 'resources',
+        'tag', 'tags', 'comment', 'comments',
+        'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
+        'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
+        'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
+    ])
     
     def __init__(self):
         self.endpoints: Dict[str, FusedEndpoint] = {}
@@ -187,6 +221,259 @@ class UnifiedFusionEngine:
             'kb_contributed': 0,
             'stat_contributed': 0,
         }
+
+    @staticmethod
+    def generate_parent_paths(path: str, max_depth: int = 3) -> List[str]:
+        """
+        从完整路径生成可能的父路径前缀（直接复用 js_collector 的逻辑）
+
+        例如: /inspect/login/checkCode/getCheckCode
+        返回: ['/inspect/login/checkCode', '/inspect/login', '/inspect']
+        """
+        if not path or not isinstance(path, str):
+            return []
+
+        if path.startswith('http://') or path.startswith('https://'):
+            from urllib.parse import urlparse
+            parsed = urlparse(path)
+            path = parsed.path
+
+        path = path.strip('/')
+        if not path:
+            return []
+
+        parts = path.split('/')
+
+        if len(parts) <= 2:
+            return []
+
+        def is_likely_id(s: str) -> bool:
+            return (
+                s.isdigit() or
+                bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+                (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+                (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            )
+
+        valid_parts_count = len(parts)
+        for i, part in enumerate(parts):
+            if is_likely_id(part) and i > 0:
+                valid_parts_count = i
+                break
+
+        if valid_parts_count < 2:
+            return []
+
+        parent_paths = []
+        for i in range(1, min(valid_parts_count, max_depth + 1)):
+            parent_path = '/' + '/'.join(parts[:-i])
+            if parent_path and len(parent_path) > 1:
+                parent_paths.append(parent_path)
+
+        return parent_paths
+
+    @staticmethod
+    def _is_common_suffix(s: str) -> bool:
+        """判断是否为常见后缀"""
+        return s.lower() in UnifiedFusionEngine._COMMON_SUFFIXES_SET
+
+    @staticmethod
+    def _is_common_resource(s: str) -> bool:
+        """判断是否为常见资源"""
+        return s.lower() in UnifiedFusionEngine._COMMON_RESOURCES_SET
+
+    @staticmethod
+    def _is_likely_id(s: str) -> bool:
+        """判断是否为ID"""
+        return (
+            s.isdigit() or
+            bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+        )
+
+    @staticmethod
+    def _is_meaningful_segment(s: str) -> bool:
+        """
+        判断路径段是否有实际意义（知识库辅助判断）
+
+        综合考虑：
+        - 是否是常见后缀
+        - 是否是常见资源
+        - 是否是ID
+        - 是否是代理前缀
+        """
+        s_lower = s.lower()
+
+        if s_lower in UnifiedFusionEngine.NON_RESOURCE_SEGMENTS:
+            return False
+
+        if UnifiedFusionEngine._is_common_suffix(s_lower):
+            return True
+
+        if UnifiedFusionEngine._is_common_resource(s_lower):
+            return True
+
+        if UnifiedFusionEngine._is_likely_id(s):
+            return False
+
+        if len(s) < 2:
+            return False
+
+        return True
+
+    @staticmethod
+    def extract_base_path(api_path: str) -> Optional[str]:
+        """
+        提取代理/网关前缀（统计学+知识库+ID检测混合）
+
+        对于 /inspect/login/checkCode/getCheckCode：
+        - 'login' 是常见资源 → 有意义
+        - 'checkCode' 是驼峰资源 → 有意义
+        - 'getCheckCode' 是常见后缀 → 有意义
+        - 所以第一段没有实际意义的 segment 就是代理前缀: /inspect
+        """
+        if not api_path:
+            return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        for i, part in enumerate(parts):
+            if part.lower() in UnifiedFusionEngine.NON_RESOURCE_SEGMENTS:
+                if i == 0:
+                    return None
+                return '/' + '/'.join(parts[:i])
+
+        first_meaningful_idx = 0
+        for i in range(len(parts) - 1, -1, -1):
+            if UnifiedFusionEngine._is_meaningful_segment(parts[i]):
+                first_meaningful_idx = i
+                break
+
+        if first_meaningful_idx > 0:
+            return '/' + '/'.join(parts[:first_meaningful_idx])
+
+        return None
+
+    @staticmethod
+    def extract_resource_path(api_path: str) -> Optional[str]:
+        """
+        提取资源路径（去掉前两段后的路径）
+
+        例如: /inspect/login/checkCode/getCheckCode
+        返回: /checkCode/getCheckCode
+        """
+        if not api_path:
+            return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        if len(parts) >= 3:
+            return '/' + '/'.join(parts[2:])
+
+        return api_path
+
+    @staticmethod
+    def generate_path_variants(api_path: str) -> Dict[str, str]:
+        """
+        生成路径变体 - 基于父路径 + 资源路径组合
+
+        输入: /inspect/login/checkCode/getCheckCode
+
+        返回:
+        {
+            'original': /inspect/login/checkCode/getCheckCode,
+            'parent_paths': ['/inspect/login/checkCode', '/inspect/login', '/inspect'],
+            'resource_path': /checkCode/getCheckCode,
+            'v1': /checkCode/getCheckCode,
+            'v2': /inspect/checkCode/getCheckCode,
+        }
+        """
+        if not api_path:
+            return {}
+
+        parent_paths = UnifiedFusionEngine.generate_parent_paths(api_path, max_depth=3)
+        resource_path = UnifiedFusionEngine.extract_resource_path(api_path)
+
+        if resource_path is None:
+            resource_path = api_path
+
+        variants: Dict[str, Any] = {
+            'original': api_path,
+            'parent_paths': parent_paths,
+            'resource_path': resource_path,
+        }
+
+        rp = resource_path
+        if rp:
+            variants['v1'] = rp
+
+        if len(parent_paths) >= 1:
+            variants['v2'] = parent_paths[0] + rp if rp.startswith('/') else '/' + parent_paths[0] + rp
+        else:
+            variants['v2'] = rp
+
+        return variants
+
+    def _normalize_and_fuse_url(self, raw_path: str, base_url: str = "") -> List[str]:
+        """
+        规范化并融合 URL - 生成多版本完整 URL
+
+        使用 base_path + resource_path 组合方式生成变体
+        """
+        full_urls = []
+        variants = self.generate_path_variants(raw_path)
+
+        resource_path = variants.get('resource_path', raw_path)
+        base_paths = variants.get('base_paths', [])
+
+        for bp in base_paths:
+            full_url = f"{bp}{resource_path}"
+            full_urls.append(full_url)
+
+        if resource_path != raw_path:
+            full_urls.append(resource_path)
+
+        full_urls.append(raw_path)
+
+        return list(set(full_urls))
+
+    def add_endpoint_with_variants(self, url: str, method: str = "GET",
+                                    source_type: SourceType = SourceType.UNKNOWN,
+                                    base_url: str = "",
+                                    source_url: str = "",
+                                    confidence: float = 0.5,
+                                    runtime_observed: bool = False,
+                                    **kwargs) -> Optional[FusedEndpoint]:
+        """
+        带变体生成的端点添加方法
+
+        自动生成路径变体并融合，解决 /inspect/login 前缀问题
+        """
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        path = parsed.path if parsed.path else kwargs.get('path', '/')
+
+        url_variants = self._normalize_and_fuse_url(path, base_url)
+
+        primary_endpoint = None
+        for variant_url in url_variants:
+            endpoint = self.add_endpoint(
+                url=variant_url,
+                method=method,
+                source_type=source_type,
+                source_url=source_url,
+                confidence=confidence,
+                runtime_observed=runtime_observed,
+                **kwargs
+            )
+            if primary_endpoint is None:
+                primary_endpoint = endpoint
+
+        return primary_endpoint
     
     def add_ai_result(self, url: str, method: str = "GET", evidence: str = ""):
         """

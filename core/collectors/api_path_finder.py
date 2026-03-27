@@ -488,14 +488,225 @@ class ApiPathFinder:
 class ApiPathCombiner:
     """
     API路径组合器 - 原项目 filter_data() 核心逻辑
-    
+
     智能组合:
     1. base_urls + path_with_api_paths
     2. base_urls + path_with_no_api_paths + self_api_path
+    3. 路径变体生成（解决 /inspect/login 前缀问题）
     """
-    
+
+    NON_RESOURCE_SEGMENTS = frozenset({
+        'inspect', 'proxy', 'gateway', 'api', 'service', 'web', 'www',
+        'v1', 'v2', 'v3', 'v4', 'v5', 'rest', 'graphql', 'rpc',
+        'internal', 'external', 'open', 'public', 'private',
+        'mobile', 'app', 'client', 'cdn', 'static', 'assets',
+    })
+
+    _UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', re.IGNORECASE)
+    _ALPHANUM_DASH_UNDERSCORE_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+    _COMMON_SUFFIXES_SET = frozenset([
+        'list', 'add', 'create', 'delete', 'detail', 'info', 'update', 'edit', 'remove',
+        'get', 'set', 'save', 'query', 'search', 'filter', 'sort', 'page',
+        'all', 'count', 'total', 'sum', 'export', 'import', 'upload', 'download',
+        'enable', 'disable', 'status', 'config', 'settings', 'login', 'logout',
+        'register', 'reset', 'init', 'refresh', 'sync', 'menu', 'nav', 'route',
+        'tree', 'select', 'option', 'combo', 'autocomplete', 'validate', 'verify',
+        'approve', 'reject', 'cancel', 'close', 'open', 'check',
+        'bind', 'unbind', 'link', 'unlink', 'join', 'leave', 'accept', 'refuse',
+    ])
+
+    _COMMON_RESOURCES_SET = frozenset([
+        'user', 'users', 'order', 'orders', 'product', 'products', 'goods',
+        'role', 'roles', 'menu', 'menus', 'category', 'categories', 'catalog',
+        'config', 'configuration', 'settings', 'system', 'admin', 'auth', 'login',
+        'department', 'dept', 'organization', 'org', 'employee',
+        'customer', 'customers', 'supplier', 'suppliers', 'account', 'accounts',
+        'profile', 'permission', 'permissions', 'resource', 'resources',
+        'tag', 'tags', 'comment', 'comments',
+        'attachment', 'attachments', 'file', 'files', 'image', 'images', 'video', 'videos',
+        'payment', 'transaction', 'invoice', 'refund', 'cart', 'shop', 'item', 'items',
+        'sku', 'stock', 'inventory', 'warehouse', 'address', 'area', 'region',
+    ])
+
     def __init__(self):
         self.self_api_paths = COMMON_API_PATHS
+
+    @staticmethod
+    def _is_likely_id(s: str) -> bool:
+        """判断是否为ID"""
+        return (
+            s.isdigit() or
+            bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+        )
+
+    @staticmethod
+    def _is_common_suffix(s: str) -> bool:
+        """判断是否为常见后缀"""
+        return s.lower() in ApiPathCombiner._COMMON_SUFFIXES_SET
+
+    @staticmethod
+    def _is_common_resource(s: str) -> bool:
+        """判断是否为常见资源"""
+        return s.lower() in ApiPathCombiner._COMMON_RESOURCES_SET
+
+    @staticmethod
+    def _is_likely_id(s: str) -> bool:
+        """判断是否为ID"""
+        return (
+            s.isdigit() or
+            bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
+            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+        )
+
+    @staticmethod
+    def _is_meaningful_segment(s: str) -> bool:
+        """
+        判断路径段是否有实际意义（知识库辅助判断）
+
+        综合考虑：
+        - 是否是常见后缀
+        - 是否是常见资源
+        - 是否是ID
+        - 是否是代理前缀
+        """
+        s_lower = s.lower()
+
+        if s_lower in ApiPathCombiner.NON_RESOURCE_SEGMENTS:
+            return False
+
+        if ApiPathCombiner._is_common_suffix(s_lower):
+            return True
+
+        if ApiPathCombiner._is_common_resource(s_lower):
+            return True
+
+        if ApiPathCombiner._is_likely_id(s):
+            return False
+
+        if len(s) < 2:
+            return False
+
+        return True
+
+    @staticmethod
+    def extract_base_path(api_path: str) -> Optional[str]:
+        """
+        提取代理/网关前缀（统计学+知识库+ID检测混合）
+
+        对于 /inspect/login/checkCode/getCheckCode：
+        - 'login' 是常见资源 → 有意义
+        - 'checkCode' 是驼峰资源 → 有意义
+        - 'getCheckCode' 是常见后缀 → 有意义
+        - 所以第一段没有实际意义的 segment 就是代理前缀: /inspect
+        """
+        if not api_path:
+            return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        for i, part in enumerate(parts):
+            if part.lower() in ApiPathCombiner.NON_RESOURCE_SEGMENTS:
+                if i == 0:
+                    return None
+                return '/' + '/'.join(parts[:i])
+
+        first_meaningful_idx = 0
+        for i in range(len(parts) - 1, -1, -1):
+            if ApiPathCombiner._is_meaningful_segment(parts[i]):
+                first_meaningful_idx = i
+                break
+
+        if first_meaningful_idx > 0:
+            return '/' + '/'.join(parts[:first_meaningful_idx])
+
+        return None
+
+        path = api_path.strip('/')
+        parts = path.split('/')
+
+        for i, part in enumerate(parts):
+            if part.lower() in ApiPathCombiner.NON_RESOURCE_SEGMENTS:
+                if i == 0:
+                    return None
+                return '/' + '/'.join(parts[:i])
+
+        for i in range(len(parts) - 1, 0, -1):
+            part = parts[i].lower()
+            if not ApiPathCombiner._is_common_suffix(part) and \
+               not ApiPathCombiner._is_common_resource(part) and \
+               not ApiPathCombiner._is_likely_id(part):
+                if i > 0:
+                    return '/' + '/'.join(parts[:i])
+                return None
+
+        return None
+
+    @staticmethod
+    def extract_resource_path(api_path: str) -> Optional[str]:
+        """
+        提取资源路径（去掉代理前缀后的路径）
+
+        对于 /inspect/login/checkCode/getCheckCode：
+        - 去掉 /inspect 前缀后: /login/checkCode/getCheckCode
+        """
+        if not api_path:
+            return None
+
+        base_path = ApiPathCombiner.extract_base_path(api_path)
+        if base_path:
+            if api_path.startswith(base_path):
+                resource = api_path[len(base_path):]
+                return resource if resource else api_path
+            return '/' + api_path[len(base_path):].lstrip('/')
+        return api_path
+
+    @staticmethod
+    def generate_path_variants(api_path: str) -> Dict[str, str]:
+        """
+        生成路径变体 - 基于知识库识别的 base_path + resource_path
+
+        输入: /inspect/login/checkCode/getCheckCode
+
+        返回:
+        {
+            'original': /inspect/login/checkCode/getCheckCode,
+            'parent_paths': ['/inspect/login/checkCode', '/inspect/login', '/inspect'],
+            'base_path': /inspect,
+            'resource_path': /login/checkCode/getCheckCode,
+            'v1': /login/checkCode/getCheckCode,
+            'v2': /inspect/login/checkCode/getCheckCode,
+        }
+        """
+        if not api_path:
+            return {}
+
+        parent_paths = ApiPathCombiner.generate_parent_paths(api_path, max_depth=3)
+        base_path = ApiPathCombiner.extract_base_path(api_path)
+        resource_path = ApiPathCombiner.extract_resource_path(api_path)
+
+        if resource_path is None:
+            resource_path = api_path
+
+        variants: Dict[str, Any] = {
+            'original': api_path,
+            'parent_paths': parent_paths,
+            'base_path': base_path,
+            'resource_path': resource_path,
+        }
+
+        variants['v1'] = resource_path
+
+        if base_path:
+            variants['v2'] = base_path + resource_path
+        else:
+            variants['v2'] = resource_path
+
+        return variants
     
     def filter_data(
         self,
@@ -580,10 +791,32 @@ class ApiPathCombiner:
         
         path_with_api_paths = list(set(path_with_api_paths))
         path_with_no_api_paths = list(set(path_with_no_api_paths))
-        
+
+        all_parent_paths = set()
+        all_resource_paths = set()
+        all_variants = []
+
+        for path in path_with_no_api_paths:
+            variants = self.generate_path_variants(path)
+            all_parent_paths.update(variants.get('parent_paths', []))
+            resource = variants.get('resource_path', path) or path
+            all_resource_paths.add(resource)
+
+            if variants.get('v1'):
+                all_variants.append(variants['v1'])
+            if variants.get('v2'):
+                all_variants.append(variants['v2'])
+
+        for path in path_with_api_paths:
+            variants = self.generate_path_variants(path)
+            all_parent_paths.update(variants.get('parent_paths', []))
+
+        parent_paths_list = list(all_parent_paths)
+        resource_paths_list = list(all_resource_paths)
+
         if not path_with_api_paths:
             path_with_api_paths.append('/api')
-        
+
         all_combined_urls = []
         for base in base_urls + tree_urls:
             for api_path in path_with_api_paths:
@@ -592,26 +825,42 @@ class ApiPathCombiner:
                 elif api_path:
                     combined = f"{base}{api_path}"
                     all_combined_urls.append(combined)
-        
+
         api_urls = []
+        variant_urls = []
+
         for combined_url in all_combined_urls:
             for no_api_path in path_with_no_api_paths:
                 full_url = f"{combined_url}{no_api_path}"
                 if full_url not in api_urls:
                     api_urls.append(full_url)
-            
+
+            for resource_path in resource_paths_list:
+                for parent_path in parent_paths_list:
+                    variant_url = f"{parent_path}{resource_path}"
+                    if variant_url not in variant_urls:
+                        variant_urls.append(variant_url)
+
+                variant_url = resource_path
+                if variant_url not in variant_urls:
+                    variant_urls.append(variant_url)
+
             for self_api in self.self_api_paths:
                 full_url = f"{combined_url}/{self_api}"
                 if full_url not in api_urls:
                     api_urls.append(full_url)
-        
+
         return {
             'tree_urls': tree_urls,
             'base_urls': base_urls,
+            'parent_paths': parent_paths_list,
+            'resource_paths': resource_paths_list,
             'path_with_api_paths': path_with_api_paths,
             'path_with_no_api_paths': path_with_no_api_paths,
+            'path_variants': all_variants,
             'all_combined_urls': list(set(all_combined_urls)),
-            'api_urls': list(set(api_urls))
+            'api_urls': list(set(api_urls)),
+            'variant_urls': list(set(variant_urls))
         }
     
     def generate_probe_urls(
