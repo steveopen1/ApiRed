@@ -667,7 +667,7 @@ class ScanEngine:
         browser_api_endpoints = []
         
         inline_parser = InlineJSParser()
-        response_discovery = ResponseBasedAPIDiscovery()
+        response_discovery = ResponseBasedAPIDiscovery(target_domain=self.config.target)
         api_path_finder = ApiPathFinder()
         api_combiner = ApiPathCombiner()
         

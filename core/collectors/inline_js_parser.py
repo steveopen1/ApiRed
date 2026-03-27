@@ -7,6 +7,7 @@ Inline JavaScript Parser
 import re
 import json
 import logging
+import socket
 from typing import Dict, List, Set, Any, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 from functools import lru_cache
@@ -17,6 +18,13 @@ try:
 except ImportError:
     HAS_REGEX = False
     regex = re
+
+try:
+    import tldextract
+    HAS_TLDEXTRACT = True
+except ImportError:
+    HAS_TLDEXTRACT = False
+    tldextract = None
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +510,7 @@ class ResponseBasedAPIDiscovery:
     2. 从JSON响应中提取关联的API路径
     3. 从JavaScript响应中提取API调用
     4. 从响应中发现敏感资源链接
+    5. 从响应中发现IP:port和域名信息
     """
     
     HTML_LINK_PATTERN = re.compile(r'''(?:href|src|action)=['"](/[a-zA-Z0-9_/\-.?=&]+)['"']''')
@@ -510,14 +519,21 @@ class ResponseBasedAPIDiscovery:
     
     JS_VAR_PATTERN = re.compile(r'''(?:window|global)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*['"`]([^'"`]+)['"`]''')
     
+    IP_PORT_PATTERN = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})\b')
+    
+    FULL_URL_PATTERN = re.compile(r'https?://[^\s\'"<>]+')
+    
     SENSITIVE_FILE_PATTERNS = PathValidationConstants.SENSITIVE_FILE_PATTERNS
     STATIC_FILE_EXTENSIONS = PathValidationConstants.STATIC_FILE_EXTENSIONS
     INVALID_KEYWORDS = PathValidationConstants.INVALID_KEYWORDS
     CONTENT_TYPE_INDICATORS = PathValidationConstants.CONTENT_TYPE_INDICATORS
     
-    def __init__(self):
+    def __init__(self, target_domain: str = ""):
         self.discovered_paths: Set[str] = set()
         self.discovered_sensitive_resources: Set[str] = set()
+        self.discovered_ips: Set[str] = set()
+        self.discovered_domains: Set[str] = set()
+        self.target_domain = target_domain
     
     def discover_from_response(self, url: str, content: str, content_type: str) -> Dict[str, Set[str]]:
         """
@@ -533,7 +549,9 @@ class ResponseBasedAPIDiscovery:
         """
         result = {
             'api_paths': set(),
-            'sensitive_resources': set()
+            'sensitive_resources': set(),
+            'ips': set(),
+            'domains': set()
         }
         
         if 'html' in content_type.lower():
@@ -549,9 +567,128 @@ class ResponseBasedAPIDiscovery:
             result['api_paths'].update(paths)
             result['sensitive_resources'].update(sensitive)
         
+        ips, domains = self._extract_ips_and_domains(content, url)
+        result['ips'].update(ips)
+        result['domains'].update(domains)
+        
         self.discovered_paths.update(result['api_paths'])
         self.discovered_sensitive_resources.update(result['sensitive_resources'])
+        self.discovered_ips.update(result['ips'])
+        self.discovered_domains.update(result['domains'])
         return result
+    
+    def _extract_ips_and_domains(self, content: str, source_url: str) -> Tuple[Set[str], Set[str]]:
+        """
+        从内容中提取IP:port和域名信息
+        
+        Args:
+            content: 响应内容
+            source_url: 来源URL
+            
+        Returns:
+            (ips, domains) 元组
+        """
+        ips = set()
+        domains = set()
+        
+        if not content:
+            return ips, domains
+        
+        ip_ports = self.IP_PORT_PATTERN.findall(content)
+        for ip, port in ip_ports:
+            full_ip_port = f"{ip}:{port}"
+            if self._is_likely_valid_ip_port(ip, port):
+                ips.add(full_ip_port)
+        
+        url_matches = self.FULL_URL_PATTERN.findall(content)
+        parsed_source = urlparse(source_url)
+        source_domain = parsed_source.netloc
+        
+        for url in url_matches:
+            try:
+                parsed = urlparse(url)
+                if parsed.netloc:
+                    domain = parsed.netloc
+                    
+                    if self.target_domain and self._is_related_domain(domain, self.target_domain):
+                        domains.add(domain)
+                    elif not self.target_domain and self._is_valid_domain(domain):
+                        domains.add(domain)
+            except Exception:
+                continue
+        
+        return ips, domains
+    
+    def _is_likely_valid_ip_port(self, ip: str, port: str) -> bool:
+        """验证IP:port是否可能有效"""
+        try:
+            parts = ip.split('.')
+            if len(parts) != 4:
+                return False
+            
+            for part in parts:
+                num = int(part)
+                if num < 0 or num > 255:
+                    return False
+            
+            port_num = int(port)
+            if port_num < 1 or port_num > 65535:
+                return False
+            
+            private_ips = ['10.', '172.16.', '172.17.', '172.18.', '172.19.',
+                          '172.20.', '172.21.', '172.22.', '172.23.', '172.24.',
+                          '172.25.', '172.26.', '172.27.', '172.28.', '172.29.',
+                          '172.30.', '172.31.', '192.168.', '127.', '0.']
+            for prefix in private_ips:
+                if ip.startswith(prefix):
+                    return True
+            
+            return True
+        except (ValueError, AttributeError):
+            return False
+    
+    def _is_related_domain(self, domain: str, target: str) -> bool:
+        """判断域名是否与目标相关"""
+        if not domain or not target:
+            return False
+        
+        domain_lower = domain.lower()
+        target_lower = target.lower()
+        
+        if target_lower in domain_lower or domain_lower in target_lower:
+            return True
+        
+        if HAS_TLDEXTRACT:
+            try:
+                extracted_domain = tldextract.extract(domain)
+                extracted_target = tldextract.extract(target)
+                if extracted_domain.domain == extracted_target.domain:
+                    return True
+            except Exception:
+                pass
+        
+        return False
+    
+    def _is_valid_domain(self, domain: str) -> bool:
+        """验证域名是否有效"""
+        if not domain:
+            return False
+        
+        domain_lower = domain.lower()
+        
+        invalid_prefixes = ['data:', 'javascript:', 'mailto:', 'tel:', 'ftp:']
+        for prefix in invalid_prefixes:
+            if domain_lower.startswith(prefix):
+                return False
+        
+        if domain_lower.startswith('127.') or domain_lower.startswith('0.'):
+            return False
+        
+        localhost_variants = ['localhost', 'localhost.localdomain']
+        if domain_lower in localhost_variants:
+            return False
+        
+        return True
     
     def _discover_from_html(self, content: str) -> Tuple[Set[str], Set[str]]:
         """从HTML内容中发现API路径和敏感资源"""
@@ -703,8 +840,65 @@ class ResponseBasedAPIDiscovery:
         return False
     
     def get_all_discovered(self) -> Dict[str, List[str]]:
-        """获取所有发现的新路径和敏感资源"""
+        """获取所有发现的新路径、敏感资源、IP和域名"""
         return {
             'api_paths': list(self.discovered_paths),
-            'sensitive_resources': list(self.discovered_sensitive_resources)
+            'sensitive_resources': list(self.discovered_sensitive_resources),
+            'ips': list(self.discovered_ips),
+            'domains': list(self.discovered_domains)
         }
+    
+    def get_ips(self) -> List[str]:
+        """获取所有发现的IP:port"""
+        return list(self.discovered_ips)
+    
+    def get_domains(self) -> List[str]:
+        """获取所有发现的域名"""
+        return list(self.discovered_domains)
+    
+    async def check_ips_alive(self, ips: List[str] = None) -> Dict[str, bool]:
+        """
+        检查IP:port是否存活
+        
+        Args:
+            ips: 要检查的IP:port列表，如果为None则检查所有发现的IP
+            
+        Returns:
+            {ip: is_alive} 字典
+        """
+        if ips is None:
+            ips = list(self.discovered_ips)
+        
+        results = {}
+        
+        for ip_port in ips:
+            results[ip_port] = await self._check_single_ip(ip_port)
+        
+        return results
+    
+    async def _check_single_ip(self, ip_port: str) -> bool:
+        """检查单个IP:port是否存活"""
+        try:
+            if ':' not in ip_port:
+                return False
+            
+            ip, port_str = ip_port.rsplit(':', 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                return False
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex((ip, port))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+    
+    def clear(self):
+        """清空所有发现的数据"""
+        self.discovered_paths.clear()
+        self.discovered_sensitive_resources.clear()
+        self.discovered_ips.clear()
+        self.discovered_domains.clear()
