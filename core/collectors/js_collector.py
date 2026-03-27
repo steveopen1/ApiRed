@@ -121,91 +121,300 @@ class JSFingerprintCache:
         return self._memory_cache.stats
 
 
-class WebpackAnalyzer:
+class WebpackChunkAnalyzer:
     """
-    Webpack打包分析器
-    参考 0x727/ChkApi 的 webpack_js_find 功能
+    Webpack Chunk 递归提取器 - 完整版
+
+    支持：
+    1. Webpack 4/5 chunk 映射解析
+    2. Module Federation 远程模块发现
+    3. dynamic-import/chunk Promise 加载
+    4. __webpack_require__ 异步模块
+    5. 递归解析 chunk 内容
     """
 
-    CHUNK_PATTERN = re.compile(r'''
-        ["']?([\w]{1,30})["']?\s*:\s*
-        ["']?([\w.-]{10,50})["']?
-    ''', re.VERBOSE)
+    WEBPACK_REQUIRE_PATTERNS = [
+        r'__webpack_require__\.e\(\s*["\']([^"\']+)["\']\s*\)',
+        r'__webpack_require__\.oe\(\s*["\']([^"\']+)["\']\s*\)',
+        r'__webpack_require__\.r\(["\']([^"\']+)["\']\)',
+    ]
 
-    MODULE_PATTERN = re.compile(r'''
-        \.\/([\w/-]+)\.js
-    ''', re.VERBOSE)
+    CHUNK_MAPPING_PATTERNS = [
+        r'\.p\s*\+\s*["\']([^"\']+)["\']\s*\+\s*["\']',
+        r'["\']([^"\']+)["\']\s*\+\s*["\']([^"\']+)["\']\s*\+\s*["\']',
+        r'root\s*\+\s*["\']([^"\']+)["\']',
+    ]
+
+    FEDERATION_PATTERNS = [
+        r'Federation\.import\(\s*["\']([^"\']+)["\']\s*\)',
+        r'federation\.import\(\s*["\']([^"\']+)["\']\s*\)',
+        r'remote\.import\(\s*["\']([^"\']+)["\']\s*\)',
+        r'__federation_import\(\s*["\']([^"\']+)["\']\s*\)',
+    ]
+
+    ASYNC_IMPORT_PATTERNS = [
+        r'import\(\s*["\']([^"\']+\.js)["\']\s*\)',
+        r'import\s*\(\s*["\']([^"\']+)["\']\s*\)',
+        r'require\.e\(\s*["\']([^"\']+)["\']\s*\)',
+        r'require\(["\']([^"\']+\.js)["\']\)',
+        r'resolve\(["\']([^"\']+)["\']\)',
+    ]
+
+    CHUNK_NAME_PATTERNS = [
+        r'\.chunkId\s*=\s*["\']([^"\']+)["\']',
+        r'chunkId\s*:\s*["\']([^"\']+)["\']',
+        r'"name"\s*:\s*["\']([^"\']+)["\']',
+        r'"id"\s*:\s*["\']([^"\']+)["\']',
+    ]
 
     @classmethod
-    def extract_chunks(cls, js_content: str) -> Dict[str, str]:
-        """提取chunk映射"""
-        chunks = {}
-        matches = cls.CHUNK_PATTERN.findall(js_content)
-        for name, hash_val in matches:
-            if len(hash_val) >= 8:
-                chunks[name] = hash_val
-        return chunks
-
-    @classmethod
-    def extract_modules(cls, js_content: str) -> List[str]:
-        """提取模块引用"""
-        return cls.MODULE_PATTERN.findall(js_content)
-
-    @classmethod
-    def extract_webpack_chunk_paths(cls, js_content: str) -> List[str]:
+    def extract_chunk_references(cls, js_content: str) -> List[str]:
         """
-        提取 Webpack chunk 路径
-        整合 0x727/ChkApi 的完整 webpack 解析逻辑
+        从 JS 内容中提取所有 chunk 引用
+
+        Returns:
+            chunk 路径列表
         """
-        paths = set()
+        refs = set()
 
-        m = re.search(
-            r'return\s+[a-zA-Z]\.p\+"([^"]+)".*\{(.*)\}\[[a-zA-Z]\]\+"\.js"\}',
-            js_content
-        )
-        if m:
-            base_path = m.group(1)
-            json_string = m.group(2)
-            pairs = json_string.split(',')
-            formatted_pairs = []
-            for pair in pairs:
-                try:
-                    key, value = pair.split(':', 1)
-                except Exception as e:
-                    logger.warning(f"JSON键值对解析异常: {e}")
-                    continue
-                if not key.strip().startswith('"'):
-                    continue
-                if not value.strip().startswith('"'):
-                    continue
-                formatted_pairs.append(key + ':' + value)
-            try:
-                chunk_mapping = json.loads('{' + ','.join(formatted_pairs) + '}')
-                for key, value in chunk_mapping.items():
-                    paths.add('/' + base_path + key + '.' + value + '.js')
-            except Exception as e:
-                logger.warning(f"JSON解析异常: {e}")
-                pass
+        for pattern in cls.ASYNC_IMPORT_PATTERNS:
+            for m in re.finditer(pattern, js_content):
+                path = m.group(1) if m.lastindex else m.group(0)
+                if path and ('.js' in path or 'chunk' in path.lower()):
+                    refs.add(path)
 
-        for m in re.finditer(
-            r'__webpack_require__\.u\s*=\s*function\(\w+\)\s*\{\s*return\s*"([^"]+)"\s*\+\s*\w+\s*\+\s*"([^"]+)"',
-            js_content
-        ):
-            dirprefix, suffix = m.groups()
-            for c in re.findall(r'__webpack_require__\.e\(\s*[\'"]([^\'"]+)[\'"]\s*\)', js_content):
-                paths.add('/' + dirprefix + c + suffix)
+        for pattern in cls.FEDERATION_PATTERNS:
+            for m in re.finditer(pattern, js_content):
+                path = m.group(1) if m.lastindex else m.group(0)
+                if path:
+                    refs.add(path)
 
-        for m in re.finditer(r'webpackChunkName\s*:\s*[\'"]([^\'"]+)[\'"]', js_content):
-            name = m.group(1)
-            if name and not name.endswith('.js'):
-                paths.add('./' + name + '.js')
+        for pattern in cls.CHUNK_NAME_PATTERNS:
+            for m in re.finditer(pattern, js_content):
+                chunk_id = m.group(1) if m.lastindex else m.group(0)
+                if chunk_id:
+                    refs.add(f"./{chunk_id}.js")
 
-        for m in re.finditer(r'import\(\s*[\'"]([^\'"]+)[\'"]\s*\)', js_content):
-            p = m.group(1).strip()
-            if p:
-                paths.add(p)
+        return list(refs)
 
-        return list(paths)
+    @classmethod
+    def extract_webpack_manifest(cls, js_content: str) -> Dict[str, Any]:
+        """
+        提取 Webpack manifest 信息
+
+        Returns:
+            {
+                'module_ids': [...],
+                'chunk_ids': [...],
+                'public_path': 'static/js/',
+                'remotes': {...},
+                'exposes': {...},
+            }
+        """
+        manifest = {
+            'module_ids': [],
+            'chunk_ids': [],
+            'public_path': '',
+            'remotes': {},
+            'exposes': {},
+        }
+
+        public_path_match = re.search(r'publicPath\s*[=:]\s*["\']([^"\']+)["\']', js_content)
+        if public_path_match:
+            manifest['public_path'] = public_path_match.group(1)
+
+        for pattern in [
+            r'moduleIds\s*:\s*\[([^\]]+)',
+            r'chunkIds\s*:\s*\[([^\]]+)',
+        ]:
+            match = re.search(pattern, js_content)
+            if match:
+                ids_str = match.group(1)
+                ids = re.findall(r'["\']([^"\']+)["\']', ids_str)
+                if 'moduleIds' in pattern:
+                    manifest['module_ids'].extend(ids)
+                elif 'chunkIds' in pattern:
+                    manifest['chunk_ids'].extend(ids)
+
+        federation_match = re.search(r'FederationPlugin\s*\(\s*\{([^}]+)\})', js_content, re.DOTALL)
+        if federation_match:
+            fed_config = federation_match.group(2)
+            for rem in re.finditer(r'(?:name|remotes|exposes)\s*:\s*\{([^}]+)\}', fed_config, re.DOTALL):
+                if 'name' in fed_config[:fed_config.find(rem.group(0))]:
+                    manifest['remotes'].update(re.findall(r'["\']([^"\']+)["\']', rem.group(1)))
+                elif 'exposes' in fed_config[:fed_config.find(rem.group(0))]:
+                    manifest['exposes'].update(re.findall(r'["\']([^"\']+)["\']', rem.group(1)))
+
+        return manifest
+
+    @classmethod
+    def build_chunk_url(cls, chunk_ref: str, public_path: str = '') -> str:
+        """
+        构建完整的 chunk URL
+
+        Args:
+            chunk_ref: chunk 引用
+            public_path: public path 前缀
+
+        Returns:
+            完整的 chunk URL
+        """
+        if chunk_ref.startswith('http'):
+            return chunk_ref
+
+        if chunk_ref.startswith('//'):
+            return 'https:' + chunk_ref
+
+        if chunk_ref.startswith('/'):
+            return public_path.rstrip('/') + '/' + chunk_ref.lstrip('/')
+
+        return public_path.rstrip('/') + '/' + chunk_ref
+
+    @classmethod
+    def extract_all_chunks_from_manifest(cls, js_content: str) -> List[str]:
+        """
+        从 Webpack manifest 提取所有 chunk 路径
+
+        Returns:
+            chunk 路径列表
+        """
+        chunks = set()
+        manifest = cls.extract_webpack_manifest(js_content)
+
+        public_path = manifest.get('public_path', '')
+
+        for chunk_id in manifest.get('chunk_ids', []):
+            chunk_url = cls.build_chunk_url(f"./{chunk_id}.js", public_path)
+            chunks.add(chunk_url)
+
+        for chunk_id in manifest.get('module_ids', []):
+            if isinstance(chunk_id, str) and ('.' in chunk_id or '/' in chunk_id):
+                chunk_url = cls.build_chunk_url(chunk_id, public_path)
+                chunks.add(chunk_url)
+
+        for remote in manifest.get('remotes', {}).keys():
+            if remote.startswith('./') or '/' in remote:
+                chunks.add(remote)
+
+        for exposed in manifest.get('exposes', {}).keys():
+            if exposed.startswith('./') or '/' in exposed:
+                chunks.add(exposed)
+
+        chunks.update(cls.extract_chunk_references(js_content))
+
+        return list(chunks)
+
+
+class RecursiveJSExtractor:
+    """
+    递归 JS 提取器
+
+    从初始 JS 列表递归提取所有依赖的 JS 模块
+    支持 Webpack/Vite/Parcel 等打包工具
+    """
+
+    def __init__(self, http_client=None, max_depth: int = 5, max_chunks_per_level: int = 100):
+        self.http_client = http_client
+        self.max_depth = max_depth
+        self.max_chunks_per_level = max_chunks_per_level
+        self.visited_urls: Set[str] = set()
+        self.pending_urls: List[str] = []
+        self.all_js_contents: Dict[str, str] = {}
+        self.all_chunk_refs: List[str] = []
+
+    async def extract_from_urls(self, initial_urls: List[str]) -> Dict[str, str]:
+        """
+        从初始 URL 列表递归提取所有 JS
+
+        Args:
+            initial_urls: 初始 JS URL 列表
+
+        Returns:
+            {js_url: js_content}
+        """
+        self.pending_urls = list(set(initial_urls))[:self.max_chunks_per_level]
+
+        for depth in range(self.max_depth):
+            if not self.pending_urls:
+                break
+
+            logger.info(f"Recursive JS extraction depth {depth + 1}, pending: {len(self.pending_urls)}")
+
+            batch = self.pending_urls[:self.max_chunks_per_level]
+            self.pending_urls = self.pending_urls[self.max_chunks_per_level:]
+
+            contents = await self._fetch_batch(batch)
+
+            new_chunks = []
+            for url, content in contents.items():
+                if url not in self.visited_urls:
+                    self.visited_urls.add(url)
+                    self.all_js_contents[url] = content
+
+                    if content:
+                        chunk_refs = WebpackChunkAnalyzer.extract_all_chunks_from_manifest(content)
+                        for chunk in chunk_refs:
+                            normalized = self._normalize_chunk_url(chunk, url)
+                            if normalized and normalized not in self.visited_urls:
+                                new_chunks.append(normalized)
+
+            self.pending_urls.extend(new_chunks)
+            self.pending_urls = list(set(self.pending_urls))
+
+        return self.all_js_contents
+
+    async def _fetch_batch(self, urls: List[str]) -> Dict[str, str]:
+        """批量获取 JS 内容"""
+        if not self.http_client:
+            return {}
+
+        contents = {}
+        tasks = []
+
+        for url in urls:
+            if url and url not in self.visited_urls:
+                tasks.append(self._fetch_js(url))
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for url, result in zip(urls, results):
+                if isinstance(result, str):
+                    contents[url] = result
+
+        return contents
+
+    async def _fetch_js(self, url: str) -> str:
+        """获取单个 JS 文件内容"""
+        try:
+            if self.http_client:
+                resp = await self.http_client.get(url, timeout=10)
+                if resp and resp.status_code == 200:
+                    return resp.text
+        except Exception as e:
+            logger.debug(f"Failed to fetch {url}: {e}")
+        return ""
+
+    def _normalize_chunk_url(self, chunk: str, referer: str) -> Optional[str]:
+        """规范化 chunk URL"""
+        if not chunk:
+            return None
+
+        chunk = chunk.strip()
+
+        if chunk.startswith('http'):
+            return chunk
+
+        if chunk.startswith('//'):
+            return 'https:' + chunk
+
+        if chunk.startswith('/'):
+            from urllib.parse import urlparse
+            ref_parsed = urlparse(referer)
+            base = f"{ref_parsed.scheme}://{ref_parsed.netloc}"
+            return base + chunk
+
+        from urllib.parse import urljoin
+        return urljoin(referer, chunk)
 
     @classmethod
     def extract_promise_chunks(cls, js_content: str) -> List[str]:
