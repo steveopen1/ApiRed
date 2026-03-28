@@ -31,6 +31,24 @@ class APIEndpoint:
     response_sample: str = ""
     content_hash: str = ""
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'path': self.path,
+            'method': self.method,
+            'source': self.source,
+            'full_url': self.full_url,
+            'status': self.status,
+            'score': self.score,
+            'tags': self.tags,
+            'parameters': self.parameters,
+            'headers': self.headers,
+            'cookies': self.cookies,
+            'discovered_at': self.discovered_at,
+            'last_tested': self.last_tested,
+            'response_sample': self.response_sample,
+            'content_hash': self.content_hash,
+        }
+
 
 @dataclass
 class Finding:
@@ -44,6 +62,19 @@ class Finding:
     payload: str = ""
     remediation: str = ""
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'finding_type': self.finding_type,
+            'severity': self.severity,
+            'title': self.title,
+            'description': self.description,
+            'url': self.url,
+            'evidence': self.evidence,
+            'payload': self.payload,
+            'remediation': self.remediation,
+            'timestamp': self.timestamp,
+        }
 
 
 class KnowledgeBase:
