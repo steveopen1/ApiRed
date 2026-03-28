@@ -57,6 +57,10 @@ class WebSocketClient {
             return;
         }
 
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.close();
+        }
+        
         this.isManualDisconnect = false;
         try {
             this.ws = new WebSocket(this.url);

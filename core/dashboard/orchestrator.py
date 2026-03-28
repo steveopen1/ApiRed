@@ -432,6 +432,16 @@ class ScanOrchestrator:
             logger.warning(f"Task {task_id} is not stopped, cannot resume")
             return False
 
+        if task_id in self._tasks:
+            existing_task = self._tasks[task_id]
+            if not existing_task.done():
+                existing_task.cancel()
+                try:
+                    await existing_task
+                except asyncio.CancelledError:
+                    pass
+                logger.info(f"Cancelled existing scan task: {task_id}")
+
         task.config_dict['resume'] = True
         task.status = TaskStatus.PENDING
 

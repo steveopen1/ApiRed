@@ -88,7 +88,9 @@ class DashboardServer:
             origin = request.headers.get('Origin', '')
             if origin == '*' or origin in self.config.cors_origins:
                 response = await handler(request)
-                if origin != '*':
+                if origin == '*':
+                    response.headers['Access-Control-Allow-Origin'] = '*'
+                else:
                     response.headers['Access-Control-Allow-Origin'] = origin
                     response.headers['Access-Control-Allow-Credentials'] = 'true'
                 response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'

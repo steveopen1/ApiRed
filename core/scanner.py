@@ -816,6 +816,11 @@ class ChkApiScanner:
         self._running = False
         
         if self.http_client:
+            if hasattr(self.http_client, 'session') and self.http_client.session:
+                try:
+                    await self.http_client.session.close()
+                except Exception:
+                    pass
             self.http_client.session = None
         
         if self.db_storage:
