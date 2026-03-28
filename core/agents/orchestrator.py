@@ -12,17 +12,9 @@ from enum import Enum
 import logging
 
 from ..knowledge_base import KnowledgeBase, APIEndpoint, Finding
+from ..dashboard.models import TaskStatus
 
 logger = logging.getLogger(__name__)
-
-
-class TaskStatus(Enum):
-    """任务状态"""
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
 
 
 AI_ENV_VARS = {

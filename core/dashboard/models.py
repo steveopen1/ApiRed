@@ -18,6 +18,7 @@ class TaskStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     STOPPED = "stopped"
+    SKIPPED = "skipped"
 
 
 class ScanMode(Enum):
