@@ -185,13 +185,14 @@ class WebSocketClient {
     _handleError(data) {
         const taskId = data.task_id;
         const error = data.data?.error || data.error || 'Unknown error';
-        window.dashboardApp.showError(error);
+        window.dashboardApp.showToast(`Error: ${error}`, 'error');
         this._emit('error', { taskId, error });
     }
 
     _scheduleReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this._emit('reconnectFailed', { attempts: this.reconnectAttempts });
             return;
         }
 
