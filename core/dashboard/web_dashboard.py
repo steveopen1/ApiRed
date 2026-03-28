@@ -42,6 +42,7 @@ class ConfigManager:
     
     _instance = None
     _lock = threading.Lock()
+    _init_lock = threading.Lock()
     
     def __new__(cls):
         if cls._instance is None:
@@ -54,11 +55,14 @@ class ConfigManager:
     def __init__(self):
         if self._initialized:
             return
-        self._initialized = True
-        from ..utils.config import Config
-        self._config = Config()
-        self._ai_config: Dict[str, Any] = {}
-        self._load_ai_config()
+        with self._init_lock:
+            if self._initialized:
+                return
+            self._initialized = True
+            from ..utils.config import Config
+            self._config = Config()
+            self._ai_config: Dict[str, Any] = {}
+            self._load_ai_config()
     
     def _load_ai_config(self):
         """加载 AI 配置"""
@@ -313,7 +317,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send_json({"task_id": task.task_id, "status": "started"})
     
     def _validate_target(self, target: str) -> bool:
-        """验证 target URL 格式并防止路径遍历"""
+        """验证 target URL 格式并防止路径遍历和 SSRF 攻击"""
         if not target or len(target) > 2048:
             return False
         if '..' in target or target.startswith('/'):
@@ -326,6 +330,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not parsed.netloc:
                 return False
             if parsed.scheme in ('javascript', 'data', 'vbscript'):
+                return False
+            if not self._is_safe_host(parsed.netloc):
+                return False
+            return True
+        except Exception:
+            return False
+    
+    def _is_safe_host(self, netloc: str) -> bool:
+        """检查主机是否安全（防止 SSRF）"""
+        import ipaddress
+        try:
+            host = netloc.split(':')[0]
+            if host in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
+                return False
+            try:
+                addr = ipaddress.ip_address(host)
+                if addr.is_private or addr.is_loopback or addr.is_reserved:
+                    return False
+                if addr.is_unspecified:
+                    return False
+            except ValueError:
+                pass
+            blocked_domains = ('169.254.169.254', 'metadata.google.internal')
+            if host in blocked_domains:
                 return False
             return True
         except Exception:

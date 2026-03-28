@@ -297,13 +297,14 @@ class ServerConfig:
     port: int = 8080
     static_path: str = "core/dashboard/static"
     enable_cors: bool = True
-    cors_origins: List[str] = field(default_factory=lambda: ["*"])
+    cors_origins: List[str] = field(default_factory=list)
     heartbeat_interval: int = 30
     max_log_entries: int = 1000
     task_history_limit: int = 100
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ServerConfig':

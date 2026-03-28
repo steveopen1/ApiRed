@@ -40,7 +40,8 @@ class DashboardServer:
         self.orchestrator = ScanOrchestrator(self.task_manager)
 
         self.app = web.Application(
-            middlewares=[self._cors_middleware]
+            middlewares=[self._cors_middleware, self._body_limit_middleware],
+            client_max_size=1024*1024
         )
 
         self._setup_routes()
@@ -94,7 +95,14 @@ class DashboardServer:
                 response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
                 return response
         return await handler(request)
-
+    
+    @web.middleware
+    async def _body_limit_middleware(self, request: web.Request, handler):
+        """请求体大小限制中间件"""
+        if request.content_length and request.content_length > 10 * 1024 * 1024:
+            return web.json_response({'error': 'Request body too large'}, status=413)
+        return await handler(request)
+    
     async def start(self):
         """启动服务器"""
         if not self.app:

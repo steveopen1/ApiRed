@@ -156,8 +156,14 @@ class TaskManager:
 
     def _get_connection(self) -> sqlite3.Connection:
         """获取数据库连接"""
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(
+            self.db_path,
+            check_same_thread=False,
+            timeout=30.0
+        )
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
     async def create_task(self, target: str, config: Optional[Dict[str, Any]] = None,
@@ -251,7 +257,7 @@ class TaskManager:
         if data.get('engine_config'):
             try:
                 data['engine_config'] = EngineConfig.from_dict(json.loads(data['engine_config']))
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, KeyError):
                 data['engine_config'] = None
         if data.get('config_dict'):
             try:
@@ -259,10 +265,19 @@ class TaskManager:
             except json.JSONDecodeError:
                 data['config_dict'] = {}
         if data.get('status'):
-            data['status'] = TaskStatus(data['status'])
+            try:
+                data['status'] = TaskStatus(data['status'])
+            except ValueError:
+                data['status'] = TaskStatus.PENDING
         if data.get('scan_mode'):
-            data['scan_mode'] = ScanMode(data['scan_mode'])
-        return ScanTask(**{k: v for k, v in data.items() if hasattr(ScanTask, k)})
+            try:
+                data['scan_mode'] = ScanMode(data['scan_mode'])
+            except ValueError:
+                data['scan_mode'] = ScanMode.RULE
+        
+        valid_fields = {f.name for f in ScanTask.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return ScanTask(**filtered_data)
 
     async def update_task(self, task_id: str, **updates):
         """更新任务状态"""
