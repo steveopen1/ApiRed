@@ -1,6 +1,11 @@
 """
-Web Dashboard Module
-专业 Web 控制面板 - 支持 Agent 模式和纯规则模式
+DEPRECATED: Web Dashboard Module
+专业 Web 控制面板 - 已废弃，请使用 server.py
+
+注意：此文件已被 server.py 替代，不再维护。
+main.py 已更新为使用 server.py 中的 run_server() 函数。
+
+保留此文件仅作为参考，如需新功能请在 server.py 中实现。
 """
 
 import json

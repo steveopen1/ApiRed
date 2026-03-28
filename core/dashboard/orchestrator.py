@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any, List, Callable, Awaitable
 
 from .models import (
-    ScanTask, TaskStatus, ScanMode, EngineConfig, ScanProgress,
+    ScanTask, TaskStatus, ScanMode, ScanProgress,
     Finding, FindingType, StageStats, LogLevel
 )
 from .task_manager import TaskManager
@@ -32,7 +32,7 @@ class ScanOrchestrator:
         self._progress_counters: Dict[str, int] = {}
         self._last_progress_time: Dict[str, float] = {}
 
-    async def start_scan(self, task: ScanTask, config: Optional[EngineConfig] = None) -> str:
+    async def start_scan(self, task: ScanTask, config: 'Any' = None) -> str:
         """启动扫描"""
         task_id = task.task_id
 
@@ -45,7 +45,7 @@ class ScanOrchestrator:
         self._last_progress_time[task_id] = time.time()
 
         engine_config = config or self._build_engine_config(task)
-        task.engine_config = engine_config
+        task.engine_config = engine_config  # type: ignore
 
         await self.task_manager.update_task(
             task_id,
@@ -61,11 +61,13 @@ class ScanOrchestrator:
         logger.info(f"Scan started: {task_id} for target {task.target}")
         return task_id
 
-    def _build_engine_config(self, task: ScanTask) -> EngineConfig:
-        """从任务配置构建 EngineConfig"""
+    def _build_engine_config(self, task: ScanTask):
+        """从任务配置构建 core.engine.EngineConfig"""
+        from core.engine import EngineConfig as CoreEngineConfig
+        
         config_dict = task.config_dict or {}
 
-        return EngineConfig(
+        return CoreEngineConfig(
             target=task.target,
             collectors=config_dict.get('collectors', ['js', 'api']),
             analyzers=config_dict.get('analyzers', ['scorer', 'sensitive']),
@@ -91,7 +93,7 @@ class ScanOrchestrator:
             enable_idor_test=config_dict.get('enable_idor_test', True),
         )
 
-    async def _run_scan(self, task_id: str, config: EngineConfig):
+    async def _run_scan(self, task_id: str, config: Any):
         """运行扫描"""
         engine = None
         try:
