@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any, List, Callable, Awaitable
 
 from .models import (
-    ScanTask, TaskStatus, EngineConfig, ScanProgress,
+    ScanTask, TaskStatus, ScanMode, EngineConfig, ScanProgress,
     Finding, FindingType, StageStats, LogLevel
 )
 from .task_manager import TaskManager
@@ -70,7 +70,7 @@ class ScanOrchestrator:
             collectors=config_dict.get('collectors', ['js', 'api']),
             analyzers=config_dict.get('analyzers', ['scorer', 'sensitive']),
             testers=config_dict.get('testers', ['fuzz', 'vuln']),
-            ai_enabled=task.scan_mode.value == 'agent' if isinstance(task.scan_mode, type) else task.scan_mode == 'agent',
+            ai_enabled=task.scan_mode == ScanMode.AGENT,
             checkpoint_enabled=config_dict.get('checkpoint_enabled', True),
             cookies=config_dict.get('cookies', ''),
             concurrency=config_dict.get('concurrency', 50),
@@ -81,7 +81,7 @@ class ScanOrchestrator:
             chrome=config_dict.get('chrome', True),
             verify_ssl=config_dict.get('verify_ssl', True),
             resume=config_dict.get('resume', False),
-            agent_mode=task.scan_mode.value == 'agent' if isinstance(task.scan_mode, type) else task.scan_mode == 'agent',
+            agent_mode=task.scan_mode == ScanMode.AGENT,
             report_formats=config_dict.get('report_formats', ['json', 'html']),
             enable_sql_test=config_dict.get('enable_sql_test', True),
             enable_xss_test=config_dict.get('enable_xss_test', True),
@@ -415,7 +415,7 @@ class ScanOrchestrator:
         return ScanProgress(
             task_id=task_id,
             stage=task.current_stage or 'unknown',
-            stage_status=task.status.value if hasattr(task.status, 'value') else task.status,
+            stage_status=task.status.value if isinstance(task.status, TaskStatus) else str(task.status),
             progress_percent=task.progress,
             current_phase=task.current_phase or ''
         )

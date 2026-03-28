@@ -8,7 +8,7 @@ import json
 import logging
 import os
 from typing import Optional, Any, Dict
-from aiohttp import web, WSMsgType, ClientSession
+from aiohttp import web, WSMsgType
 from datetime import datetime
 
 from .models import TaskStatus, ScanMode, ServerConfig
@@ -411,9 +411,17 @@ class DashboardServer:
         except json.JSONDecodeError:
             return web.json_response({'error': 'Invalid JSON'}, status=400)
 
-        for key, value in data.items():
-            if hasattr(self.config, key):
-                setattr(self.config, key, value)
+        allowed_keys = {'host', 'port', 'enable_cors', 'cors_origins', 'heartbeat_interval', 'max_log_entries', 'task_history_limit'}
+        update_data = {k: v for k, v in data.items() if k in allowed_keys}
+
+        for key, value in update_data.items():
+            if key == 'port' and isinstance(value, int):
+                if value < 1 or value > 65535:
+                    return web.json_response({'error': 'Invalid port number'}, status=400)
+            if key == 'heartbeat_interval' and isinstance(value, int):
+                if value < 1:
+                    return web.json_response({'error': 'Invalid heartbeat_interval'}, status=400)
+            setattr(self.config, key, value)
 
         return web.json_response({'status': 'saved'})
 
