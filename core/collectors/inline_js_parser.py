@@ -137,7 +137,19 @@ class InlineJSParser:
     """
     
     API_PATH_PATTERNS = [
-        re.compile(r'''['"`](/(?:api|prod-api|rest|v\d+|graphql|rpc|gateway|sys-[a-z]+-api)[/a-zA-Z0-9_?&=\-\.%]+)['"`]'''),
+        re.compile(r'''['"`](/(?:api|prod-api|test-api|pre-api|rest|api-test|v\d+|graphql|rpc|gateway|swagger|openapi)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:admin|management|api-admin|console|dashboard)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:sys-[a-z]+-api|sys/[a-z]+|ums|oauth|auth|login|passport)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:service|services|app|application|web|open)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:data|datas|file|files|content|contents|resource|resources)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:user|users|customer|customers|account|member|members|client|clients)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:order|orders|product|products|item|items|cart|shop)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:upload|download|export|import|backup|config|cfg|setting|settings)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:news|article|post|posts|blog|cms|content|media|file)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:monitor|monitoring|stats|statistics|analytics|report|reports)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:message|messages|notification|notifications|notice|notices)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:job|jobs|task|tasks|schedule|scheduler|worker|workers)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
+        re.compile(r'''['"`](/(?:search|query|find|filter|list|page|pages)(?:[/a-zA-Z0-9_?&=\-\.%]+|/?))['"`]'''),
     ]
     
     ROUTE_PATTERNS = [
