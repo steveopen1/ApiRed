@@ -96,8 +96,8 @@ class ContainerSecurityTester:
                                 runtime=runtime_name,
                                 detail=f"{runtime_name} API允许未授权访问"
                             ))
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Container runtime check failed for {url}: {e}")
 
         return findings
 

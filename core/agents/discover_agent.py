@@ -247,8 +247,8 @@ class DiscoverAgent(AgentInterface):
                                     )
                                     endpoints.append(endpoint)
                                 
-                except Exception:
-                    continue
+                except Exception as e:
+                    logger.debug(f"Swagger endpoint discovery failed: {e}")
         
         return endpoints
     
