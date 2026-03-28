@@ -23,21 +23,26 @@ const Components = {
         const card = document.createElement('div');
         card.className = 'task-card';
         card.id = `task-${task.task_id}`;
+        card.dataset.taskId = task.task_id;
 
         const statusBadge = this.statusBadge(task.status);
-        const modeBadge = `<span class="badge badge-running">${task.scan_mode || 'rule'}</span>`;
+        const modeBadge = `<span class="badge badge-running">${this.escapeHtml(task.scan_mode || 'rule')}</span>`;
+        const stageBadge = task.current_stage 
+            ? `<span class="badge badge-stage">${this.escapeHtml(task.current_stage)}</span>` 
+            : '';
 
         card.innerHTML = `
             <div class="task-header">
                 <div>
                     <div class="task-target">${this.escapeHtml(task.target)}</div>
                     <div class="task-meta">
-                        <span>${task.scan_mode || 'rule'}</span>
+                        <span>${this.escapeHtml(task.scan_mode || 'rule')}</span>
                         ${task.created_at ? `<span>${new Date(task.created_at).toLocaleString()}</span>` : ''}
                     </div>
                 </div>
                 <div class="task-badges">
                     ${modeBadge}
+                    ${stageBadge}
                     ${statusBadge}
                 </div>
             </div>
@@ -45,18 +50,19 @@ const Components = {
                 <div class="progress-bar">
                     <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
                 </div>
-                <div class="progress-text">${task.progress || 0}% ${task.current_stage ? `- ${task.current_stage}` : ''}</div>
+                <div class="progress-text">${task.progress || 0}% ${task.current_stage ? `- ${this.escapeHtml(task.current_stage)}` : ''}</div>
             </div>
             <div class="task-stats">
                 <span>APIs: <strong>${task.total_apis || 0}</strong></span>
                 <span>Vulns: <strong>${task.vulnerabilities || 0}</strong></span>
+                ${task.high_value_apis ? `<span>High: <strong>${task.high_value_apis}</strong></span>` : ''}
             </div>
             <div class="task-actions">
                 ${task.status === 'running' ? `
-                    <button class="btn btn-small btn-secondary" onclick="dashboardApp.stopTask('${task.task_id}')">Stop</button>
+                    <button class="btn btn-small btn-secondary" data-action="stop" data-task-id="${this.escapeHtml(task.task_id)}">Stop</button>
                 ` : ''}
-                <button class="btn btn-small btn-secondary" onclick="dashboardApp.viewResults('${task.task_id}')">View</button>
-                <button class="btn btn-small btn-danger" onclick="dashboardApp.deleteTask('${task.task_id}')">Delete</button>
+                <button class="btn btn-small btn-secondary" data-action="view" data-task-id="${this.escapeHtml(task.task_id)}">View</button>
+                <button class="btn btn-small btn-danger" data-action="delete" data-task-id="${this.escapeHtml(task.task_id)}">Delete</button>
             </div>
         `;
 
@@ -130,7 +136,17 @@ const Components = {
      */
     logEntry(level, message, timestamp) {
         const entry = document.createElement('div');
-        entry.className = `log-entry ${level}`;
+        let entryClass = 'log-entry';
+        if (level === 'stage_start') {
+            entryClass += ' stage-start';
+            level = 'info';
+        } else if (level === 'stage_complete') {
+            entryClass += ' stage-end';
+            level = 'info';
+        } else {
+            entryClass += ` ${level}`;
+        }
+        entry.className = entryClass;
 
         const time = document.createElement('span');
         time.className = 'log-time';

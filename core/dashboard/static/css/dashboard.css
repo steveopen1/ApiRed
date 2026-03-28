@@ -356,6 +356,11 @@ body {
     color: var(--success);
 }
 
+.badge-stage {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--accent-secondary);
+}
+
 /* Progress Bar */
 .progress-container {
     margin: 16px 0;
@@ -420,6 +425,22 @@ body {
 
 .log-entry.error .log-message {
     color: var(--danger);
+}
+
+.log-entry.debug .log-message {
+    color: var(--text-muted);
+}
+
+.log-entry.stage-start {
+    border-left: 3px solid var(--accent-primary);
+    padding-left: 8px;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.log-entry.stage-end {
+    border-left: 3px solid var(--success);
+    padding-left: 8px;
+    background: rgba(16, 185, 129, 0.05);
 }
 
 /* Task Card */
@@ -562,5 +583,30 @@ body {
 
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .toast {
+        animation: none;
+    }
+
+    .progress-fill {
+        transition: none;
+    }
+
+    .nav-tab,
+    .btn,
+    .mode-card {
+        transition: none;
     }
 }

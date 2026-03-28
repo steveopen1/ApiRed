@@ -8,7 +8,7 @@ import json
 import logging
 import os
 from typing import Optional, Any, Dict
-from aiohttp import web, WSMsgType, ClientSession
+from aiohttp import web, WSMsgType
 from datetime import datetime
 
 from .models import TaskStatus, ScanMode, ServerConfig
@@ -40,7 +40,8 @@ class DashboardServer:
         self.orchestrator = ScanOrchestrator(self.task_manager)
 
         self.app = web.Application(
-            middlewares=[self._cors_middleware]
+            middlewares=[self._cors_middleware, self._body_limit_middleware],
+            client_max_size=1024*1024
         )
 
         self._setup_routes()
@@ -84,15 +85,24 @@ class DashboardServer:
     async def _cors_middleware(self, request: web.Request, handler):
         """CORS 中间件"""
         if self.config.enable_cors:
-            origin = request.headers.get('Origin', '*')
+            origin = request.headers.get('Origin', '')
             if origin == '*' or origin in self.config.cors_origins:
                 response = await handler(request)
-                response.headers['Access-Control-Allow-Origin'] = origin
+                if origin != '*':
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
                 response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
                 response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
                 return response
         return await handler(request)
-
+    
+    @web.middleware
+    async def _body_limit_middleware(self, request: web.Request, handler):
+        """请求体大小限制中间件"""
+        if request.content_length and request.content_length > 10 * 1024 * 1024:
+            return web.json_response({'error': 'Request body too large'}, status=413)
+        return await handler(request)
+    
     async def start(self):
         """启动服务器"""
         if not self.app:
@@ -401,9 +411,17 @@ class DashboardServer:
         except json.JSONDecodeError:
             return web.json_response({'error': 'Invalid JSON'}, status=400)
 
-        for key, value in data.items():
-            if hasattr(self.config, key):
-                setattr(self.config, key, value)
+        allowed_keys = {'host', 'port', 'enable_cors', 'cors_origins', 'heartbeat_interval', 'max_log_entries', 'task_history_limit'}
+        update_data = {k: v for k, v in data.items() if k in allowed_keys}
+
+        for key, value in update_data.items():
+            if key == 'port' and isinstance(value, int):
+                if value < 1 or value > 65535:
+                    return web.json_response({'error': 'Invalid port number'}, status=400)
+            if key == 'heartbeat_interval' and isinstance(value, int):
+                if value < 1:
+                    return web.json_response({'error': 'Invalid heartbeat_interval'}, status=400)
+            setattr(self.config, key, value)
 
         return web.json_response({'status': 'saved'})
 

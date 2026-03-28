@@ -9,14 +9,16 @@ import time
 import threading
 import subprocess
 import signal
+import ipaddress
+import re
+import secrets
+import logging
+import hashlib
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
-import secrets
-import logging
-import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class ConfigManager:
     
     _instance = None
     _lock = threading.Lock()
+    _init_lock = threading.Lock()
     
     def __new__(cls):
         if cls._instance is None:
@@ -54,11 +57,14 @@ class ConfigManager:
     def __init__(self):
         if self._initialized:
             return
-        self._initialized = True
-        from ..utils.config import Config
-        self._config = Config()
-        self._ai_config: Dict[str, Any] = {}
-        self._load_ai_config()
+        with self._init_lock:
+            if self._initialized:
+                return
+            self._initialized = True
+            from ..utils.config import Config
+            self._config = Config()
+            self._ai_config: Dict[str, Any] = {}
+            self._load_ai_config()
     
     def _load_ai_config(self):
         """加载 AI 配置"""
@@ -313,7 +319,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send_json({"task_id": task.task_id, "status": "started"})
     
     def _validate_target(self, target: str) -> bool:
-        """验证 target URL 格式并防止路径遍历"""
+        """验证 target URL 格式并防止路径遍历和 SSRF 攻击"""
         if not target or len(target) > 2048:
             return False
         if '..' in target or target.startswith('/'):
@@ -327,13 +333,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return False
             if parsed.scheme in ('javascript', 'data', 'vbscript'):
                 return False
+            if not self._is_safe_host(parsed.netloc):
+                return False
+            return True
+        except Exception:
+            return False
+    
+    def _is_safe_host(self, netloc: str) -> bool:
+        """检查主机是否安全（防止 SSRF）"""
+        try:
+            host = netloc.split(':')[0]
+            if host in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
+                return False
+            try:
+                addr = ipaddress.ip_address(host)
+                if addr.is_private or addr.is_loopback or addr.is_reserved:
+                    return False
+                if addr.is_unspecified:
+                    return False
+            except ValueError:
+                pass
+            blocked_domains = ('169.254.169.254', 'metadata.google.internal')
+            if host in blocked_domains:
+                return False
             return True
         except Exception:
             return False
     
     def _sanitize_error(self, error: str) -> str:
         """对错误信息进行脱敏处理，移除敏感内容"""
-        import re
         if not error:
             return ""
         patterns = [
@@ -403,8 +431,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             
             indeterminate_steps = [15, 20, 30, 40, 50, 60, 70, 80]
             step_index = 0
+            max_runtime = 3600
+            start_time = time.time()
             
             while process.poll() is None:
+                elapsed = time.time() - start_time
+                if elapsed > max_runtime:
+                    process.terminate()
+                    time.sleep(0.5)
+                    if process.poll() is None:
+                        process.kill()
+                    self.task_manager.update_task(
+                        task_id,
+                        status="failed",
+                        error=f"Scan timed out after {max_runtime} seconds"
+                    )
+                    return
+                
                 time.sleep(3)
                 if step_index < len(indeterminate_steps):
                     self.task_manager.update_task(task_id, progress=indeterminate_steps[step_index])
@@ -607,7 +650,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         return results
     
     def log_message(self, format, *args):
-        print(f"[Dashboard] {args[0]}")
+        logger.info(f"[Dashboard] {args[0] if args else format}")
 
 
 class WebDashboard:

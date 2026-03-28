@@ -38,7 +38,6 @@ class WebSocketClient {
 
     _setupEventHandlers() {
         this.ws.onopen = () => {
-            console.log('WebSocket connected');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this._updateConnectionStatus(true);
@@ -48,7 +47,6 @@ class WebSocketClient {
         };
 
         this.ws.onclose = (event) => {
-            console.log('WebSocket closed:', event.code, event.reason);
             this.isConnected = false;
             this._updateConnectionStatus(false);
             this._stopHeartbeat();
@@ -107,7 +105,6 @@ class WebSocketClient {
                 this._handleError(data);
                 break;
             case 'connected':
-                console.log('Received connected confirmation');
                 break;
         }
     }
@@ -185,19 +182,19 @@ class WebSocketClient {
     _handleError(data) {
         const taskId = data.task_id;
         const error = data.data?.error || data.error || 'Unknown error';
-        window.dashboardApp.showError(error);
+        window.dashboardApp.showToast(`Error: ${error}`, 'error');
         this._emit('error', { taskId, error });
     }
 
     _scheduleReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this._emit('reconnectFailed', { attempts: this.reconnectAttempts });
             return;
         }
 
         this.reconnectAttempts++;
         const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
-        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
         setTimeout(() => {
             this.connect();

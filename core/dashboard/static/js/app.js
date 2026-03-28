@@ -11,6 +11,7 @@ class DashboardApp {
         this.wsClient = null;
         this.selectedTaskId = null;
         this.findings = new Map();
+        this.pollingIntervalId = null;
     }
 
     async init() {
@@ -26,6 +27,7 @@ class DashboardApp {
         this.wsClient.on('finding', (data) => this.onFinding(data));
         this.wsClient.on('log', (data) => this.onLog(data));
         this.wsClient.on('error', (data) => this.onError(data));
+        this.wsClient.on('reconnectFailed', (data) => this.onReconnectFailed(data));
 
         this.setupNavigation();
         this.setupForms();
@@ -34,11 +36,13 @@ class DashboardApp {
     }
 
     onConnected() {
-        console.log('Connected to dashboard');
     }
 
     onDisconnected() {
-        console.log('Disconnected from dashboard');
+    }
+
+    onReconnectFailed(data) {
+        this.showToast('Connection lost. Please refresh the page to reconnect.', 'error');
     }
 
     onTaskUpdate(data) {
@@ -122,6 +126,20 @@ class DashboardApp {
                 const page = tab.dataset.page;
                 this.switchPage(page);
             });
+        });
+
+        document.addEventListener('click', (e) => {
+            const action = e.target.dataset.action;
+            const taskId = e.target.dataset.taskId;
+            if (!action || !taskId) return;
+
+            if (action === 'stop') {
+                this.stopTask(taskId);
+            } else if (action === 'view') {
+                this.viewResults(taskId);
+            } else if (action === 'delete') {
+                this.deleteTask(taskId);
+            }
         });
     }
 
@@ -413,11 +431,22 @@ class DashboardApp {
     }
 
     startPolling() {
-        setInterval(async () => {
+        if (this.pollingIntervalId) return;
+        this.pollingIntervalId = setInterval(async () => {
             if (this.wsClient && !this.wsClient.isConnected) {
                 await this.loadInitialData();
             }
         }, 30000);
+    }
+
+    cleanup() {
+        if (this.pollingIntervalId) {
+            clearInterval(this.pollingIntervalId);
+            this.pollingIntervalId = null;
+        }
+        if (this.wsClient) {
+            this.wsClient.disconnect();
+        }
     }
 
     showToast(message, type = 'info') {
@@ -433,4 +462,8 @@ window.dashboardApp = new DashboardApp();
 
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboardApp.init();
+});
+
+window.addEventListener('beforeunload', () => {
+    window.dashboardApp.cleanup();
 });

@@ -53,12 +53,12 @@
                 <form id="quick-scan-form">
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">Target URL</label>
+                            <label class="form-label" for="quick-target">Target URL</label>
                             <input type="url" id="quick-target" class="form-input" 
                                    placeholder="https://example.com" required>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Scan Mode</label>
+                            <label class="form-label" for="quick-mode">Scan Mode</label>
                             <select id="quick-mode" class="form-select">
                                 <option value="rule">Rule Mode (Fast)</option>
                                 <option value="agent">AI Agent Mode</option>
@@ -98,27 +98,27 @@
                 <form id="scan-form">
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">Target URL *</label>
+                            <label class="form-label" for="input-target">Target URL *</label>
                             <input type="url" id="input-target" class="form-input" 
                                    placeholder="https://example.com" required>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Cookies (Optional)</label>
+                            <label class="form-label" for="input-cookies">Cookies (Optional)</label>
                             <input type="text" id="input-cookies" class="form-input" 
                                    placeholder="session=xxx; token=yyy">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Concurrency</label>
+                            <label class="form-label" for="input-concurrency">Concurrency</label>
                             <input type="number" id="input-concurrency" class="form-input" 
                                    value="50" min="1" max="500">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">JS Depth</label>
+                            <label class="form-label" for="input-js-depth">JS Depth</label>
                             <input type="number" id="input-js-depth" class="form-input" 
                                    value="3" min="1" max="10">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Attack Mode</label>
+                            <label class="form-label" for="input-attack-mode">Attack Mode</label>
                             <select id="input-attack-mode" class="form-select">
                                 <option value="all">All (Collect + Test)</option>
                                 <option value="collect">Collect Only</option>
@@ -126,7 +126,7 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Report Format</label>
+                            <label class="form-label" for="input-format">Report Format</label>
                             <select id="input-format" class="form-select">
                                 <option value="json">JSON</option>
                                 <option value="html">HTML</option>

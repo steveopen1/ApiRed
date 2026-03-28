@@ -156,8 +156,14 @@ class TaskManager:
 
     def _get_connection(self) -> sqlite3.Connection:
         """获取数据库连接"""
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(
+            self.db_path,
+            check_same_thread=False,
+            timeout=30.0
+        )
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
     async def create_task(self, target: str, config: Optional[Dict[str, Any]] = None,
@@ -251,7 +257,7 @@ class TaskManager:
         if data.get('engine_config'):
             try:
                 data['engine_config'] = EngineConfig.from_dict(json.loads(data['engine_config']))
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, KeyError):
                 data['engine_config'] = None
         if data.get('config_dict'):
             try:
@@ -259,10 +265,19 @@ class TaskManager:
             except json.JSONDecodeError:
                 data['config_dict'] = {}
         if data.get('status'):
-            data['status'] = TaskStatus(data['status'])
+            try:
+                data['status'] = TaskStatus(data['status'])
+            except ValueError:
+                data['status'] = TaskStatus.PENDING
         if data.get('scan_mode'):
-            data['scan_mode'] = ScanMode(data['scan_mode'])
-        return ScanTask(**{k: v for k, v in data.items() if hasattr(ScanTask, k)})
+            try:
+                data['scan_mode'] = ScanMode(data['scan_mode'])
+            except ValueError:
+                data['scan_mode'] = ScanMode.RULE
+        
+        valid_fields = {f.name for f in ScanTask.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return ScanTask(**filtered_data)
 
     async def update_task(self, task_id: str, **updates):
         """更新任务状态"""
@@ -476,6 +491,28 @@ class TaskManager:
         finally:
             conn.close()
 
+    async def get_results_all(self) -> List[Dict[str, Any]]:
+        """获取所有扫描结果"""
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM scan_results ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+
+            results = []
+            for row in rows:
+                result = dict(row)
+                if result.get('data'):
+                    try:
+                        result['data'] = json.loads(result['data'])
+                    except json.JSONDecodeError:
+                        pass
+                results.append(result)
+
+            return results
+        finally:
+            conn.close()
+
     async def save_result(self, task_id: str, result: Dict[str, Any]):
         """保存扫描结果"""
         conn = self._get_connection()
@@ -507,13 +544,18 @@ class TaskManager:
         """保存 API 端点"""
         conn = self._get_connection()
         try:
+            endpoint_id = endpoint.get('endpoint_id')
+            if not endpoint_id:
+                import secrets
+                endpoint_id = secrets.token_hex(8)
+            
             conn.execute("""
                 INSERT OR REPLACE INTO api_endpoints
                 (endpoint_id, task_id, path, method, base_url, full_url, status,
                  status_code, score, is_high_value, sources, parameters, response_sample, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                endpoint.get('endpoint_id'),
+                endpoint_id,
                 task_id,
                 endpoint.get('path'),
                 endpoint.get('method', 'GET'),
