@@ -438,7 +438,7 @@ class ChkApiScanner:
                         method=method
                     )
                     
-                    from core.analyzers.response_cluster import TaskResult as RCTaskResult
+                    from .analyzers.response_cluster import TaskResult as RCTaskResult
                     rc_task_result = RCTaskResult(
                         status_code=response.status_code,
                         content=response.content.encode() if isinstance(response.content, str) else response.content,

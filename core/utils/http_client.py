@@ -163,7 +163,7 @@ class AsyncHttpClient:
         
         result.duration = time.time() - start_time
         
-        if result.error and ('SSL' in result.error or 'ClientError' in result.error or 'sslv3' in result.error.lower() if result.error else False):
+        if result.error and ('SSL' in result.error or 'ClientError' in result.error or 'sslv3' in result.error.lower()):
             return await self._fallback_request(url, method, headers, data, timeout_sec, verify_ssl)
         
         return result

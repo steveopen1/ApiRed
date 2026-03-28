@@ -1025,58 +1025,6 @@ class APIRouter:
             'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
             '_identified_keywords': sorted(list(identified_api_keywords)),
         }
-        
-        total_urls = len(segment_urls)
-        
-        api_prefix_positions = set()
-        for pos, segments in segment_at_position.items():
-            unique_segments = set(segments)
-            unique_ratio = len(unique_segments) / len(segments)
-            
-            if unique_ratio < 0.5:
-                api_prefix_positions.add(pos)
-        
-        identified_api_keywords = set()
-        for pos in api_prefix_positions:
-            for seg in segment_at_position[pos]:
-                if segment_count[seg] / total_urls >= 0.3:
-                    identified_api_keywords.add(seg)
-        
-        base_urls = set()
-        for full_path, segments in segment_urls.items():
-            for i, seg in enumerate(segments):
-                if seg in identified_api_keywords:
-                    api_prefix = '/' + '/'.join(segments[:i+1])
-                    path_with_api_paths.add(api_prefix)
-                    if tree_urls:
-                        base_url = list(tree_urls)[0] + api_prefix
-                        base_urls.add(base_url)
-                    break
-        
-        for full_path, segments in segment_urls.items():
-            is_api_path = False
-            for seg in segments:
-                if seg in identified_api_keywords:
-                    is_api_path = True
-                    break
-            if not is_api_path:
-                path_with_no_api_paths.add(full_path)
-            else:
-                no_api_suffix = '/' + '/'.join([
-                    seg for seg in segments 
-                    if seg not in identified_api_keywords
-                ])
-                if no_api_suffix != '/':
-                    path_with_no_api_paths.add(no_api_suffix)
-        
-        return {
-            'tree_urls': list(tree_urls),
-            'base_urls': sorted(list(base_urls)),
-            'path_with_api_paths': sorted(list(path_with_api_paths)),
-            'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
-            '_identified_keywords': sorted(list(identified_api_keywords)),
-            '_method': 'statistical',
-        }
     
     VERSION_PREFIX_PATTERN = re.compile(r'^v\d+$', re.IGNORECASE)
     

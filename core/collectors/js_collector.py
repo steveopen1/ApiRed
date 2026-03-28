@@ -3,6 +3,7 @@ JS Fingerprint Cache Module
 JS指纹缓存模块 - 避免重复AST解析
 """
 
+import asyncio
 import hashlib
 import json
 import re
@@ -493,7 +494,7 @@ class RecursiveJSExtractor:
         """获取单个 JS 文件内容"""
         try:
             if self.http_client:
-                resp = await self.http_client.get(url, timeout=10)
+                resp = await self.http_client.request(url, timeout=10)
                 if resp and resp.status_code == 200:
                     return resp.text
         except Exception as e:
