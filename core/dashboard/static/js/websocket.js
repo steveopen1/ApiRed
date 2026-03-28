@@ -10,10 +10,19 @@ class WebSocketClient {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 1000;
+        this.maxReconnectDelay = 30000;
+        this.reconnectStartTime = null;
+        this.maxReconnectDuration = 300000;
         this.heartbeatInterval = null;
+        this.heartbeatTimeout = null;
         this.isConnected = false;
+        this.isManualDisconnect = false;
         this.messageQueue = [];
         this.listeners = {};
+        this._boundHandleOnline = this._handleOnline.bind(this);
+        this._boundHandleOffline = this._handleOffline.bind(this);
+        window.addEventListener('online', this._boundHandleOnline);
+        window.addEventListener('offline', this._boundHandleOffline);
     }
 
     _getWebSocketUrl() {
@@ -22,13 +31,36 @@ class WebSocketClient {
         return `${protocol}//${host}/ws`;
     }
 
+    _handleOnline() {
+        console.log('Network online, attempting reconnect...');
+        this._emit('networkOnline', {});
+        if (!this.isConnected && !this.isManualDisconnect) {
+            this.reconnectAttempts = 0;
+            this.reconnectStartTime = Date.now();
+            this.connect();
+        }
+    }
+
+    _handleOffline() {
+        console.log('Network offline');
+        this._emit('networkOffline', {});
+        this._stopHeartbeat();
+    }
+
     connect() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             return;
         }
 
+        if (!window.navigator.onLine) {
+            console.warn('Browser is offline, waiting for network...');
+            return;
+        }
+
+        this.isManualDisconnect = false;
         try {
             this.ws = new WebSocket(this.url);
+            this._setupConnectionTimeout();
             this._setupEventHandlers();
         } catch (error) {
             console.error('WebSocket connection error:', error);
@@ -36,10 +68,30 @@ class WebSocketClient {
         }
     }
 
+    _setupConnectionTimeout() {
+        this._clearConnectionTimeout();
+        this.connectionTimeout = setTimeout(() => {
+            if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+                console.warn('WebSocket connection timeout, closing...');
+                this.ws.close();
+                this._scheduleReconnect();
+            }
+        }, 10000);
+    }
+
+    _clearConnectionTimeout() {
+        if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
+        }
+    }
+
     _setupEventHandlers() {
         this.ws.onopen = () => {
             this.isConnected = true;
             this.reconnectAttempts = 0;
+            this.reconnectStartTime = null;
+            this._clearConnectionTimeout();
             this._updateConnectionStatus(true);
             this._startHeartbeat();
             this._flushMessageQueue();
@@ -48,10 +100,13 @@ class WebSocketClient {
 
         this.ws.onclose = (event) => {
             this.isConnected = false;
+            this._clearConnectionTimeout();
             this._updateConnectionStatus(false);
             this._stopHeartbeat();
             this._emit('disconnected', { code: event.code, reason: event.reason });
-            this._scheduleReconnect();
+            if (!this.isManualDisconnect) {
+                this._scheduleReconnect();
+            }
         };
 
         this.ws.onerror = (error) => {
@@ -62,11 +117,22 @@ class WebSocketClient {
         this.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                if (data.type === 'pong') {
+                    this._handlePong();
+                    return;
+                }
                 this._handleMessage(data);
             } catch (error) {
                 console.error('Failed to parse message:', error);
             }
         };
+    }
+
+    _handlePong() {
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
     }
 
     _handleMessage(data) {
@@ -187,18 +253,80 @@ class WebSocketClient {
     }
 
     _scheduleReconnect() {
+        if (this.isManualDisconnect) {
+            return;
+        }
+
+        if (this.reconnectStartTime && (Date.now() - this.reconnectStartTime) > this.maxReconnectDuration) {
+            console.error('Max reconnection duration reached (5 minutes)');
+            this._emit('reconnectFailed', { 
+                attempts: this.reconnectAttempts, 
+                reason: 'max_duration',
+                message: 'Connection could not be established within 5 minutes. Please refresh the page or check the server status.'
+            });
+            this._showReconnectFailedNotification();
+            return;
+        }
+
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
-            this._emit('reconnectFailed', { attempts: this.reconnectAttempts });
+            this._emit('reconnectFailed', { 
+                attempts: this.reconnectAttempts,
+                reason: 'max_attempts',
+                message: 'Unable to connect after multiple attempts. Please refresh the page or check the server status.'
+            });
+            this._showReconnectFailedNotification();
+            return;
+        }
+
+        if (!window.navigator.onLine) {
+            console.warn('Browser is offline, waiting for network...');
             return;
         }
 
         this.reconnectAttempts++;
-        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
+        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay);
 
+        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        
         setTimeout(() => {
-            this.connect();
+            if (!this.isManualDisconnect && window.navigator.onLine) {
+                this.connect();
+            }
         }, delay);
+    }
+
+    _showReconnectFailedNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'reconnect-failed-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">⚠️</span>
+                <span class="notification-message">Connection lost. Please refresh the page to reconnect.</span>
+                <button class="notification-btn" onclick="location.reload()">Refresh</button>
+                <button class="notification-btn-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+        `;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            animation: slideIn 0.3s ease-out;
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 10000);
     }
 
     _startHeartbeat() {
@@ -300,11 +428,31 @@ class WebSocketClient {
     }
 
     disconnect() {
+        this.isManualDisconnect = true;
         this._stopHeartbeat();
+        this._clearConnectionTimeout();
         if (this.ws) {
             this.ws.close();
             this.ws = null;
         }
+    }
+
+    forceReconnect() {
+        this.reconnectAttempts = 0;
+        this.reconnectStartTime = Date.now();
+        this.disconnect();
+        setTimeout(() => {
+            this.isManualDisconnect = false;
+            this.connect();
+        }, 100);
+    }
+
+    destroy() {
+        this.disconnect();
+        window.removeEventListener('online', this._boundHandleOnline);
+        window.removeEventListener('offline', this._boundHandleOffline);
+        this.messageQueue = [];
+        this.listeners = {};
     }
 }
 

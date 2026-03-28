@@ -1,0 +1,7 @@
+"""
+Core configuration module
+"""
+
+from .api_patterns import COMMON_API_PATHS, RESTFUL_SUFFIXES, FUZZ_SUFFIXES, PATH_FRAGMENTS
+
+__all__ = ['COMMON_API_PATHS', 'RESTFUL_SUFFIXES', 'FUZZ_SUFFIXES', 'PATH_FRAGMENTS']
