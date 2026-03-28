@@ -199,7 +199,9 @@ class ScanOrchestrator:
             'reporting': ('reporting', 100),
         }
 
-        stage_name, progress = stage_map.get(stage, (stage, progress))
+        default_progress = 50
+        stage_info = stage_map.get(stage, (stage, default_progress))
+        stage_name, progress = stage_info
         duration = data.get('duration', 0.0)
 
         await self.task_manager.update_task(

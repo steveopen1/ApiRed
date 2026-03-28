@@ -3,11 +3,13 @@ Dashboard Events
 事件定义 - WebSocket 消息协议和事件类型
 """
 
+import asyncio
+import json
+import logging
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 from datetime import datetime
 from enum import Enum
-import json
 
 
 class EventType(Enum):
@@ -313,6 +315,3 @@ class EventEmitter:
                 except Exception as e:
                     import logging
                     logging.getLogger(__name__).warning(f"Event callback error for {event}: {e}")
-
-
-import asyncio

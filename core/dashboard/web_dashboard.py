@@ -403,8 +403,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             
             indeterminate_steps = [15, 20, 30, 40, 50, 60, 70, 80]
             step_index = 0
+            max_runtime = 3600
+            start_time = time.time()
             
             while process.poll() is None:
+                elapsed = time.time() - start_time
+                if elapsed > max_runtime:
+                    process.terminate()
+                    time.sleep(0.5)
+                    if process.poll() is None:
+                        process.kill()
+                    self.task_manager.update_task(
+                        task_id,
+                        status="failed",
+                        error=f"Scan timed out after {max_runtime} seconds"
+                    )
+                    return
+                
                 time.sleep(3)
                 if step_index < len(indeterminate_steps):
                     self.task_manager.update_task(task_id, progress=indeterminate_steps[step_index])
