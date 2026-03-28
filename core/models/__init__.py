@@ -29,8 +29,10 @@ class Severity(Enum):
 
 @dataclass
 class APIEndpoint:
-    """API端点模型"""
+    """API端点模型（统一版本）"""
     api_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    endpoint_id: str = ""  # Dashboard 使用
+    task_id: str = ""  # Dashboard 使用
     path: str = ""
     method: str = "GET"
     base_url: str = ""
@@ -47,6 +49,12 @@ class APIEndpoint:
     is_high_value: bool = False
     service_key: str = ""
     regex_context: Optional[str] = None
+    content_hash: str = ""  # KnowledgeBase 使用
+    summary: str = ""  # API Spec Parser 使用
+    request_body: Optional[Dict] = None  # API Spec Parser 使用
+    responses: Dict = field(default_factory=dict)  # API Spec Parser 使用
+    security: List[Dict] = field(default_factory=list)  # API Spec Parser 使用
+    tags: List[str] = field(default_factory=list)  # KnowledgeBase/API Spec Parser 使用
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     updated_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
@@ -54,6 +62,8 @@ class APIEndpoint:
         """转换为字典"""
         return {
             'api_id': self.api_id,
+            'endpoint_id': self.endpoint_id or self.api_id,
+            'task_id': self.task_id,
             'path': self.path,
             'method': self.method,
             'base_url': self.base_url,
@@ -70,6 +80,12 @@ class APIEndpoint:
             'is_high_value': self.is_high_value,
             'service_key': self.service_key,
             'regex_context': self.regex_context,
+            'content_hash': self.content_hash,
+            'summary': self.summary,
+            'request_body': self.request_body,
+            'responses': self.responses,
+            'security': self.security,
+            'tags': self.tags,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
@@ -77,9 +93,11 @@ class APIEndpoint:
 
 @dataclass
 class Vulnerability:
-    """漏洞模型"""
+    """漏洞模型（统一版本）"""
     vuln_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
-    api_id: str = ""
+    api_id: str = ""  # 核心模型使用
+    endpoint_id: str = ""  # Dashboard 使用
+    task_id: str = ""  # Dashboard 使用
     vuln_type: str = ""
     severity: Severity = Severity.MEDIUM
     title: str = ""
@@ -87,7 +105,7 @@ class Vulnerability:
     evidence: str = ""
     payload: Optional[str] = None
     remediation: str = ""
-    references: List[str] = field(default_factory=list)
+    references: List[str] = field(default_factory=list)  # 核心模型有
     cwe_id: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
@@ -96,6 +114,8 @@ class Vulnerability:
         return {
             'vuln_id': self.vuln_id,
             'api_id': self.api_id,
+            'endpoint_id': self.endpoint_id or self.api_id,
+            'task_id': self.task_id,
             'vuln_type': self.vuln_type,
             'severity': self.severity.value if isinstance(self.severity, Enum) else self.severity,
             'title': self.title,
@@ -139,8 +159,9 @@ class SensitiveData:
 
 @dataclass
 class ScanResult:
-    """扫描结果模型"""
+    """扫描结果模型（统一版本）"""
     scan_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    task_id: str = ""  # Dashboard 使用
     target_url: str = ""
     start_time: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     end_time: Optional[str] = None
@@ -149,16 +170,20 @@ class ScanResult:
     total_apis: int = 0
     alive_apis: int = 0
     high_value_apis: int = 0
+    total_vulns: int = 0  # Dashboard 使用
+    total_sensitive: int = 0  # Dashboard 使用
     vulnerabilities: List[Vulnerability] = field(default_factory=list)
     sensitive_data: List[SensitiveData] = field(default_factory=list)
     api_endpoints: List[APIEndpoint] = field(default_factory=list)
     statistics: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
             'scan_id': self.scan_id,
+            'task_id': self.task_id,
             'target_url': self.target_url,
             'start_time': self.start_time,
             'end_time': self.end_time,
@@ -167,11 +192,14 @@ class ScanResult:
             'total_apis': self.total_apis,
             'alive_apis': self.alive_apis,
             'high_value_apis': self.high_value_apis,
+            'total_vulns': self.total_vulns or len(self.vulnerabilities),
+            'total_sensitive': self.total_sensitive or len(self.sensitive_data),
             'vulnerabilities': [v.to_dict() for v in self.vulnerabilities],
             'sensitive_data': [s.to_dict() for s in self.sensitive_data],
             'api_endpoints': [a.to_dict() for a in self.api_endpoints],
             'statistics': self.statistics,
-            'errors': self.errors
+            'errors': self.errors,
+            'created_at': self.created_at
         }
 
 

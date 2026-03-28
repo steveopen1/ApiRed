@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class SourceType(Enum):
-    """端点来源类型"""
+    """端点来源类型（已废弃，请使用 core.unified_fusion 中的 SourceType）"""
     JS_STRING = "js_string"
     JS_CONCAT = "js_concat"
     JS_AST = "js_ast"
@@ -40,7 +40,11 @@ class SourceType(Enum):
     API_DOC = "api_doc"
     AI_INFERRED = "ai_inferred"
     FINGERPRINT = "fingerprint"
+    KNOWLEDGE_BASE = "knowledge_base"
+    STATISTICAL = "statistical"
     STATIC = "static"
+    REGEX = "regex"
+    UNKNOWN = "unknown"
 
 
 class EndpointType(Enum):

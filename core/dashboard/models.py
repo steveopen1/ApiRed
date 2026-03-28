@@ -1,6 +1,8 @@
 """
 Dashboard Data Models
 数据模型定义 - 用于任务管理、进度跟踪、发现事件等
+
+注意：APIEndpoint, Vulnerability, ScanResult 已统一到 core.models 模块
 """
 
 from dataclasses import dataclass, field, asdict
@@ -9,6 +11,12 @@ from datetime import datetime
 from enum import Enum
 import secrets
 import json
+
+# 导入统一后的核心数据模型
+from core.models import APIEndpoint as CoreAPIEndpoint
+from core.models import Vulnerability as CoreVulnerability
+from core.models import ScanResult as CoreScanResult
+from core.models import Severity
 
 
 class TaskStatus(Enum):
@@ -221,26 +229,20 @@ class LogEntry:
 
 
 @dataclass
-class APIEndpoint:
-    """API端点"""
-    endpoint_id: str = field(default_factory=lambda: secrets.token_hex(8))
-    task_id: str = ""
-    path: str = ""
-    method: str = "GET"
-    base_url: str = ""
-    full_url: str = ""
-    status: str = "unknown"
-    status_code: int = 0
-    score: int = 0
-    is_high_value: bool = False
-    sources: List[str] = field(default_factory=list)
-    parameters: List[str] = field(default_factory=list)
-    response_sample: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
+class APIEndpoint(CoreAPIEndpoint):
+    """API端点（向后兼容别名，请使用 core.models.APIEndpoint）"""
+    
+    def __post_init__(self):
+        if not self.endpoint_id:
+            self.endpoint_id = self.api_id
+        if self.created_at is None:
+            self.created_at = datetime.now().isoformat()
+    
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
+        result = super().to_dict()
+        result.setdefault('endpoint_id', self.endpoint_id or self.api_id)
+        return result
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'APIEndpoint':
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
@@ -249,49 +251,33 @@ class APIEndpoint:
 
 
 @dataclass
-class Vulnerability:
-    """漏洞"""
-    vuln_id: str = field(default_factory=lambda: secrets.token_hex(8))
-    task_id: str = ""
-    endpoint_id: str = ""
-    vuln_type: str = ""
-    severity: str = "medium"
-    title: str = ""
-    description: str = ""
-    evidence: str = ""
-    payload: Optional[str] = None
-    remediation: str = ""
-    cwe_id: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
+class Vulnerability(CoreVulnerability):
+    """漏洞（向后兼容别名，请使用 core.models.Vulnerability）"""
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now().isoformat()
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Vulnerability':
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        if 'severity' in filtered_data and isinstance(filtered_data['severity'], str):
+            try:
+                filtered_data['severity'] = Severity(filtered_data['severity'])
+            except ValueError:
+                filtered_data['severity'] = Severity.MEDIUM
         return cls(**filtered_data)
 
 
 @dataclass
-class ScanResult:
-    """扫描结果摘要"""
-    result_id: str = field(default_factory=lambda: secrets.token_hex(8))
-    task_id: str = ""
-    target_url: str = ""
-    total_apis: int = 0
-    alive_apis: int = 0
-    high_value_apis: int = 0
-    total_vulns: int = 0
-    total_sensitive: int = 0
-    status: str = "pending"
-    duration: float = 0.0
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
+class ScanResult(CoreScanResult):
+    """扫描结果摘要（向后兼容别名，请使用 core.models.ScanResult）"""
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now().isoformat()
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ScanResult':
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}

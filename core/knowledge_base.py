@@ -1,6 +1,8 @@
 """
 Knowledge Base Module
 共享知识库 - 为 Agent 系统提供统一的数据共享
+
+注意：APIEndpoint 已统一到 core.models 模块
 """
 
 import asyncio
@@ -10,44 +12,58 @@ from datetime import datetime
 from collections import defaultdict
 import threading
 import logging
+import uuid
+import secrets
 logger = logging.getLogger(__name__)
+
+# 导入统一后的核心数据模型
+from core.models import APIEndpoint as CoreAPIEndpoint
 
 
 @dataclass
-class APIEndpoint:
-    """API 端点"""
-    path: str
-    method: str = "GET"
-    source: str = ""
-    full_url: str = ""
-    status: int = 0
-    score: float = 0.0
-    tags: List[str] = field(default_factory=list)
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    headers: Dict[str, str] = field(default_factory=dict)
-    cookies: str = ""
-    discovered_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    last_tested: str = ""
-    response_sample: str = ""
-    content_hash: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'path': self.path,
-            'method': self.method,
-            'source': self.source,
-            'full_url': self.full_url,
-            'status': self.status,
-            'score': self.score,
-            'tags': self.tags,
-            'parameters': self.parameters,
-            'headers': self.headers,
-            'cookies': self.cookies,
-            'discovered_at': self.discovered_at,
-            'last_tested': self.last_tested,
-            'response_sample': self.response_sample,
-            'content_hash': self.content_hash,
-        }
+class APIEndpoint(CoreAPIEndpoint):
+    """API 端点（向后兼容别名，请使用 core.models.APIEndpoint）"""
+    
+    def __post_init__(self):
+        if not self.discovered_at:
+            self.discovered_at = datetime.now().isoformat()
+        if not self.api_id:
+            self.api_id = str(uuid.uuid4())[:8] if hasattr(uuid, 'uuid4') else secrets.token_hex(8)
+    
+    @property
+    def discovered_at(self) -> str:
+        return self.created_at
+    
+    @discovered_at.setter
+    def discovered_at(self, value: str):
+        self.created_at = value
+    
+    @property
+    def last_tested(self) -> str:
+        return self.updated_at
+    
+    @last_tested.setter
+    def last_tested(self, value: str):
+        self.updated_at = value
+    
+    @property
+    def source(self) -> str:
+        """向后兼容属性：返回第一个 source 或空字符串"""
+        if self.sources and len(self.sources) > 0:
+            if isinstance(self.sources[0], dict):
+                return self.sources[0].get('type', '')
+            return str(self.sources[0])
+        return ""
+    
+    @source.setter
+    def source(self, value: str):
+        """向后兼容属性：设置 source"""
+        if not self.sources:
+            self.sources = [{'type': value}]
+        elif isinstance(self.sources[0], dict):
+            self.sources[0]['type'] = value
+        else:
+            self.sources = [{'type': value}]
 
 
 @dataclass
