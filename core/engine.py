@@ -101,6 +101,15 @@ class EngineConfig:
     # 报告格式
     report_formats: List[str] = field(default_factory=lambda: ['json', 'html'])
 
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'EngineConfig':
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
+
 
 @dataclass
 class ScanCheckpoint:
