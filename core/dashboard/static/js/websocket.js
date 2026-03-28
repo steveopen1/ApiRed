@@ -350,6 +350,10 @@ class WebSocketClient {
             clearInterval(this.heartbeatInterval);
             this.heartbeatInterval = null;
         }
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
     }
 
     _flushMessageQueue() {

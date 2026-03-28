@@ -30,7 +30,9 @@ const Components = {
         const stageBadge = task.current_stage 
             ? `<span class="badge badge-stage">${this.escapeHtml(task.current_stage)}</span>` 
             : '';
-
+        
+        const safeTaskId = this.escapeHtmlAttribute(task.task_id || '');
+        
         card.innerHTML = `
             <div class="task-header">
                 <div>
@@ -59,14 +61,19 @@ const Components = {
             </div>
             <div class="task-actions">
                 ${task.status === 'running' ? `
-                    <button class="btn btn-small btn-secondary" data-action="stop" data-task-id="${this.escapeHtml(task.task_id)}">Stop</button>
+                    <button class="btn btn-small btn-secondary" data-action="stop" data-task-id="${safeTaskId}">Stop</button>
                 ` : ''}
-                <button class="btn btn-small btn-secondary" data-action="view" data-task-id="${this.escapeHtml(task.task_id)}">View</button>
-                <button class="btn btn-small btn-danger" data-action="delete" data-task-id="${this.escapeHtml(task.task_id)}">Delete</button>
+                <button class="btn btn-small btn-secondary" data-action="view" data-task-id="${safeTaskId}">View</button>
+                <button class="btn btn-small btn-danger" data-action="delete" data-task-id="${safeTaskId}">Delete</button>
             </div>
         `;
 
         return card;
+    },
+    
+    escapeHtmlAttribute(str) {
+        if (!str) return '';
+        return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     },
 
     /**
@@ -236,13 +243,36 @@ const Components = {
         const tbody = table.querySelector('tbody');
         pageApis.forEach(api => {
             const row = tbody.appendChild(document.createElement('tr'));
-            row.innerHTML = `
-                <td><span class="badge badge-running">${api.method || 'GET'}</span></td>
-                <td>${this.escapeHtml(api.path || api.full_url || '')}</td>
-                <td>${api.status_code || '-'}</td>
-                <td>${api.score || 0}</td>
-                <td>${api.is_high_value ? '<span class="badge badge-high">Yes</span>' : 'No'}</td>
-            `;
+            
+            const methodCell = document.createElement('td');
+            const methodSpan = document.createElement('span');
+            methodSpan.className = 'badge badge-running';
+            methodSpan.textContent = api.method || 'GET';
+            methodCell.appendChild(methodSpan);
+            row.appendChild(methodCell);
+            
+            const pathCell = document.createElement('td');
+            pathCell.textContent = api.path || api.full_url || '';
+            row.appendChild(pathCell);
+            
+            const statusCell = document.createElement('td');
+            statusCell.textContent = api.status_code || '-';
+            row.appendChild(statusCell);
+            
+            const scoreCell = document.createElement('td');
+            scoreCell.textContent = api.score || 0;
+            row.appendChild(scoreCell);
+            
+            const highValueCell = document.createElement('td');
+            if (api.is_high_value) {
+                const badge = document.createElement('span');
+                badge.className = 'badge badge-high';
+                badge.textContent = 'Yes';
+                highValueCell.appendChild(badge);
+            } else {
+                highValueCell.textContent = 'No';
+            }
+            row.appendChild(highValueCell);
         });
 
         const pagination = this.paginationControls(currentPage, totalPages, (page) => {
@@ -294,12 +324,22 @@ const Components = {
         const tbody = table.querySelector('tbody');
         pageVulns.forEach(vuln => {
             const row = tbody.appendChild(document.createElement('tr'));
-            row.innerHTML = `
-                <td>${this.severityBadge(vuln.severity)}</td>
-                <td>${this.escapeHtml(vuln.vuln_type || '')}</td>
-                <td>${this.escapeHtml(vuln.endpoint_id || '')}</td>
-                <td>${this.escapeHtml(vuln.title || '')}</td>
-            `;
+            
+            const severityCell = document.createElement('td');
+            severityCell.innerHTML = this.severityBadge(vuln.severity);
+            row.appendChild(severityCell);
+            
+            const typeCell = document.createElement('td');
+            typeCell.textContent = vuln.vuln_type || '';
+            row.appendChild(typeCell);
+            
+            const pathCell = document.createElement('td');
+            pathCell.textContent = vuln.endpoint_id || '';
+            row.appendChild(pathCell);
+            
+            const titleCell = document.createElement('td');
+            titleCell.textContent = vuln.title || '';
+            row.appendChild(titleCell);
         });
 
         const pagination = this.paginationControls(currentPage, totalPages, (page) => {

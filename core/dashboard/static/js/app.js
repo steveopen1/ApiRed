@@ -41,15 +41,18 @@ class DashboardApp {
         await this.loadInitialData();
         this.startPolling();
         
-        window.addEventListener('error', (e) => this.onGlobalError(e));
-        window.addEventListener('unhandledrejection', (e) => this.onUnhandledRejection(e));
+        window.addEventListener('error', this._boundHandleGlobalError);
+        window.addEventListener('unhandledrejection', this._boundHandleUnhandledRejection);
+        document.addEventListener('click', this._boundHandleClick);
     }
 
     onConnected() {
+        this.wsConnected = true;
         this.hideReconnectingBanner();
     }
 
     onDisconnected() {
+        this.wsConnected = false;
     }
 
     onNetworkOnline() {
@@ -193,20 +196,6 @@ class DashboardApp {
                 const page = tab.dataset.page;
                 this.switchPage(page);
             });
-        });
-
-        document.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            const taskId = e.target.dataset.taskId;
-            if (!action || !taskId) return;
-
-            if (action === 'stop') {
-                this.stopTask(taskId);
-            } else if (action === 'view') {
-                this.viewResults(taskId);
-            } else if (action === 'delete') {
-                this.deleteTask(taskId);
-            }
         });
     }
 
@@ -548,8 +537,37 @@ class DashboardApp {
             clearInterval(this.pollingIntervalId);
             this.pollingIntervalId = null;
         }
+        
         if (this.wsClient) {
-            this.wsClient.disconnect();
+            this.wsClient.destroy();
+            this.wsClient = null;
+        }
+        
+        this.tasks.clear();
+        this.findings.clear();
+        this.resultsCache.clear();
+        this.logs = [];
+        
+        window.removeEventListener('error', this._boundHandleGlobalError);
+        window.removeEventListener('unhandledrejection', this._boundHandleUnhandledRejection);
+        document.removeEventListener('click', this._boundHandleClick);
+    }
+    
+    _boundHandleGlobalError = (e) => this.onGlobalError(e);
+    _boundHandleUnhandledRejection = (e) => this.onUnhandledRejection(e);
+    _boundHandleClick = (e) => this.onDocumentClick(e);
+    
+    onDocumentClick(e) {
+        const action = e.target.dataset.action;
+        const taskId = e.target.dataset.taskId;
+        if (!action || !taskId) return;
+
+        if (action === 'stop') {
+            this.stopTask(taskId);
+        } else if (action === 'view') {
+            this.viewResults(taskId);
+        } else if (action === 'delete') {
+            this.deleteTask(taskId);
         }
     }
 
