@@ -2916,11 +2916,11 @@ class ScanEngine:
             if self._api_aggregator and hasattr(self._api_aggregator, '_fusion_engine') and self._api_aggregator._fusion_engine:
                 try:
                     fusion_engine = self._api_aggregator._fusion_engine
+                    from .unified_fusion import SourceType as FusionSourceType
                     for endpoint in (self.result.api_endpoints if self.result else []):
                         source_type_val = getattr(endpoint, 'source_type', 'unknown')
                         try:
-                            from .collectors.enhanced_endpoint_aggregator import SourceType as FluxSourceType
-                            source_type = FluxSourceType(source_type_val) if source_type_val else FluxSourceType.UNKNOWN
+                            source_type = FusionSourceType(source_type_val) if source_type_val else FusionSourceType.UNKNOWN
                         except (ValueError, AttributeError):
                             source_type = None
                         

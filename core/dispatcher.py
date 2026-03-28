@@ -4,12 +4,15 @@ Dispatcher Module
 """
 
 import asyncio
+import logging
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from queue import Queue, Empty, Full
 import threading
 import time
+
+logger = logging.getLogger(__name__)
 
 
 class TaskPriority(Enum):

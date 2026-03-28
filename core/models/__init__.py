@@ -15,7 +15,7 @@ class APIStatus(Enum):
     UNKNOWN = "unknown"
     ALIVE = "alive"
     DEAD = "dead"
-    UNauthorized = "unauthorized"
+    UNAUTHORIZED = "unauthorized"
     SUSPICIOUS = "suspicious"
 
 

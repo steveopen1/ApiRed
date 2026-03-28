@@ -1145,27 +1145,6 @@ class HybridClassification:
                 'stat': len(stat_prefixes),
             }
         }
-        
-        method = 'hybrid'
-        if ai_prefixes and not kb_prefixes and not stat_prefixes:
-            method = 'ai_only'
-        elif kb_prefixes and not ai_prefixes and not stat_prefixes:
-            method = 'kb_only'
-        elif stat_prefixes and not ai_prefixes and not kb_prefixes:
-            method = 'stat_only'
-        elif not ai_prefixes and not kb_prefixes and not stat_prefixes:
-            method = 'none'
-        
-        return {
-            'api_prefixes': identified_api_keywords,
-            'prefix_confidence': prefix_confidence,
-            'method': method,
-            'sources': {
-                'ai': len(ai_prefixes),
-                'kb': len(kb_prefixes),
-                'stat': len(stat_prefixes),
-            }
-        }
 
 
 __all__ = [
