@@ -38,7 +38,6 @@ class WebSocketClient {
 
     _setupEventHandlers() {
         this.ws.onopen = () => {
-            console.log('WebSocket connected');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this._updateConnectionStatus(true);
@@ -48,7 +47,6 @@ class WebSocketClient {
         };
 
         this.ws.onclose = (event) => {
-            console.log('WebSocket closed:', event.code, event.reason);
             this.isConnected = false;
             this._updateConnectionStatus(false);
             this._stopHeartbeat();
@@ -107,7 +105,6 @@ class WebSocketClient {
                 this._handleError(data);
                 break;
             case 'connected':
-                console.log('Received connected confirmation');
                 break;
         }
     }
@@ -198,7 +195,6 @@ class WebSocketClient {
 
         this.reconnectAttempts++;
         const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
-        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
         setTimeout(() => {
             this.connect();

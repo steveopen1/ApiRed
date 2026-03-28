@@ -36,11 +36,9 @@ class DashboardApp {
     }
 
     onConnected() {
-        console.log('Connected to dashboard');
     }
 
     onDisconnected() {
-        console.log('Disconnected from dashboard');
     }
 
     onReconnectFailed(data) {

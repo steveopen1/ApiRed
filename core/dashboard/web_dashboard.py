@@ -9,14 +9,16 @@ import time
 import threading
 import subprocess
 import signal
+import ipaddress
+import re
+import secrets
+import logging
+import hashlib
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
-import secrets
-import logging
-import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +341,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
     
     def _is_safe_host(self, netloc: str) -> bool:
         """检查主机是否安全（防止 SSRF）"""
-        import ipaddress
         try:
             host = netloc.split(':')[0]
             if host in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
@@ -361,7 +362,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
     
     def _sanitize_error(self, error: str) -> str:
         """对错误信息进行脱敏处理，移除敏感内容"""
-        import re
         if not error:
             return ""
         patterns = [
@@ -650,7 +650,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         return results
     
     def log_message(self, format, *args):
-        print(f"[Dashboard] {args[0]}")
+        logger.info(f"[Dashboard] {args[0] if args else format}")
 
 
 class WebDashboard:
