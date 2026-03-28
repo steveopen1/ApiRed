@@ -181,7 +181,12 @@ class DashboardServer:
 
         msg_type = client_msg.type
 
-        if msg_type == ClientMessageType.START_SCAN.value:
+        if msg_type == 'ping':
+            await ws.send_json({
+                'type': 'pong',
+                'timestamp': datetime.now().isoformat()
+            })
+        elif msg_type == ClientMessageType.START_SCAN.value:
             await self._ws_handle_start_scan(ws, client_msg)
         elif msg_type == ClientMessageType.STOP_SCAN.value:
             await self._ws_handle_stop_scan(ws, client_msg)

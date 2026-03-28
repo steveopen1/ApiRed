@@ -201,13 +201,23 @@ const Components = {
     },
 
     /**
-     * 创建 API 表格
+     * 创建 API 表格（带分页）
      */
-    apiTable(apis) {
+    apiTable(apis, options = {}) {
         if (!apis || apis.length === 0) {
             return this.emptyState('No API endpoints found');
         }
 
+        const pageSize = options.pageSize || 50;
+        const currentPage = options.currentPage || 1;
+        const totalPages = Math.ceil(apis.length / pageSize);
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = startIdx + pageSize;
+        const pageApis = apis.slice(startIdx, endIdx);
+
+        const container = document.createElement('div');
+        container.className = 'table-container';
+        
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -224,7 +234,7 @@ const Components = {
         `;
 
         const tbody = table.querySelector('tbody');
-        apis.slice(0, 100).forEach(api => {
+        pageApis.forEach(api => {
             const row = tbody.appendChild(document.createElement('tr'));
             row.innerHTML = `
                 <td><span class="badge badge-running">${api.method || 'GET'}</span></td>
@@ -235,16 +245,37 @@ const Components = {
             `;
         });
 
-        return table;
+        const pagination = this.paginationControls(currentPage, totalPages, (page) => {
+            if (options.onPageChange) {
+                options.onPageChange(page);
+            }
+        });
+
+        container.appendChild(table);
+        if (totalPages > 1) {
+            container.appendChild(pagination);
+        }
+
+        return container;
     },
 
     /**
-     * 创建漏洞表格
+     * 创建漏洞表格（带分页）
      */
-    vulnTable(vulns) {
+    vulnTable(vulns, options = {}) {
         if (!vulns || vulns.length === 0) {
             return this.emptyState('No vulnerabilities found');
         }
+
+        const pageSize = options.pageSize || 50;
+        const currentPage = options.currentPage || 1;
+        const totalPages = Math.ceil(vulns.length / pageSize);
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = startIdx + pageSize;
+        const pageVulns = vulns.slice(startIdx, endIdx);
+
+        const container = document.createElement('div');
+        container.className = 'table-container';
 
         const table = document.createElement('table');
         table.className = 'results-table';
@@ -261,7 +292,7 @@ const Components = {
         `;
 
         const tbody = table.querySelector('tbody');
-        vulns.slice(0, 100).forEach(vuln => {
+        pageVulns.forEach(vuln => {
             const row = tbody.appendChild(document.createElement('tr'));
             row.innerHTML = `
                 <td>${this.severityBadge(vuln.severity)}</td>
@@ -271,7 +302,68 @@ const Components = {
             `;
         });
 
-        return table;
+        const pagination = this.paginationControls(currentPage, totalPages, (page) => {
+            if (options.onPageChange) {
+                options.onPageChange(page);
+            }
+        });
+
+        container.appendChild(table);
+        if (totalPages > 1) {
+            container.appendChild(pagination);
+        }
+
+        return container;
+    },
+
+    /**
+     * 分页控件
+     */
+    paginationControls(currentPage, totalPages, onPageChange) {
+        const container = document.createElement('div');
+        container.className = 'pagination-controls';
+        container.style.cssText = `
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            flex-wrap: wrap;
+        `;
+
+        const createButton = (page, text, disabled = false, className = '') => {
+            const btn = document.createElement('button');
+            btn.className = `btn btn-small ${className}`;
+            btn.textContent = text;
+            btn.disabled = disabled;
+            btn.style.cssText = 'min-width: 32px; padding: 4px 8px;';
+            btn.onclick = () => !disabled && onPageChange(page);
+            return btn;
+        };
+
+        container.appendChild(createButton(1, '«', currentPage === 1));
+        container.appendChild(createButton(currentPage - 1, '‹', currentPage === 1));
+
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            container.appendChild(createButton(i, i.toString(), false, i === currentPage ? 'btn-primary' : ''));
+        }
+
+        container.appendChild(createButton(currentPage + 1, '›', currentPage === totalPages));
+        container.appendChild(createButton(totalPages, '»', currentPage === totalPages));
+
+        const info = document.createElement('span');
+        info.style.cssText = 'margin-left: 12px; color: #888; font-size: 12px;';
+        info.textContent = `Page ${currentPage} of ${totalPages}`;
+        container.appendChild(info);
+
+        return container;
     }
 };
 

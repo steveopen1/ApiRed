@@ -12,6 +12,11 @@ class DashboardApp {
         this.selectedTaskId = null;
         this.findings = new Map();
         this.pollingIntervalId = null;
+        this.resultsCache = new Map();
+        this.paginationState = {
+            apis: { currentPage: 1, pageSize: 50 },
+            vulns: { currentPage: 1, pageSize: 50 }
+        };
     }
 
     async init() {
@@ -28,21 +33,83 @@ class DashboardApp {
         this.wsClient.on('log', (data) => this.onLog(data));
         this.wsClient.on('error', (data) => this.onError(data));
         this.wsClient.on('reconnectFailed', (data) => this.onReconnectFailed(data));
+        this.wsClient.on('networkOnline', () => this.onNetworkOnline());
+        this.wsClient.on('networkOffline', () => this.onNetworkOffline());
 
         this.setupNavigation();
         this.setupForms();
         await this.loadInitialData();
         this.startPolling();
+        
+        window.addEventListener('error', (e) => this.onGlobalError(e));
+        window.addEventListener('unhandledrejection', (e) => this.onUnhandledRejection(e));
     }
 
     onConnected() {
+        this.hideReconnectingBanner();
     }
 
     onDisconnected() {
     }
 
+    onNetworkOnline() {
+        this.showToast('Network restored', 'info');
+        this.hideReconnectingBanner();
+    }
+
+    onNetworkOffline() {
+        this.showToast('Network lost. Connection will resume when network is restored.', 'warning');
+    }
+
     onReconnectFailed(data) {
-        this.showToast('Connection lost. Please refresh the page to reconnect.', 'error');
+        this.showReconnectFailedBanner();
+    }
+    
+    showReconnectFailedBanner() {
+        const existing = document.getElementById('reconnect-banner');
+        if (existing) return;
+        
+        const banner = document.createElement('div');
+        banner.id = 'reconnect-banner';
+        banner.className = 'reconnect-banner';
+        banner.innerHTML = `
+            <span class="reconnect-icon">⚠️</span>
+            <span class="reconnect-text">Connection lost. Please refresh the page to reconnect.</span>
+            <button class="reconnect-btn" onclick="location.reload()">Refresh</button>
+        `;
+        banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10000;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+        `;
+        document.body.appendChild(banner);
+    }
+    
+    hideReconnectingBanner() {
+        const existing = document.getElementById('reconnect-banner');
+        if (existing) existing.remove();
+    }
+
+    onGlobalError(e) {
+        console.error('Global error:', e.error);
+        if (e.error && e.error.message) {
+            this.showToast(`Error: ${e.error.message}`, 'error');
+        }
+    }
+
+    onUnhandledRejection(e) {
+        console.error('Unhandled promise rejection:', e.reason);
     }
 
     onTaskUpdate(data) {
@@ -281,6 +348,44 @@ class DashboardApp {
             if (!resp.ok) throw new Error('Failed to load results');
 
             const data = await resp.json();
+            this.resultsCache.set(taskId, data);
+            
+            if (!this.paginationState[taskId]) {
+                this.paginationState[taskId] = {
+                    apis: { currentPage: 1, pageSize: 50 },
+                    vulns: { currentPage: 1, pageSize: 50 }
+                };
+            }
+            const pageState = this.paginationState[taskId];
+
+            const apiTableContainer = document.createElement('div');
+            apiTableContainer.id = `api-table-${taskId}`;
+            const vulnTableContainer = document.createElement('div');
+            vulnTableContainer.id = `vuln-table-${taskId}`;
+            
+            apiTableContainer.appendChild(Components.apiTable(
+                data.api_endpoints || [],
+                {
+                    currentPage: pageState.apis.currentPage,
+                    pageSize: pageState.apis.pageSize,
+                    onPageChange: (page) => {
+                        pageState.apis.currentPage = page;
+                        this.renderResults(taskId);
+                    }
+                }
+            ));
+            
+            vulnTableContainer.appendChild(Components.vulnTable(
+                data.vulnerabilities || [],
+                {
+                    currentPage: pageState.vulns.currentPage,
+                    pageSize: pageState.vulns.pageSize,
+                    onPageChange: (page) => {
+                        pageState.vulns.currentPage = page;
+                        this.renderResults(taskId);
+                    }
+                }
+            ));
 
             container.innerHTML = `
                 <div class="card">
@@ -296,21 +401,20 @@ class DashboardApp {
                 </div>
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">API Endpoints</h2>
-                    </div>
-                    <div class="table-container">
-                        ${Components.apiTable(data.api_endpoints || []).outerHTML}
+                        <h2 class="card-title">API Endpoints (${data.api_endpoints?.length || 0})</h2>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">Vulnerabilities</h2>
-                    </div>
-                    <div class="table-container">
-                        ${Components.vulnTable(data.vulnerabilities || []).outerHTML}
+                        <h2 class="card-title">Vulnerabilities (${data.vulnerabilities?.length || 0})</h2>
                     </div>
                 </div>
             `;
+            
+            const cards = container.querySelectorAll('.card');
+            cards[1].appendChild(apiTableContainer);
+            cards[2].appendChild(vulnTableContainer);
+            
         } catch (error) {
             console.error('Failed to render results:', error);
             container.innerHTML = Components.emptyState('Failed to load results');

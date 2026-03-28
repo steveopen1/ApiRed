@@ -155,6 +155,9 @@ class WebSocketClient {
             case 'progress':
                 this._handleProgress(data);
                 break;
+            case 'pong':
+                this._handlePong();
+                break;
             case 'finding':
                 this._handleFinding(data);
                 break;
@@ -214,6 +217,11 @@ class WebSocketClient {
         const progressData = data.data || data;
         window.dashboardApp.updateTaskProgress(taskId, progressData);
         this._emit('progress', { taskId, data: progressData });
+    }
+
+    _handlePong(data) {
+        this._clearHeartbeatTimeout();
+        this._emit('pong', data);
     }
 
     _handleFinding(data) {
