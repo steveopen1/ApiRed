@@ -83,7 +83,9 @@ class EngineConfig:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'EngineConfig':
-        return cls(**data)
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -240,7 +242,9 @@ class APIEndpoint:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'APIEndpoint':
-        return cls(**data)
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -264,7 +268,9 @@ class Vulnerability:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Vulnerability':
-        return cls(**data)
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -287,7 +293,9 @@ class ScanResult:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ScanResult':
-        return cls(**data)
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
 
 
 @dataclass
@@ -308,4 +316,6 @@ class ServerConfig:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ServerConfig':
-        return cls(**data)
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
