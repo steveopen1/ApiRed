@@ -15,7 +15,7 @@ from typing import Optional, List
 
 from core.engine import ScanEngine, EngineConfig, ScanResultAggregator, run_multi_target
 from core.utils.config import Config
-from core.dashboard.web_dashboard import WebDashboard
+from core.dashboard.server import run_server
 
 
 class CLI:
@@ -235,8 +235,7 @@ Examples:
         return 1
 
     def run_dashboard(self, host: str, port: int):
-        dashboard = WebDashboard(host=host, port=port)
-        dashboard.start()
+        asyncio.run(run_server(host=host, port=port))
 
 
 def main():

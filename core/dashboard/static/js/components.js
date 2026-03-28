@@ -27,6 +27,9 @@ const Components = {
 
         const statusBadge = this.statusBadge(task.status);
         const modeBadge = `<span class="badge badge-running">${this.escapeHtml(task.scan_mode || 'rule')}</span>`;
+        const stageBadge = task.current_stage 
+            ? `<span class="badge badge-stage">${this.escapeHtml(task.current_stage)}</span>` 
+            : '';
 
         card.innerHTML = `
             <div class="task-header">
@@ -39,6 +42,7 @@ const Components = {
                 </div>
                 <div class="task-badges">
                     ${modeBadge}
+                    ${stageBadge}
                     ${statusBadge}
                 </div>
             </div>
@@ -51,6 +55,7 @@ const Components = {
             <div class="task-stats">
                 <span>APIs: <strong>${task.total_apis || 0}</strong></span>
                 <span>Vulns: <strong>${task.vulnerabilities || 0}</strong></span>
+                ${task.high_value_apis ? `<span>High: <strong>${task.high_value_apis}</strong></span>` : ''}
             </div>
             <div class="task-actions">
                 ${task.status === 'running' ? `
@@ -131,7 +136,17 @@ const Components = {
      */
     logEntry(level, message, timestamp) {
         const entry = document.createElement('div');
-        entry.className = `log-entry ${level}`;
+        let entryClass = 'log-entry';
+        if (level === 'stage_start') {
+            entryClass += ' stage-start';
+            level = 'info';
+        } else if (level === 'stage_complete') {
+            entryClass += ' stage-end';
+            level = 'info';
+        } else {
+            entryClass += ` ${level}`;
+        }
+        entry.className = entryClass;
 
         const time = document.createElement('span');
         time.className = 'log-time';
