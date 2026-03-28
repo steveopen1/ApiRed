@@ -358,6 +358,10 @@ class DBStorage:
     def close(self):
         """关闭连接"""
         if hasattr(self._local, 'conn') and self._local.conn:
+            try:
+                self._local.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass
             self._local.conn.close()
             self._local.conn = None
 

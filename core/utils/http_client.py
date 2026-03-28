@@ -78,28 +78,29 @@ class AsyncHttpClient:
         if verify_ssl is None:
             verify_ssl = self.verify_ssl
         
-        if self._ssl_verified != verify_ssl and self.session is not None and not self.session.closed:
-            await self.session.close()
-            self.session = None
-        
-        if self.session is None or self.session.closed:
-            self._ssl_verified = verify_ssl
-            if verify_ssl:
-                ssl_context = ssl.create_default_context()
-            else:
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
+        async with self._lock:
+            if self._ssl_verified != verify_ssl and self.session is not None and not self.session.closed:
+                await self.session.close()
+                self.session = None
             
-            connector = aiohttp.TCPConnector(
-                ssl=ssl_context,
-                limit=self.max_concurrent,
-                limit_per_host=10
-            )
-            self.session = aiohttp.ClientSession(
-                connector=connector,
-                timeout=self.default_timeout
-            )
+            if self.session is None or self.session.closed:
+                self._ssl_verified = verify_ssl
+                if verify_ssl:
+                    ssl_context = ssl.create_default_context()
+                else:
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+                
+                connector = aiohttp.TCPConnector(
+                    ssl=ssl_context,
+                    limit=self.max_concurrent,
+                    limit_per_host=10
+                )
+                self.session = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=self.default_timeout
+                )
     
     async def request(
         self,

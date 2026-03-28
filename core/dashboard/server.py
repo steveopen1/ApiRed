@@ -34,6 +34,13 @@ class DashboardServer:
         self.orchestrator: Optional[ScanOrchestrator] = None
         self._ws_connections: set = set()
 
+    def _error_response(self, message: str, status: int = 400) -> web.Response:
+        """统一错误响应格式"""
+        return web.json_response({
+            'success': False,
+            'error': message
+        }, status=status)
+
     async def initialize(self):
         """初始化服务器"""
         self.task_manager = TaskManager(db_path="./results/dashboard.db")
@@ -102,7 +109,7 @@ class DashboardServer:
     async def _body_limit_middleware(self, request: web.Request, handler):
         """请求体大小限制中间件"""
         if request.content_length and request.content_length > 10 * 1024 * 1024:
-            return web.json_response({'error': 'Request body too large'}, status=413)
+            return self._error_response('Request body too large', 413)
         return await handler(request)
     
     async def start(self):
@@ -299,11 +306,11 @@ class DashboardServer:
         try:
             data = await request.json()
         except json.JSONDecodeError:
-            return web.json_response({'error': 'Invalid JSON'}, status=400)
+            return self._error_response('Invalid JSON', 400)
 
         target = data.get('target')
         if not target:
-            return web.json_response({'error': 'target is required'}, status=400)
+            return self._error_response('target is required', 400)
 
         task = await self.task_manager.create_task(
             target=target,
@@ -324,7 +331,7 @@ class DashboardServer:
         task = await self.task_manager.get_task(task_id)
 
         if not task:
-            return web.json_response({'error': 'Task not found'}, status=404)
+            return self._error_response('Task not found', 404)
 
         return web.json_response(task.to_dict())
 
@@ -334,7 +341,7 @@ class DashboardServer:
         success = await self.orchestrator.stop_scan(task_id)
 
         if not success:
-            return web.json_response({'error': 'Failed to stop task'}, status=400)
+            return self._error_response('Failed to stop task', 400)
 
         return web.json_response({'task_id': task_id, 'status': 'stopped'})
 
@@ -344,7 +351,7 @@ class DashboardServer:
         success = await self.orchestrator.resume_scan(task_id)
 
         if not success:
-            return web.json_response({'error': 'Failed to resume task'}, status=400)
+            return self._error_response('Failed to resume task', 400)
 
         return web.json_response({'task_id': task_id, 'status': 'resumed'})
 
@@ -354,7 +361,7 @@ class DashboardServer:
         success = await self.task_manager.delete_task(task_id)
 
         if not success:
-            return web.json_response({'error': 'Failed to delete task'}, status=400)
+            return self._error_response('Failed to delete task', 400)
 
         return web.json_response({'task_id': task_id, 'status': 'deleted'})
 
@@ -378,7 +385,7 @@ class DashboardServer:
         result = await self.task_manager.get_results(task_id)
 
         if not result:
-            return web.json_response({'error': 'Result not found'}, status=404)
+            return self._error_response('Result not found', 404)
 
         return web.json_response(result)
 
@@ -388,7 +395,7 @@ class DashboardServer:
         result = await self.task_manager.get_results(task_id)
 
         if not result:
-            return web.json_response({'error': 'Result not found'}, status=404)
+            return self._error_response('Result not found', 404)
 
         return web.json_response({'apis': result.get('api_endpoints', [])})
 
@@ -398,7 +405,7 @@ class DashboardServer:
         result = await self.task_manager.get_results(task_id)
 
         if not result:
-            return web.json_response({'error': 'Result not found'}, status=404)
+            return self._error_response('Result not found', 404)
 
         return web.json_response({'vulnerabilities': result.get('vulnerabilities', [])})
 
@@ -416,7 +423,7 @@ class DashboardServer:
         try:
             data = await request.json()
         except json.JSONDecodeError:
-            return web.json_response({'error': 'Invalid JSON'}, status=400)
+            return self._error_response('Invalid JSON', 400)
 
         allowed_keys = {'host', 'port', 'enable_cors', 'cors_origins', 'heartbeat_interval', 'max_log_entries', 'task_history_limit'}
         update_data = {k: v for k, v in data.items() if k in allowed_keys}
@@ -424,10 +431,10 @@ class DashboardServer:
         for key, value in update_data.items():
             if key == 'port' and isinstance(value, int):
                 if value < 1 or value > 65535:
-                    return web.json_response({'error': 'Invalid port number'}, status=400)
+                    return self._error_response('Invalid port number', 400)
             if key == 'heartbeat_interval' and isinstance(value, int):
                 if value < 1:
-                    return web.json_response({'error': 'Invalid heartbeat_interval'}, status=400)
+                    return self._error_response('Invalid heartbeat_interval', 400)
             setattr(self.config, key, value)
 
         return web.json_response({'status': 'saved'})
