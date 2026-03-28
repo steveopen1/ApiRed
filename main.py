@@ -225,7 +225,7 @@ Examples:
         parsed = self.parser.parse_args(args)
 
         if parsed.command == 'dashboard':
-            self.run_dashboard(parsed.host, parsed.port)
+            return await self.run_dashboard(parsed.host, parsed.port)
             return 0
 
         if parsed.command == 'scan' or parsed.command is None:
@@ -234,8 +234,8 @@ Examples:
         self.parser.print_help()
         return 1
 
-    def run_dashboard(self, host: str, port: int):
-        asyncio.run(run_server(host=host, port=port))
+    async def run_dashboard(self, host: str, port: int):
+        await run_server(host=host, port=port)
 
 
 def main():

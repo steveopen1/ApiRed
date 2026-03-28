@@ -137,9 +137,7 @@ class InlineJSParser:
     """
     
     API_PATH_PATTERNS = [
-        re.compile(r'''['"`](?:/api)[/a-zA-Z0-9_?&=\-\.%]+['"`]'''),
-        re.compile(r'''['"`](?:/v\d+)[/a-zA-Z0-9_?&=\-\.%]+['"`]'''),
-        re.compile(r'''['"`](?:/rest)[/a-zA-Z0-9_?&=\-\.%]+['"`]'''),
+        re.compile(r'''['"`](/(?:api|prod-api|rest|v\d+|graphql|rpc|gateway|sys-[a-z]+-api)[/a-zA-Z0-9_?&=\-\.%]+)['"`]'''),
     ]
     
     ROUTE_PATTERNS = [
