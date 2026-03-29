@@ -23,6 +23,8 @@ from .swagger_discoverer import SwaggerDiscoverer, SwaggerDoc, SwaggerEndpoint, 
 from .api_bypass import APIBypasser, SmartBypasser, BypassResult, BypassTechnique, quick_bypass
 from .passive_sources import PassiveSourceCollector, PassiveSource, collect_passive, TokenBucket
 from .smart_filter import SmartFilter, ScoredEndpoint, SmartFilter, ResponseClusterAnalyzer, prioritize_endpoints, EndpointValue
+from .burp_importer import BurpSuiteImporter, ProxyRequest, ProxyResponse, ProxyTransaction, import_burp_file, convert_burp_to_openapi
+from .postman_importer import PostmanCollectionImporter, PostmanEndpoint, import_postman_file, convert_to_openapi
 
 __all__ = [
     # JS & API Collection
@@ -69,4 +71,16 @@ __all__ = [
     'ResponseClusterAnalyzer',
     'prioritize_endpoints',
     'EndpointValue',
+    # BurpSuite Import
+    'BurpSuiteImporter',
+    'ProxyRequest',
+    'ProxyResponse',
+    'ProxyTransaction',
+    'import_burp_file',
+    'convert_burp_to_openapi',
+    # Postman Import
+    'PostmanCollectionImporter',
+    'PostmanEndpoint',
+    'import_postman_file',
+    'convert_to_openapi',
 ]

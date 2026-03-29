@@ -1,0 +1,550 @@
+# HealthcareAPI - Healthcare API Security Tests
+# Reference: HIPAA, HL7 FHIR, OWASP API Security Top 10
+# 覆盖: 患者数据、医疗记录、处方药管理、保险理赔
+
+api_version: "1.0"
+category: HealthcareAPI
+
+test_cases:
+
+  # === 患者数据访问 ===
+  - id: HEALTH-001
+    name: Patient Record Access (BOLA)
+    severity: CRITICAL
+    cwe_id: CWE-639
+    description: Test for unauthorized patient record access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "12346"
+      - "../patient/99999"
+    expected_response:
+      status_code: 200
+    validation:
+      type: bola
+      indicators:
+        - unauthorized_access: true
+        - patient_data_exposed: true
+    remediation: Implement object-level authorization. Verify patient ownership.
+
+  - id: HEALTH-002
+    name: Patient List Enumeration
+    severity: HIGH
+    cwe_id: CWE-204
+    description: Test for patient list enumeration
+    vuln_type: INFORMATION_DISCLOSURE
+    method: GET
+    path: /api/patients
+    parameters:
+      - name: page
+        type: integer
+        location: query
+      - name: limit
+        type: integer
+        location: query
+    payloads:
+      - page: 1
+        limit: 100
+      - page: 2
+        limit: 100
+    expected_response:
+      status_code: 200
+    validation:
+      type: enumeration
+      indicators:
+        - sequential_access: true
+    remediation: Implement pagination access controls.
+
+  # === 医疗记录 ===
+  - id: HEALTH-003
+    name: Medical History Access
+    severity: CRITICAL
+    cwe_id: CWE-639
+    description: Test for unauthorized medical history access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}/medical-history
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "other_patient_id"
+    expected_response:
+      status_code: 200
+    validation:
+      type: medical_record_access
+      indicators:
+        - hipaa_violation: true
+        - unauthorized_disclosure: true
+    remediation: Implement HIPAA-compliant access controls.
+
+  - id: HEALTH-004
+    name: Lab Results Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized lab results access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}/lab-results
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "12345_other"
+    expected_response:
+      status_code: 200
+    validation:
+      type: lab_results_access
+      indicators:
+        - unauthorized_lab_access: true
+    remediation: Verify patient consent and authorization.
+
+  # === 处方药管理 ===
+  - id: HEALTH-005
+    name: Prescription Data Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for prescription data manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/prescription
+    parameters:
+      - name: patientId
+        type: string
+        location: body
+      - name: medication
+        type: string
+        location: body
+      - name: dosage
+        type: string
+        location: body
+    payloads:
+      - patientId: "12345"
+        medication: "Vicodin"
+        dosage: "1000mg"
+      - patientId: "12345"
+        medication: "Placebo"
+        dosage: "9999"
+    expected_response:
+      status_code: 201
+    validation:
+      type: prescription_validation
+      indicators:
+        - dosage_exceeded: true
+        - drug_interaction: true
+    remediation: Validate dosages against known limits. Check interactions.
+
+  - id: HEALTH-006
+    name: Controlled Substance Access
+    severity: CRITICAL
+    cwe_id: CWE-639
+    description: Test for controlled substance prescription access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}/prescriptions/controlled
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "other_patient"
+    expected_response:
+      status_code: 200
+    validation:
+      type: controlled_access
+      indicators:
+        - unauthorized_csa_access: true
+    remediation: Implement DEA Schedule verification.
+
+  # === 保险理赔 ===
+  - id: HEALTH-007
+    name: Insurance Claim Manipulation
+    severity: HIGH
+    cwe_id: CWE-20
+    description: Test for insurance claim amount manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/claim/submit
+    parameters:
+      - name: patientId
+        type: string
+        location: body
+      - name: amount
+        type: number
+        location: body
+      - name: procedureCode
+        type: string
+        location: body
+    payloads:
+      - patientId: "12345"
+        amount: 99999.99
+        procedureCode: "99213"
+      - patientId: "12345"
+        amount: -1000
+        procedureCode: "99214"
+    expected_response:
+      status_code: 201
+    validation:
+      type: claim_validation
+      indicators:
+        - amount_manipulation: true
+    remediation: Validate claim amounts against fee schedules.
+
+  - id: HEALTH-008
+    name: Claim History Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized claim history access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}/claims
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "12346"
+    expected_response:
+      status_code: 200
+    validation:
+      type: claim_access
+      indicators:
+        - unauthorized_claim_access: true
+    remediation: Verify insurance coverage and patient authorization.
+
+  # === 预约管理 ===
+  - id: HEALTH-009
+    name: Appointment Enumeration
+    severity: MEDIUM
+    cwe_id: CWE-204
+    description: Test for appointment enumeration
+    vuln_type: INFORMATION_DISCLOSURE
+    method: GET
+    path: /api/appointments
+    parameters:
+      - name: date
+        type: string
+        location: query
+      - name: provider
+        type: string
+        location: query
+    payloads:
+      - date: "2024-01-01"
+        provider: "Dr.Smith"
+      - date: "2024-01-02"
+        provider: "Dr.Smith"
+    expected_response:
+      status_code: 200
+    validation:
+      type: appointment_enum
+      indicators:
+        - slot_enumeration: true
+    remediation: Implement appointment access controls.
+
+  - id: HEALTH-010
+    name: Appointment Cancellation Manipulation
+    severity: MEDIUM
+    cwe_id: CWE-285
+    description: Test for unauthorized appointment cancellation
+    vuln_type: IDOR
+    method: DELETE
+    path: /api/appointment/{appointmentId}
+    parameters:
+      - name: appointmentId
+        type: string
+        location: path
+    payloads:
+      - "APT123"
+      - "APT456"
+    expected_response:
+      status_code: 200
+    validation:
+      type: appointment_idor
+      indicators:
+        - unauthorized_cancellation: true
+    remediation: Verify appointment ownership before cancellation.
+
+  # === 医疗设备数据 ===
+  - id: HEALTH-011
+    name: Medical Device Data Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized medical device data access
+    vuln_type: BOLA
+    method: GET
+    path: /api/device/{deviceId}/readings
+    parameters:
+      - name: deviceId
+        type: string
+        location: path
+    payloads:
+      - "device_123"
+      - "device_456"
+    expected_response:
+      status_code: 200
+    validation:
+      type: device_access
+      indicators:
+        - unauthorized_device_data: true
+    remediation: Implement device pairing verification.
+
+  - id: HEALTH-012
+    name: Device Data Manipulation
+    severity: HIGH
+    cwe_id: CWE-20
+    description: Test for medical device data manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/device/{deviceId}/reading
+    parameters:
+      - name: deviceId
+        type: string
+        location: path
+      - name: value
+        type: number
+        location: body
+      - name: timestamp
+        type: string
+        location: body
+    payloads:
+      - deviceId: "device_123"
+        value: 99999
+        timestamp: "2024-01-01T00:00:00Z"
+    expected_response:
+      status_code: 201
+    validation:
+      type: device_validation
+      indicators:
+        - implausible_value: true
+    remediation: Validate device readings against normal ranges.
+
+  # === HIPAA 隐私 ===
+  - id: HEALTH-013
+    name: PHI Exposure via API
+    severity: CRITICAL
+    cwe_id: CWE-200
+    description: Test for Protected Health Information exposure
+    vuln_type: SENSITIVE_DATA_EXPOSURE
+    method: GET
+    path: /api/patient/{patientId}
+    payloads:
+      - "12345"
+    expected_response:
+      status_code: 200
+    validation:
+      type: phi_exposure
+      indicators:
+        - ssn_exposed: true
+        - dob_exposed: true
+        - address_exposed: true
+    remediation: Implement HIPAA minimum necessary standard.
+
+  - id: HEALTH-014
+    name: Audit Log Access
+    severity: MEDIUM
+    cwe_id: CWE-639
+    description: Test for unauthorized audit log access
+    vuln_type: IDOR
+    method: GET
+    path: /api/audit/patient/{patientId}
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "12346"
+    expected_response:
+      status_code: 200
+    validation:
+      type: audit_access
+      indicators:
+        - unauthorized_audit_access: true
+    remediation: Restrict audit log access to compliance officers.
+
+  # === 供应商管理 ===
+  - id: HEALTH-015
+    name: Provider Schedule Access
+    severity: LOW
+    cwe_id: CWE-284
+    description: Test for provider schedule information disclosure
+    vuln_type: INFORMATION_DISCLOSURE
+    method: GET
+    path: /api/provider/{providerId}/schedule
+    parameters:
+      - name: providerId
+        type: string
+        location: path
+    payloads:
+      - "DR001"
+      - "DR002"
+    expected_response:
+      status_code: 200
+    validation:
+      type: schedule_access
+      indicators:
+        - schedule_disclosure: true
+    remediation: Control provider schedule visibility.
+
+  # === 跨患者操作 ===
+  - id: HEALTH-016
+    name: Cross-Patient Record Linking
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized cross-patient record linking
+    vuln_type: BOLA
+    method: POST
+    path: /api/patient/{patientId}/emergency-contact
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+      - name: contactPatientId
+        type: string
+        location: body
+    payloads:
+      - patientId: "12345"
+        contactPatientId: "67890"
+    expected_response:
+      status_code: 201
+    validation:
+      type: cross_patient
+      indicators:
+        - unauthorized_linking: true
+    remediation: Verify patient consent for record linking.
+
+  # === 医疗转录 ===
+  - id: HEALTH-017
+    name: Medical Transcription Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized medical transcription access
+    vuln_type: BOLA
+    method: GET
+    path: /api/patient/{patientId}/transcriptions
+    parameters:
+      - name: patientId
+        type: string
+        location: path
+    payloads:
+      - "12345"
+      - "12346"
+    expected_response:
+      status_code: 200
+    validation:
+      type: transcription_access
+      indicators:
+        - unauthorized_transcription_access: true
+    remediation: Implement role-based transcription access.
+
+  # === FHIR API ===
+  - id: HEALTH-018
+    name: FHIR Patient Resource Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for FHIR Patient resource unauthorized access
+    vuln_type: BOLA
+    method: GET
+    path: /fhir/Patient/{id}
+    parameters:
+      - name: id
+        type: string
+        location: path
+    payloads:
+      - "patient-123"
+      - "patient-456"
+    expected_response:
+      status_code: 200
+    validation:
+      type: fhir_access
+      indicators:
+        - unauthorized_fhir_access: true
+    remediation: Implement SMART on FHIR authorization.
+
+  - id: HEALTH-019
+    name: FHIR Observation Creation
+    severity: HIGH
+    cwe_id: CWE-20
+    description: Test for unauthorized FHIR Observation creation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /fhir/Observation
+    parameters:
+      - name: subject
+        type: string
+        location: body
+      - name: value
+        type: number
+        location: body
+    payloads:
+      - subject: "Patient/123"
+        value: -999999
+    expected_response:
+      status_code: 201
+    validation:
+      type: fhir_validation
+      indicators:
+        - implausible_observation: true
+    remediation: Validate FHIR resource contents.
+
+  # === 批量操作 ===
+  - id: HEALTH-020
+    name: Mass Patient Data Export
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for mass unauthorized patient data export
+    vuln_type: BOLA
+    method: POST
+    path: /api/patient/export
+    parameters:
+      - name: patientIds
+        type: array
+        location: body
+      - name: format
+        type: string
+        location: body
+    payloads:
+      - patientIds: ["12345", "12346", "12347", "12348", "12349"]
+        format: "csv"
+    expected_response:
+      status_code: 200
+    validation:
+      type: mass_export
+      indicators:
+        - mass_phi_export: true
+    remediation: Implement data export approval workflow.
+
+  # === 会话安全 ===
+  - id: HEALTH-021
+    name: Healthcare Session Hijacking
+    severity: CRITICAL
+    cwe_id: CWE-307
+    description: Test for healthcare session hijacking vulnerability
+    vuln_type: SESSION_HIJACKING
+    method: GET
+    path: /api/patient/dashboard
+    parameters:
+      - name: sessionToken
+        type: string
+        location: header
+    payloads:
+      - sessionToken: "STOLEN_TOKEN"
+    expected_response:
+      status_code: 200
+    validation:
+      type: session_hijack
+      indicators:
+        - session_stolen: true
+    remediation: Implement secure session management. Use short timeouts.

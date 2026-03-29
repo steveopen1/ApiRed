@@ -1,0 +1,614 @@
+# FinanceAPI - Financial API Security Tests
+# Reference: PCI-DSS, OWASP API Security Top 10,金融行业API安全规范
+# 覆盖: 账户管理、支付交易、贷款风控、反欺诈
+
+api_version: "1.0"
+category: FinanceAPI
+
+test_cases:
+
+  # === 账户安全 ===
+  - id: FIN-001
+    name: Account Balance Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for account balance manipulation vulnerabilities
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: GET
+    path: /api/account/{accountId}/balance
+    parameters:
+      - name: accountId
+        type: string
+        location: path
+    payloads:
+      - "../other_account"
+      - "'; UPDATE accounts SET balance=999999 WHERE id='123"
+    expected_response:
+      check_pattern: "balance|account"
+    validation:
+      type: balance_check
+      indicators:
+        - unauthorized_balance_access: true
+    remediation: Implement proper authorization checks.
+
+  - id: FIN-002
+    name: Account Number Enumeration
+    severity: HIGH
+    cwe_id: CWE-204
+    description: Test for account number enumeration via response difference
+    vuln_type: INFORMATION_DISCLOSURE
+    method: GET
+    path: /api/account/{accountNumber}
+    payloads:
+      - "1234567890"
+      - "1234567891"
+      - "1234567892"
+    expected_response:
+      status_code: 200
+    validation:
+      type: enumeration
+      indicators:
+        - status_code_difference: true
+        - response_length_difference: true
+    remediation: Use indirect references. Return consistent responses.
+
+  # === 支付交易 ===
+  - id: FIN-003
+    name: Payment Amount Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for payment amount manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/payment/transfer
+    parameters:
+      - name: amount
+        type: number
+        location: body
+      - name: fromAccount
+        type: string
+        location: body
+      - name: toAccount
+        type: string
+        location: body
+    payloads:
+      - amount: 0.01
+      - amount: -100
+      - amount: 999999999.99
+      - amount: "'; UPDATE accounts SET balance=0 WHERE id='123"
+    expected_response:
+      status_code: 201
+    validation:
+      type: amount_validation
+      indicators:
+        - negative_amount: true
+        - excessive_amount: true
+    remediation: Validate amounts server-side. Use decimal type.
+
+  - id: FIN-004
+    name: Currency Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for currency code manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/payment/convert
+    parameters:
+      - name: fromCurrency
+        type: string
+        location: body
+      - name: toCurrency
+        type: string
+        location: body
+      - name: amount
+        type: number
+        location: body
+    payloads:
+      - fromCurrency: USD
+        toCurrency: USD
+        amount: 1000
+      - fromCurrency: USD
+        toCurrency: EUR
+        amount: 1
+      - fromCurrency: XXX
+        toCurrency: XXX
+        amount: 1
+    expected_response:
+      status_code: 200
+    validation:
+      type: currency_check
+      indicators:
+        - invalid_currency: true
+    remediation: Validate currency codes against ISO 4217.
+
+  - id: FIN-005
+    name: Transaction History Access
+    severity: HIGH
+    cwe_id: CWE-639
+    description: Test for unauthorized transaction history access
+    vuln_type: IDOR
+    method: GET
+    path: /api/account/{accountId}/transactions
+    parameters:
+      - name: accountId
+        type: string
+        location: path
+    payloads:
+      - "12345_other_user"
+      - "../admin/transactions"
+    expected_response:
+      status_code: 200
+    validation:
+      type: idor
+      indicators:
+        - unauthorized_access: true
+    remediation: Implement object-level authorization.
+
+  # === 贷款风控 ===
+  - id: FIN-006
+    name: Loan Amount Limit Bypass
+    severity: HIGH
+    cwe_id: CWE-20
+    description: Test for loan amount limit bypass
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/loan/apply
+    parameters:
+      - name: amount
+        type: number
+        location: body
+      - name: term
+        type: integer
+        location: body
+    payloads:
+      - amount: 10000000
+        term: 360
+      - amount: 0
+        term: 0
+      - amount: -1000
+        term: 12
+    expected_response:
+      status_code: 201
+    validation:
+      type: limit_check
+      indicators:
+        - exceeds_limit: true
+    remediation: Validate limits server-side.
+
+  - id: FIN-007
+    name: Interest Rate Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for interest rate manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/loan/calculate
+    parameters:
+      - name: principal
+        type: number
+        location: body
+      - name: rate
+        type: number
+        location: body
+      - name: term
+        type: integer
+        location: body
+    payloads:
+      - principal: 10000
+        rate: 0
+        term: 12
+      - principal: 10000
+        rate: -5
+        term: 12
+      - principal: 10000
+        rate: 99.99
+        term: 12
+    expected_response:
+      status_code: 200
+    validation:
+      type: rate_validation
+      indicators:
+        - invalid_rate: true
+    remediation: Calculate rates server-side. Don't trust client input.
+
+  # === 反欺诈 ===
+  - id: FIN-008
+    name: Card Number Enumeration
+    severity: HIGH
+    cwe_id: CWE-204
+    description: Test for card number enumeration
+    vuln_type: INFORMATION_DISCLOSURE
+    method: POST
+    path: /api/payment/validate
+    parameters:
+      - name: cardNumber
+        type: string
+        location: body
+      - name: cvv
+        type: string
+        location: body
+    payloads:
+      - cardNumber: "4111111111111111"
+        cvv: "123"
+      - cardNumber: "4111111111111112"
+        cvv: "123"
+    expected_response:
+      status_code: 200
+    validation:
+      type: card_validation
+      indicators:
+        - response_timing: true
+        - status_difference: true
+    remediation: Use constant-time comparison. Rate limit validation.
+
+  - id: FIN-009
+    name: CVV Bypass
+    severity: CRITICAL
+    cwe_id: CWE-345
+    description: Test for CVV bypass
+    vuln_type: BROKEN_AUTH
+    method: POST
+    path: /api/payment/process
+    parameters:
+      - name: cardNumber
+        type: string
+        location: body
+      - name: expiryMonth
+        type: string
+        location: body
+      - name: expiryYear
+        type: string
+        location: body
+    payloads:
+      - cardNumber: "4111111111111111"
+        expiryMonth: "12"
+        expiryYear: "2025"
+        cvv: "000"
+      - cardNumber: "4111111111111111"
+        expiryMonth: "12"
+        expiryYear: "2025"
+        cvv: "123"
+    expected_response:
+      status_code: 200
+    validation:
+      type: cvv_check
+      indicators:
+        - cvv_bypassed: true
+    remediation: Always validate CVV. Use 3DS for additional security.
+
+  # === 账户注册/登录 ===
+  - id: FIN-010
+    name: Registration Email Enumeration
+    severity: MEDIUM
+    cwe_id: CWE-204
+    description: Test for email enumeration during registration
+    vuln_type: INFORMATION_DISCLOSURE
+    method: POST
+    path: /api/user/register
+    parameters:
+      - name: email
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - email: "test@example.com"
+        password: "Test1234"
+      - email: "admin@company.com"
+        password: "Test1234"
+    expected_response:
+      status_code: 409
+    validation:
+      type: email_enum
+      indicators:
+        - email_exists: true
+    remediation: Use generic error messages. Implement rate limiting.
+
+  - id: FIN-011
+    name: Login Brute Force
+    severity: HIGH
+    cwe_id: CWE-307
+    description: Test for login brute force vulnerability
+    vuln_type: BROKEN_AUTH
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: "admin@company.com"
+        password: "password1"
+      - username: "admin@company.com"
+        password: "password2"
+      - username: "admin@company.com"
+        password: "password3"
+    expected_response:
+      status_code: 401
+    validation:
+      type: brute_force
+      indicators:
+        - no_account_lockout: true
+        - no_rate_limit: true
+    remediation: Implement account lockout. Add CAPTCHA. Use MFA.
+
+  # === 账户锁定 ===
+  - id: FIN-012
+    name: Account Lockout Bypass
+    severity: MEDIUM
+    cwe_id: CWE-307
+    description: Test for account lockout bypass via username variation
+    vuln_type: BROKEN_AUTH
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: "admin@company.com"
+        password: "wrong"
+      - username: "Admin@company.com"
+        password: "wrong"
+      - username: "ADMIN@COMPANY.COM"
+        password: "wrong"
+    expected_response:
+      status_code: 401
+    validation:
+      type: lockout_bypass
+      indicators:
+        - case_variation_bypass: true
+    remediation: Implement case-insensitive username matching.
+
+  # === 会话管理 ===
+  - id: FIN-013
+    name: Session Token Prediction
+    severity: CRITICAL
+    cwe_id: CWE-340
+    description: Test for predictable session tokens
+    vuln_type: BROKEN_AUTH
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - username: "user1@company.com"
+        password: "ValidPass123"
+      - username: "user2@company.com"
+        password: "ValidPass123"
+    expected_response:
+      status_code: 200
+    validation:
+      type: session_prediction
+      indicators:
+        - sequential_tokens: true
+        - predictable_pattern: true
+    remediation: Use cryptographically secure random tokens.
+
+  - id: FIN-014
+    name: Session Fixation
+    severity: HIGH
+    cwe_id: CWE-384
+    description: Test for session fixation vulnerability
+    vuln_type: SESSION_FIXATION
+    method: GET
+    path: /api/auth/login
+    parameters:
+      - name: sessionId
+        type: string
+        location: query
+    payloads:
+      - sessionId: "KNOWN_SESSION_ID"
+    expected_response:
+      status_code: 200
+    validation:
+      type: session_fixation
+      indicators:
+        - session_not_regenerated: true
+    remediation: Regenerate session ID after authentication.
+
+  # === API Key 安全 ===
+  - id: FIN-015
+    name: API Key Enumeration
+    severity: HIGH
+    cwe_id: CWE-204
+    description: Test for API key enumeration
+    vuln_type: INFORMATION_DISCLOSURE
+    method: GET
+    path: /api/user/api-keys
+    parameters:
+      - name: userId
+        type: string
+        location: query
+    payloads:
+      - userId: "user123"
+      - userId: "user124"
+    expected_response:
+      status_code: 200
+    validation:
+      type: key_enumeration
+      indicators:
+        - unauthorized_key_access: true
+    remediation: Require proper authentication for API key access.
+
+  - id: FIN-016
+    name: API Key in URL
+    severity: HIGH
+    cwe_id: CWE-598
+    description: Test for API key exposure in URL
+    vuln_type: SENSITIVE_DATA_EXPOSURE
+    method: GET
+    path: /api/data/export
+    parameters:
+      - name: apiKey
+        type: string
+        location: query
+      - name: format
+        type: string
+        location: query
+    payloads:
+      - apiKey: "sk_live_xxxxx"
+        format: "csv"
+    expected_response:
+      status_code: 200
+    validation:
+      type: key_exposure
+      indicators:
+        - key_in_url: true
+    remediation: Send API keys via headers, not URL parameters.
+
+  # === 回调/Webhook ===
+  - id: FIN-017
+    name: Payment Callback IP Spoofing
+    severity: CRITICAL
+    cwe_id: CWE-346
+    description: Test for payment callback IP spoofing vulnerability
+    vuln_type: SSRF
+    method: POST
+    path: /api/payment/callback
+    parameters:
+      - name: transactionId
+        type: string
+        location: body
+      - name: status
+        type: string
+        location: body
+      - name: amount
+        type: number
+        location: body
+    payloads:
+      - transactionId: "TXN123456"
+        status: "SUCCESS"
+        amount: 9999.99
+    expected_response:
+      status_code: 200
+    validation:
+      type: callback_verification
+      indicators:
+        - ip_not_verified: true
+        - signature_not_validated: true
+    remediation: Verify IP ranges. Use HMAC signatures.
+
+  - id: FIN-018
+    name: Webhook Replay Attack
+    severity: HIGH
+    cwe_id: CWE-345
+    description: Test for webhook replay attack
+    vuln_type: REPLAY_ATTACK
+    method: POST
+    path: /api/payment/webhook
+    parameters:
+      - name: event
+        type: string
+        location: body
+      - name: transactionId
+        type: string
+        location: body
+      - name: timestamp
+        type: integer
+        location: body
+    payloads:
+      - event: "payment.completed"
+        transactionId: "TXN123456"
+        timestamp: 1640000000
+    expected_response:
+      status_code: 200
+    validation:
+      type: replay_check
+      indicators:
+        - no_timestamp_check: true
+        - no_nonce: true
+    remediation: Verify timestamps. Use nonces. Implement idempotency.
+
+  # === 数据导出 ===
+  - id: FIN-019
+    name: Mass Data Export
+    severity: HIGH
+    cwe_id: CWE-20
+    description: Test for mass unauthorized data export
+    vuln_type: BOLA
+    method: GET
+    path: /api/account/{accountId}/export
+    parameters:
+      - name: accountId
+        type: string
+        location: path
+      - name: format
+        type: string
+        location: query
+    payloads:
+      - accountId: "ALL"
+        format: "csv"
+      - accountId: "*"
+        format: "pdf"
+    expected_response:
+      status_code: 200
+    validation:
+      type: data_export
+      indicators:
+        - mass_export: true
+    remediation: Implement access controls. Audit logging.
+
+  # === 内部API ===
+  - id: FIN-020
+    name: Internal Admin API Access
+    severity: CRITICAL
+    cwe_id: CWE-284
+    description: Test for internal admin API exposure
+    vuln_type: SECURITY_MISCONFIG
+    method: GET
+    path: /api/internal/admin/users
+    payloads: []
+    expected_response:
+      status_code: 200
+    validation:
+      type: internal_access
+      indicators:
+        - internal_exposed: true
+    remediation: Restrict internal APIs. Use network segmentation.
+
+  # === 加密货币 (如果适用) ===
+  - id: FIN-021
+    name: Wallet Balance Manipulation
+    severity: CRITICAL
+    cwe_id: CWE-20
+    description: Test for cryptocurrency wallet balance manipulation
+    vuln_type: IMPROPER_INPUT_VALIDATION
+    method: POST
+    path: /api/wallet/transfer
+    parameters:
+      - name: fromWallet
+        type: string
+        location: body
+      - name: toWallet
+        type: string
+        location: body
+      - name: amount
+        type: number
+        location: body
+    payloads:
+      - fromWallet: "wallet_123"
+        toWallet: "wallet_456"
+        amount: -100
+      - fromWallet: "wallet_123"
+        toWallet: "wallet_456"
+        amount: 1000000
+    expected_response:
+      status_code: 200
+    validation:
+      type: wallet_validation
+      indicators:
+        - balanceManipulation: true
+    remediation: Validate amounts server-side. Use big decimal.
