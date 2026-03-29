@@ -83,6 +83,13 @@ class DashboardServer:
         self.app.router.add_get('/api/health', self._handle_health)
         self.app.router.add_get('/api/tasks/{task_id}/apis', self._handle_get_apis)
         self.app.router.add_get('/api/tasks/{task_id}/vulns', self._handle_get_vulns)
+        self.app.router.add_post('/api/import/burp', self._handle_import_burp)
+        self.app.router.add_post('/api/import/postman', self._handle_import_postman)
+        self.app.router.add_post('/api/schedule', self._handle_create_schedule)
+        self.app.router.add_get('/api/schedule', self._handle_list_schedules)
+        self.app.router.add_delete('/api/schedule/{task_id}', self._handle_delete_schedule)
+        self.app.router.add_get('/api/results/{task_id}/report', self._handle_get_enhanced_report)
+
 
         static_path = os.path.join(os.path.dirname(__file__), 'static')
         if os.path.exists(static_path):
@@ -456,6 +463,197 @@ class DashboardServer:
 
         return web.json_response(health)
 
+
+
+    async def _handle_import_burp(self, request: web.Request) -> web.Response:
+        """导入 BurpSuite 流量文件"""
+        try:
+            reader = await request.multipart()
+            field = await reader.next()
+            if not field:
+                return self._error_response('No file provided')
+            
+            filename = field.filename or 'upload'
+            content = await field.read()
+            
+            from ..collectors import BurpSuiteImporter
+            importer = BurpSuiteImporter()
+            
+            try:
+                if filename.endswith('.csv'):
+                    importer.import_csv(content.decode('utf-8', errors='ignore'))
+                elif filename.endswith('.json'):
+                    importer.import_json(content.decode('utf-8', errors='ignore'))
+                elif filename.endswith('.xml'):
+                    importer.import_xml(content.decode('utf-8', errors='ignore'))
+                elif filename.endswith('.har'):
+                    importer.import_har(content.decode('utf-8', errors='ignore'))
+                else:
+                    return self._error_response('Unsupported format. Use CSV/JSON/XML/HAR')
+            except Exception as parse_err:
+                logger.warning(f"Parse error: {parse_err}")
+            
+            summary = importer.get_traffic_summary()
+            endpoints = importer.get_api_endpoints()
+            
+            logger.info(f"BurpSuite import: {summary.get('total_transactions', 0)} transactions, {len(endpoints)} endpoints")
+            
+            return web.json_response({
+                'success': True,
+                'count': len(endpoints),
+                'endpoints': endpoints,
+                'summary': summary
+            })
+            
+        except Exception as e:
+            logger.error(f"BurpSuite import error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_import_postman(self, request: web.Request) -> web.Response:
+        """导入 Postman Collection"""
+        try:
+            reader = await request.multipart()
+            field = await reader.next()
+            if not field:
+                return self._error_response('No file provided')
+            
+            content = await field.read()
+            
+            from ..collectors import PostmanCollectionImporter
+            importer = PostmanCollectionImporter()
+            
+            try:
+                importer.import_collection(content.decode('utf-8'))
+            except Exception as parse_err:
+                logger.warning(f"Parse error: {parse_err}")
+            
+            summary = importer.get_endpoints_summary()
+            endpoints = importer.get_api_endpoints()
+            
+            logger.info(f"Postman import: {summary.get('total_endpoints', 0)} endpoints")
+            
+            return web.json_response({
+                'success': True,
+                'count': len(endpoints),
+                'endpoints': endpoints,
+                'summary': summary
+            })
+            
+        except Exception as e:
+            logger.error(f"Postman import error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_create_schedule(self, request: web.Request) -> web.Response:
+        """创建定时扫描任务"""
+        try:
+            data = await request.json()
+            target = data.get('target', '')
+            cron_expr = data.get('cron', '')
+            
+            if not target:
+                return self._error_response('Target is required')
+            if not cron_expr:
+                return self._error_response('Cron expression is required')
+            
+            from ..scheduled_testing import CronScheduler
+            import time
+            
+            scheduler = CronScheduler()
+            task_id = f"sched_{int(time.time())}"
+            
+            scheduler.add_task(
+                task_id=task_id,
+                name=f"Scheduled: {target}",
+                target=target,
+                cron_expression=cron_expr,
+                trigger_type='cron',
+                config=data.get('config', {})
+            )
+            
+            logger.info(f"Created schedule: {task_id} for {target} with cron {cron_expr}")
+            
+            return web.json_response({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Schedule created'
+            })
+            
+        except Exception as e:
+            logger.error(f"Create schedule error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_list_schedules(self, request: web.Request) -> web.Response:
+        """列出所有定时任务"""
+        try:
+            from ..scheduled_testing import CronScheduler
+            
+            scheduler = CronScheduler()
+            summary = scheduler.get_schedule_summary()
+            
+            return web.json_response({
+                'success': True,
+                'tasks': summary.get('tasks', [])
+            })
+            
+        except Exception as e:
+            logger.error(f"List schedules error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_delete_schedule(self, request: web.Request) -> web.Response:
+        """删除定时任务"""
+        try:
+            task_id = request.match_info.get('task_id', '')
+            
+            from ..scheduled_testing import CronScheduler
+            
+            scheduler = CronScheduler()
+            scheduler.remove_task(task_id)
+            
+            logger.info(f"Deleted schedule: {task_id}")
+            
+            return web.json_response({
+                'success': True,
+                'message': f'Task {task_id} deleted'
+            })
+            
+        except Exception as e:
+            logger.error(f"Delete schedule error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_get_enhanced_report(self, request: web.Request) -> web.Response:
+        """生成增强 HTML 报告"""
+        try:
+            task_id = request.match_info.get('task_id', '')
+            
+            if not self.task_manager:
+                return self._error_response('Task manager not initialized')
+            
+            result = await self.task_manager.get_result(task_id)
+            if not result:
+                return self._error_response('Result not found', 404)
+            
+            from ..exporters.enhanced_html_reporter import EnhancedHtmlReporter
+            
+            output_dir = f'./results/{task_id}'
+            os.makedirs(output_dir, exist_ok=True)
+            report_path = os.path.join(output_dir, 'enhanced_report.html')
+            
+            data = result.to_dict() if hasattr(result, 'to_dict') else result
+            
+            reporter = EnhancedHtmlReporter()
+            reporter.export(data, report_path)
+            
+            logger.info(f"Generated enhanced report: {report_path}")
+            
+            return web.json_response({
+                'success': True,
+                'report_path': report_path,
+                'report_url': f'/results/{task_id}/enhanced_report.html'
+            })
+            
+        except Exception as e:
+            logger.error(f"Enhanced report error: {e}")
+            return self._error_response(str(e), 500)
 
 async def run_server(host: str = "0.0.0.0", port: int = 8080):
     """运行服务器"""
