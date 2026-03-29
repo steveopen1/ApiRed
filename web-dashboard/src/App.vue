@@ -7,7 +7,7 @@
 
 <script setup>
 import { ref, onMounted, provide } from 'vue'
-import { useAuthStore } from './stores/auth'
+import { useAuthStore } from './stores'
 import LoginView from './views/LoginView.vue'
 
 const authStore = useAuthStore()

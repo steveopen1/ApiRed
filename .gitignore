@@ -21,11 +21,11 @@ nul
 
 plugins/js_analysis/node_modules/
 
-js_response/
-*.har
-*.pcap
-*.pcapng
-*.zip
+# Node.js
+node_modules/
+dist/
+package-lock.json
+npm-debug.log*
 
 # Local documentation (not for git)
 .monkeycode/

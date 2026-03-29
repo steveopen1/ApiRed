@@ -102,7 +102,7 @@ class PassiveSourceCollector:
             parallel_requests=2,
         ),
         PassiveSource.CRTSH: SourceConfig(
-            name=PassiveSource.CRTSh,
+            name=PassiveSource.CRTSH,
             base_url="https://crt.sh",
             rate_limit=20,
             max_results=5000,

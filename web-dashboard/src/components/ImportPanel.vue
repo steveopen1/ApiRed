@@ -62,11 +62,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useApiStore, api } from '../stores'
+import { api } from '../stores'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-
-const apiStore = useApiStore()
 
 const importedEndpoints = ref([])
 const burpUpload = ref(null)

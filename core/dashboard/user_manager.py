@@ -142,8 +142,8 @@ class UserManager:
         
         try:
             self.conn.execute('''
-                INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, username, password_hash, role, email, 1, time.time()))
+                INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, username, password_hash, role, email, 1, time.time(), None))
             self.conn.commit()
             logger.info(f"Created user: {username} with role {role}")
             return user_id
