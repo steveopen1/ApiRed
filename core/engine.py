@@ -66,6 +66,7 @@ from .kubernetes_security import K8sSecurityTester, K8sVulnResult
 from .container_security import ContainerSecurityTester, ContainerVulnResult
 from .cicd_scanner import CICDScanner, CICDVulnResult
 from .cloud_security import CloudBucketTester, CloudSecretScanner, CloudVulnResult
+from .api_posture import SecurityPostureAnalyzer, analyze_security_posture, APICoverageAnalyzer
 from .config.api_patterns import COMMON_API_PATHS, RESTFUL_SUFFIXES, FUZZ_SUFFIXES, PATH_FRAGMENTS
 
 
@@ -3393,6 +3394,16 @@ class ScanEngine:
                 'prioritized_vulns': self._flux_results.get('prioritized_vulns', []),
             }
             logger.info(f"[FLUX] 增强数据已合并到报告: {len(self._flux_results.get('fingerprints', []))} 指纹, {len(self._flux_results.get('flux_sensitive', []))} 敏感信息")
+        
+        try:
+            posture_report = analyze_security_posture(
+                endpoints=scan_dict.get('api_endpoints', []),
+                vulnerabilities=scan_dict.get('vulnerabilities', [])
+            )
+            scan_dict['security_posture'] = posture_report
+            logger.info(f"[Posture] 安全态势评分: {posture_report.get('security_posture', {}).get('overall_score', 0)}")
+        except Exception as e:
+            logger.debug(f"Security posture analysis skipped: {e}")
         
         self.file_storage.save_json(scan_dict, 'scan_result.json')
         
