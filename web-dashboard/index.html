@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApiRed - API Security Scanner Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.5.0/dist/index.css">
+    <script src="https://unpkg.com/vue@3.4.0/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus@2.5.0/dist/index.full.js"></script>
+    <script src="https://unpkg.com/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        #app { min-height: 100vh; }
+        .header {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-title {
+            color: white;
+            font-size: 1.5em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-title .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .main-container {
+            padding: 20px 30px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+        }
+        .stat-card:hover { transform: translateY(-3px); }
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-label { color: #666; margin-top: 5px; }
+        .severity-critical { color: #dc3545; }
+        .severity-high { color: #fd7e14; }
+        .severity-medium { color: #ffc107; }
+        .severity-low { color: #28a745; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .badge-critical { background: #dc3545; color: white; }
+        .badge-high { background: #fd7e14; color: white; }
+        .badge-medium { background: #ffc107; color: #333; }
+        .badge-low { background: #28a745; color: white; }
+        .badge-info { background: #17a2b8; color: white; }
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: bold;
+            color: white;
+        }
+        .method-get { background: #61affe; }
+        .method-post { background: #49cc90; }
+        .method-put { background: #fca130; }
+        .method-delete { background: #f93e3e; }
+        .method-patch { background: #ab2fff; }
+        .el-menu { background: transparent !important; border: none !important; }
+        .el-menu-item { color: rgba(255,255,255,0.8) !important; }
+        .el-menu-item:hover, .el-menu-item.is-active { background: rgba(255,255,255,0.1) !important; color: white !important; }
+        .nav-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.05);
+            padding: 5px;
+            border-radius: 10px;
+        }
+        .nav-tab {
+            padding: 10px 20px;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+            font-size: 0.95em;
+        }
+        .nav-tab:hover { background: rgba(255,255,255,0.1); color: white; }
+        .nav-tab.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .form-section { margin-bottom: 20px; }
+        .form-label { display: block; color: #555; margin-bottom: 5px; font-weight: 500; }
+        .el-input { margin-bottom: 15px; }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: opacity 0.3s;
+        }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-secondary {
+            background: #6c757d;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f8f9fa; }
+        .empty-state { text-align: center; padding: 40px; color: #999; }
+        .chart-container { height: 300px; }
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover { border-color: #667eea; }
+        .schedule-list { margin-top: 15px; }
+        .schedule-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .main-container { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <div class="header-title">
+                <div class="logo">AR</div>
+                ApiRed Security Scanner
+            </div>
+            <el-button type="primary" @click="refreshData">
+                <span v-if="loading">刷新中...</span>
+                <span v-else>刷新</span>
+            </el-button>
+        </div>
+        
+        <div class="main-container">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ stats.total_apis || 0 }}</div>
+                    <div class="stat-label">API 端点</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value severity-critical">{{ stats.critical || 0 }}</div>
+                    <div class="stat-label">严重漏洞</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value severity-high">{{ stats.high || 0 }}</div>
+                    <div class="stat-label">高危漏洞</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value severity-medium">{{ stats.medium || 0 }}</div>
+                    <div class="stat-label">中危漏洞</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ stats.scheduled || 0 }}</div>
+                    <div class="stat-label">定时任务</div>
+                </div>
+            </div>
+            
+            <!-- Navigation Tabs -->
+            <div class="nav-tabs">
+                <button class="nav-tab" :class="{active: activeTab === 'scan'}" @click="activeTab = 'scan'">扫描任务</button>
+                <button class="nav-tab" :class="{active: activeTab === 'import'}" @click="activeTab = 'import'">导入管理</button>
+                <button class="nav-tab" :class="{active: activeTab === 'schedule'}" @click="activeTab = 'schedule'">定时任务</button>
+                <button class="nav-tab" :class="{active: activeTab === 'report'}" @click="activeTab = 'report'">报告分析</button>
+            </div>
+            
+            <!-- Scan Tab -->
+            <div v-if="activeTab === 'scan'">
+                <div class="card">
+                    <div class="card-header">新建扫描任务</div>
+                    <div class="form-section">
+                        <el-input v-model="scanForm.target" placeholder="输入目标 URL (例如: https://api.example.com)" size="large">
+                            <template #prepend>目标</template>
+                        </el-input>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-label">扫描选项</div>
+                        <el-checkbox-group v-model="scanForm.collectors">
+                            <el-checkbox label="js">JS 采集</el-checkbox>
+                            <el-checkbox label="api">API 发现</el-checkbox>
+                            <el-checkbox label="swagger">Swagger</el-checkbox>
+                            <el-checkbox label="passive">被动源</el-checkbox>
+                        </el-checkbox-group>
+                    </div>
+                    
+                    <div class="form-section">
+                        <div class="form-label">行业测试用例</div>
+                        <el-select v-model="scanForm.industryTests" placeholder="选择行业测试用例" style="width: 100%">
+                            <el-option label="无" value="none"></el-option>
+                            <el-option label="金融行业" value="finance"></el-option>
+                            <el-option label="医疗行业" value="healthcare"></el-option>
+                            <el-option label="全部行业" value="all"></el-option>
+                        </el-select>
+                    </div>
+                    <el-button type="primary" size="large" @click="startScan" :loading="scanning">
+                        {{ scanning ? '扫描中...' : '开始扫描' }}
+                    </el-button>
+                </div>
+                
+                <!-- Active Scan -->
+                <div class="card" v-if="activeScan">
+                    <div class="card-header">扫描进行中</div>
+                    <div class="progress-bar" style="margin-bottom: 15px;">
+                        <div class="progress-fill" :style="{width: activeScan.progress + '%'}"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>{{ activeScan.status }}</span>
+                        <span>{{ activeScan.progress }}%</span>
+                    </div>
+                    <div v-if="activeScan.phase" style="margin-top: 10px; color: #666;">
+                        当前阶段: {{ activeScan.phase }}
+                    </div>
+                </div>
+                
+                <!-- Scan History -->
+                <div class="card">
+                    <div class="card-header">扫描历史</div>
+                    <div class="table-container" v-if="scanHistory.length > 0">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>目标</th>
+                                    <th>端点</th>
+                                    <th>漏洞</th>
+                                    <th>状态</th>
+                                    <th>时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="scan in scanHistory" :key="scan.id">
+                                    <td>{{ scan.target }}</td>
+                                    <td>{{ scan.api_count }}</td>
+                                    <td>
+                                        <span v-if="scan.critical > 0" class="badge badge-critical">{{ scan.critical }} 严重</span>
+                                        <span v-if="scan.high > 0" class="badge badge-high">{{ scan.high }} 高危</span>
+                                    </td>
+                                    <td>
+                                        <span :class="'badge badge-' + scan.status_class">{{ scan.status }}</span>
+                                    </td>
+                                    <td>{{ scan.time }}</td>
+                                    <td>
+                                        <el-button size="small" @click="viewReport(scan)">报告</el-button>
+                                        <el-button size="small" type="danger" @click="deleteScan(scan)">删除</el-button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state">
+                        暂无扫描记录
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Import Tab -->
+            <div v-if="activeTab === 'import'">
+                <div class="card">
+                    <div class="card-header">导入 BurpSuite 流量</div>
+                    <div class="upload-area" @click="$refs.burpFile.click()">
+                        <input type="file" ref="burpFile" @change="importBurp" accept=".csv,.json,.xml,.har" style="display:none;">
+                        <div v-if="!importing.burp">
+                            <div style="font-size: 2em; margin-bottom: 10px;">📂</div>
+                            <div>点击或拖拽文件到此处上传</div>
+                            <div style="color: #999; font-size: 0.9em; margin-top: 5px;">支持 CSV/JSON/XML/HAR 格式</div>
+                        </div>
+                        <div v-else>
+                            <div>正在导入: {{ importing.burp }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">导入 Postman Collection</div>
+                    <div class="upload-area" @click="$refs.postmanFile.click()">
+                        <input type="file" ref="postmanFile" @change="importPostman" accept=".json" style="display:none;">
+                        <div v-if="!importing.postman">
+                            <div style="font-size: 2em; margin-bottom: 10px;">📦</div>
+                            <div>点击或拖拽文件到此处上传</div>
+                            <div style="color: #999; font-size: 0.9em; margin-top: 5px;">支持 Postman Collection v2.0/v2.1</div>
+                        </div>
+                        <div v-else>
+                            <div>正在导入: {{ importing.postman }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" v-if="importedEndpoints.length > 0">
+                    <div class="card-header">已导入端点 ({{ importedEndpoints.length }})</div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>方法</th>
+                                    <th>路径</th>
+                                    <th>来源</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(ep, idx) in importedEndpoints.slice(0, 50)" :key="idx">
+                                    <td><span :class="'method-badge method-' + ep.method.toLowerCase()">{{ ep.method }}</span></td>
+                                    <td><code>{{ ep.path }}</code></td>
+                                    <td>{{ ep.source }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-if="importedEndpoints.length > 50" style="text-align: center; color: #666; margin-top: 10px;">
+                        还有 {{ importedEndpoints.length - 50 }} 个端点...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Schedule Tab -->
+            <div v-if="activeTab === 'schedule'">
+                <div class="card">
+                    <div class="card-header">创建定时任务</div>
+                    <el-input v-model="scheduleForm.target" placeholder="目标 URL" style="margin-bottom: 15px;">
+                        <template #prepend>目标</template>
+                    </el-input>
+                    <el-input v-model="scheduleForm.cron" placeholder="Cron 表达式 (例如: 0 2 * * *)" style="margin-bottom: 15px;">
+                        <template #prepend>定时</template>
+                    </el-input>
+                    <div style="color: #666; font-size: 0.85em; margin-bottom: 15px;">
+                        常用表达式: <code>0 2 * * *</code> 每天凌晨2点 | <code>0 */6 * * *</code> 每6小时 | <code>0 0 * * 1</code> 每周一
+                    </div>
+                    <el-button type="primary" @click="createSchedule">创建定时任务</el-button>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">定时任务列表</div>
+                    <div v-if="scheduledTasks.length > 0" class="schedule-list">
+                        <div v-for="task in scheduledTasks" :key="task.id" class="schedule-item">
+                            <div>
+                                <div style="font-weight: bold;">{{ task.name }}</div>
+                                <div style="color: #666; font-size: 0.9em;">{{ task.target }} | {{ task.cron }}</div>
+                                <div v-if="task.nextRun" style="color: #999; font-size: 0.85em;">
+                                    下次运行: {{ task.nextRun }}
+                                </div>
+                            </div>
+                            <div>
+                                <el-tag :type="task.enabled ? 'success' : 'info'">{{ task.enabled ? '启用' : '禁用' }}</el-tag>
+                                <el-button type="danger" size="small" @click="deleteSchedule(task.id)">删除</el-button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="empty-state">
+                        暂无定时任务
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Report Tab -->
+            <div v-if="activeTab === 'report'">
+                <div class="card">
+                    <div class="card-header">安全态势评分</div>
+                    <div style="display: flex; gap: 30px;">
+                        <div class="chart-container" ref="scoreChart" style="width: 300px; height: 300px;"></div>
+                        <div style="flex: 1;">
+                            <div v-for="(score, category) in postureScores" :key="category" style="margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>{{ category }}</span>
+                                    <span>{{ score }}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" :style="{width: score + '%', background: getScoreColor(score)}"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">漏洞分布</div>
+                    <div class="chart-container" ref="vulnChart"></div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">漏洞详情</div>
+                    <div class="table-container" v-if="vulnerabilities.length > 0">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>严重程度</th>
+                                    <th>类型</th>
+                                    <th>路径</th>
+                                    <th>方法</th>
+                                    <th>描述</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(vuln, idx) in vulnerabilities" :key="idx">
+                                    <td><span :class="'badge badge-' + vuln.severity">{{ vuln.severity }}</span></td>
+                                    <td>{{ vuln.type }}</td>
+                                    <td><code>{{ vuln.path }}</code></td>
+                                    <td><span :class="'method-badge method-' + vuln.method.toLowerCase()">{{ vuln.method }}</span></td>
+                                    <td>{{ vuln.description }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state">
+                        暂无漏洞数据
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const { createApp, ref, reactive, onMounted } = Vue;
+        const { ElMessage } = ElementPlus;
+        
+        createApp({
+            setup() {
+                const activeTab = ref('scan');
+                const loading = ref(false);
+                const scanning = ref(false);
+                const activeScan = ref(null);
+                const scanHistory = ref([]);
+                const importedEndpoints = ref([]);
+                const scheduledTasks = ref([]);
+                const vulnerabilities = ref([]);
+                const postureScores = ref({});
+                
+                const stats = reactive({
+                    total_apis: 0,
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    scheduled: 0
+                });
+                
+                const scanForm = reactive({
+                    target: '',
+                    collectors: ['js', 'api'],
+                    industryTests: 'none'
+                });
+                
+                const scheduleForm = reactive({
+                    target: '',
+                    cron: '0 2 * * *'
+                });
+                
+                const importing = reactive({
+                    burp: null,
+                    postman: null
+                });
+                
+                const refreshData = async () => {
+                    loading.value = true;
+                    try {
+                        const response = await axios.get('/api/stats');
+                        Object.assign(stats, response.data);
+                        scanHistory.value = response.data.history || [];
+                        vulnerabilities.value = response.data.vulnerabilities || [];
+                        postureScores.value = response.data.posture || {};
+                    } catch (e) {
+                        console.error('Refresh failed:', e);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                
+                const startScan = async () => {
+                    if (!scanForm.target) {
+                        ElMessage.warning('请输入目标 URL');
+                        return;
+                    }
+                    scanning.value = true;
+                    activeScan.value = { progress: 0, status: '初始化...', phase: '' };
+                    
+                    try {
+                        const response = await axios.post('/api/tasks', {
+                            target: scanForm.target,
+                            collectors: scanForm.collectors,
+                            industry_tests: scanForm.industryTests
+                        });
+                        
+                        if (response.data.task_id) {
+                            pollScanProgress(response.data.task_id);
+                        }
+                    } catch (e) {
+                        ElMessage.error('扫描启动失败: ' + e.message);
+                        scanning.value = false;
+                        activeScan.value = null;
+                    }
+                };
+                
+                const pollScanProgress = async (taskId) => {
+                    const poll = async () => {
+                        if (!scanning.value) return;
+                        try {
+                            const response = await axios.get(`/api/tasks/${taskId}`);
+                            const task = response.data;
+                            activeScan.value = {
+                                progress: task.progress || 0,
+                                status: task.status || '运行中',
+                                phase: task.phase || ''
+                            };
+                            
+                            if (task.status === 'completed' || task.status === 'failed') {
+                                scanning.value = false;
+                                activeScan.value = null;
+                                ElMessage.success('扫描完成');
+                                refreshData();
+                            } else {
+                                setTimeout(poll, 2000);
+                            }
+                        } catch (e) {
+                            console.error('Poll error:', e);
+                            setTimeout(poll, 5000);
+                        }
+                    };
+                    poll();
+                };
+                
+                const importBurp = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    importing.burp = file.name;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                        const response = await axios.post('/api/import/burp', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        importedEndpoints.value = response.data.endpoints || [];
+                        ElMessage.success(`导入成功: ${response.data.count} 个端点`);
+                    } catch (e) {
+                        ElMessage.error('导入失败: ' + e.message);
+                    } finally {
+                        importing.burp = null;
+                    }
+                };
+                
+                const importPostman = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    importing.postman = file.name;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                        const response = await axios.post('/api/import/postman', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        importedEndpoints.value = response.data.endpoints || [];
+                        ElMessage.success(`导入成功: ${response.data.count} 个端点`);
+                    } catch (e) {
+                        ElMessage.error('导入失败: ' + e.message);
+                    } finally {
+                        importing.postman = null;
+                    }
+                };
+                
+                const createSchedule = async () => {
+                    if (!scheduleForm.target || !scheduleForm.cron) {
+                        ElMessage.warning('请填写目标和定时表达式');
+                        return;
+                    }
+                    try {
+                        await axios.post('/api/schedule', {
+                            target: scheduleForm.target,
+                            cron: scheduleForm.cron
+                        });
+                        ElMessage.success('定时任务创建成功');
+                        scheduleForm.target = '';
+                        scheduleForm.cron = '0 2 * * *';
+                        refreshSchedules();
+                    } catch (e) {
+                        ElMessage.error('创建失败: ' + e.message);
+                    }
+                };
+                
+                const refreshSchedules = async () => {
+                    try {
+                        const response = await axios.get('/api/schedule');
+                        scheduledTasks.value = response.data.tasks || [];
+                        stats.scheduled = scheduledTasks.value.length;
+                    } catch (e) {
+                        console.error('Failed to load schedules:', e);
+                    }
+                };
+                
+                const deleteSchedule = async (id) => {
+                    try {
+                        await axios.delete(`/api/schedule/${id}`);
+                        ElMessage.success('删除成功');
+                        refreshSchedules();
+                    } catch (e) {
+                        ElMessage.error('删除失败');
+                    }
+                };
+                
+                const viewReport = (scan) => {
+                    window.open(`/api/results/${scan.id}/report`, '_blank');
+                };
+                
+                const deleteScan = async (scan) => {
+                    try {
+                        await axios.delete(`/api/tasks/${scan.id}`);
+                        ElMessage.success('删除成功');
+                        refreshData();
+                    } catch (e) {
+                        ElMessage.error('删除失败');
+                    }
+                };
+                
+                const getScoreColor = (score) => {
+                    if (score >= 80) return '#28a745';
+                    if (score >= 60) return '#17a2b8';
+                    if (score >= 40) return '#ffc107';
+                    if (score >= 20) return '#fd7e14';
+                    return '#dc3545';
+                };
+                
+                const initCharts = () => {
+                    // Vuln Distribution Chart
+                    const vulnChart = echarts.init(document.querySelector('#app > div > div > div > div:nth-child(4) > div:nth-child(4) .chart-container'));
+                    vulnChart.setOption({
+                        tooltip: { trigger: 'item' },
+                        legend: { bottom: 0 },
+                        series: [{
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            data: [
+                                { value: stats.critical, name: '严重', itemStyle: { color: '#dc3545' } },
+                                { value: stats.high, name: '高危', itemStyle: { color: '#fd7e14' } },
+                                { value: stats.medium, name: '中危', itemStyle: { color: '#ffc107' } },
+                                { value: stats.low, name: '低危', itemStyle: { color: '#28a745' } }
+                            ]
+                        }]
+                    });
+                };
+                
+                onMounted(() => {
+                    refreshData();
+                    refreshSchedules();
+                });
+                
+                return {
+                    activeTab,
+                    loading,
+                    scanning,
+                    activeScan,
+                    scanHistory,
+                    importedEndpoints,
+                    scheduledTasks,
+                    vulnerabilities,
+                    postureScores,
+                    stats,
+                    scanForm,
+                    scheduleForm,
+                    importing,
+                    refreshData,
+                    startScan,
+                    importBurp,
+                    importPostman,
+                    createSchedule,
+                    deleteSchedule,
+                    viewReport,
+                    deleteScan,
+                    getScoreColor
+                };
+            }
+        }).use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>
