@@ -99,6 +99,17 @@ class DashboardServer:
         self.app.router.add_get('/api/schedule', self._handle_list_schedules)
         self.app.router.add_delete('/api/schedule/{task_id}', self._handle_delete_schedule)
         self.app.router.add_get('/api/results/{task_id}/report', self._handle_get_enhanced_report)
+        self.app.router.add_post('/api/tasks/{task_id}/pause', self._handle_pause_task)
+        self.app.router.add_get('/api/queue/stats', self._handle_queue_stats)
+        self.app.router.add_post('/api/queue/pause-all', self._handle_pause_all_tasks)
+        self.app.router.add_post('/api/queue/resume-all', self._handle_resume_all_tasks)
+        self.app.router.add_get('/api/users', self._handle_list_users)
+        self.app.router.add_post('/api/users', self._handle_create_user)
+        self.app.router.add_delete('/api/users/{user_id}', self._handle_delete_user)
+        self.app.router.add_put('/api/users/{user_id}', self._handle_update_user)
+        self.app.router.add_get('/api/plugins', self._handle_list_plugins)
+        self.app.router.add_post('/api/plugins/load', self._handle_load_plugin)
+        self.app.router.add_post('/api/export/config', self._handle_export_config)
 
 
         static_path = os.path.join(os.path.dirname(__file__), 'static')
@@ -739,6 +750,159 @@ class DashboardServer:
             
         except Exception as e:
             logger.error(f"Enhanced report error: {e}")
+            return self._error_response(str(e), 500)
+
+    async def _handle_pause_task(self, request: web.Request) -> web.Response:
+        """暂停任务"""
+        task_id = request.match_info['task_id']
+        try:
+            from ..task_queue import get_task_queue
+            queue = get_task_queue()
+            success = queue.pause(task_id)
+            return web.json_response({'task_id': task_id, 'success': success})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_queue_stats(self, request: web.Request) -> web.Response:
+        """获取队列统计"""
+        try:
+            from ..task_queue import get_task_queue
+            queue = get_task_queue()
+            return web.json_response(queue.stats)
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_pause_all_tasks(self, request: web.Request) -> web.Response:
+        """暂停所有任务"""
+        try:
+            from ..task_queue import get_task_queue
+            queue = get_task_queue()
+            queue.pause_all()
+            return web.json_response({'success': True, 'message': 'All tasks paused'})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_resume_all_tasks(self, request: web.Request) -> web.Response:
+        """恢复所有任务"""
+        try:
+            from ..task_queue import get_task_queue
+            queue = get_task_queue()
+            queue.resume_all()
+            return web.json_response({'success': True, 'message': 'All tasks resumed'})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_list_users(self, request: web.Request) -> web.Response:
+        """列出所有用户"""
+        try:
+            from ..dashboard.user_manager import get_user_manager
+            um = get_user_manager()
+            users = um.list_users()
+            return web.json_response({
+                'success': True,
+                'users': [
+                    {
+                        'user_id': u.user_id,
+                        'username': u.username,
+                        'role': u.role,
+                        'email': u.email,
+                        'is_active': u.is_active,
+                        'created_at': u.created_at,
+                        'last_login': u.last_login
+                    } for u in users
+                ]
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_create_user(self, request: web.Request) -> web.Response:
+        """创建用户"""
+        try:
+            from ..dashboard.user_manager import get_user_manager
+            data = await request.json()
+            um = get_user_manager()
+            user_id = um.create_user(
+                username=data.get('username'),
+                password=data.get('password'),
+                role=data.get('role', 'viewer'),
+                email=data.get('email')
+            )
+            if user_id:
+                return web.json_response({'success': True, 'user_id': user_id})
+            return self._error_response('User already exists', 400)
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_delete_user(self, request: web.Request) -> web.Response:
+        """删除用户"""
+        try:
+            from ..dashboard.user_manager import get_user_manager
+            user_id = request.match_info['user_id']
+            um = get_user_manager()
+            um.delete_user(user_id)
+            return web.json_response({'success': True, 'message': 'User deleted'})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_update_user(self, request: web.Request) -> web.Response:
+        """更新用户"""
+        try:
+            from ..dashboard.user_manager import get_user_manager
+            user_id = request.match_info['user_id']
+            data = await request.json()
+            um = get_user_manager()
+            um.update_user(user_id, **data)
+            return web.json_response({'success': True, 'message': 'User updated'})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_list_plugins(self, request: web.Request) -> web.Response:
+        """列出所有插件"""
+        try:
+            from ..plugin_system import get_plugin_registry
+            registry = get_plugin_registry()
+            plugins = registry.get_plugins()
+            return web.json_response({
+                'success': True,
+                'plugins': [
+                    {
+                        'name': p.name,
+                        'version': p.version,
+                        'author': p.author,
+                        'description': p.description,
+                        'test_cases_count': len(p.test_cases)
+                    } for p in plugins.values()
+                ],
+                'total_test_cases': len(registry.get_test_cases())
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_load_plugin(self, request: web.Request) -> web.Response:
+        """加载插件"""
+        try:
+            from ..plugin_system import load_plugin
+            data = await request.json()
+            path = data.get('path')
+            if not path:
+                return self._error_response('Plugin path is required')
+            success = load_plugin(path)
+            return web.json_response({'success': success, 'message': 'Plugin loaded' if success else 'Failed to load plugin'})
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_export_config(self, request: web.Request) -> web.Response:
+        """配置自动导出设置"""
+        try:
+            from ..auto_export import configure_auto_export
+            data = await request.json()
+            configure_auto_export(
+                enabled=data.get('enabled', True),
+                formats=data.get('formats', ['html', 'json']),
+                output_dir=data.get('output_dir', './results')
+            )
+            return web.json_response({'success': True, 'message': 'Export config updated'})
+        except Exception as e:
             return self._error_response(str(e), 500)
 
 async def run_server(host: str = "0.0.0.0", port: int = 8080):
