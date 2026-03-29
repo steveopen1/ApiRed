@@ -16,6 +16,9 @@ from typing import Optional, List
 from core.engine import ScanEngine, EngineConfig, ScanResultAggregator, run_multi_target
 from core.utils.config import Config
 from core.dashboard.server import run_server
+from core.collectors import BurpSuiteImporter, PostmanCollectionImporter
+from core.scheduled_testing import CronScheduler
+from core.exporters.enhanced_html_reporter import EnhancedHtmlReporter
 
 
 class CLI:
@@ -93,6 +96,23 @@ Examples:
         vuln_group.add_argument('--no-idor-test', dest='no_idor_test', action='store_true',
                                 help='Disable IDOR test')
         
+        import_group = scan_parser.add_argument_group('Import/Export')
+        import_group.add_argument('--import-burp', dest='import_burp', metavar='FILE',
+                                 help='Import BurpSuite traffic file')
+        import_group.add_argument('--import-postman', dest='import_postman', metavar='FILE',
+                                 help='Import Postman Collection file')
+        import_group.add_argument('--export-openapi', dest='export_openapi', metavar='FILE',
+                                 help='Export endpoints to OpenAPI format')
+        import_group.add_argument('--schedule', dest='schedule', metavar='CRON',
+                                 help='Schedule scan using cron expression')
+        import_group.add_argument('--report-type', dest='report_type', 
+                                 choices=['basic', 'enhanced'], default='basic',
+                                 help='Report type: basic or enhanced')
+        import_group.add_argument('--industry-tests', dest='industry_tests',
+                                 choices=['finance', 'healthcare', 'all', 'none'],
+                                 default='none',
+                                 help='Enable industry-specific test cases')
+        
         scan_parser.add_argument('--verbose', '-v', action='store_true')
 
         dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')
@@ -159,6 +179,12 @@ Examples:
         result = await engine.run()
 
         self._print_single_result(result)
+        
+        if getattr(parsed_args, 'export_openapi', None):
+            pass  # handled by engine
+        if getattr(parsed_args, 'report_type', 'basic') == 'enhanced':
+            self._generate_enhanced_report(result, getattr(parsed_args, 'output', './results'))
+        
         return 0
 
     async def _run_multi_target(self, targets: List[str], parsed_args) -> int:
@@ -221,8 +247,72 @@ Examples:
             for error in result.errors[:5]:
                 print(f"  - {error}")
 
+    def _handle_import_burp(self, parsed_args) -> int:
+        filepath = getattr(parsed_args, 'import_burp', None)
+        if not filepath:
+            return 0
+        if not os.path.exists(filepath):
+            print(f"Error: File not found: {filepath}")
+            return 1
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            importer = BurpSuiteImporter()
+            if filepath.endswith('.csv'):
+                importer.import_csv(content)
+            elif filepath.endswith('.json'):
+                importer.import_json(content)
+            elif filepath.endswith('.xml'):
+                importer.import_xml(content)
+            elif filepath.endswith('.har'):
+                importer.import_har(content)
+            summary = importer.get_traffic_summary()
+            print(f"[*] BurpSuite Import: {summary['total_transactions']} transactions, {summary['api_endpoints']} API endpoints")
+            endpoints = importer.get_api_endpoints()
+            for ep in endpoints[:10]:
+                print(f"    {ep.get('method','GET'):6} {ep.get('path','/')}")
+            return 0
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
+
+    def _handle_import_postman(self, parsed_args) -> int:
+        filepath = getattr(parsed_args, 'import_postman', None)
+        if not filepath:
+            return 0
+        if not os.path.exists(filepath):
+            print(f"Error: File not found: {filepath}")
+            return 1
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+            importer = PostmanCollectionImporter()
+            importer.import_collection(content)
+            summary = importer.get_endpoints_summary()
+            print(f"[*] Postman Import: {summary['total_endpoints']} endpoints")
+            return 0
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
+
+    def _generate_enhanced_report(self, result, output_dir):
+        try:
+            os.makedirs(output_dir or './results', exist_ok=True)
+            report_path = os.path.join(output_dir or './results', 'enhanced_report.html')
+            data = result.to_dict() if hasattr(result, 'to_dict') else {}
+            reporter = EnhancedHtmlReporter()
+            if reporter.export(data, report_path):
+                print(f"[*] Enhanced report: {report_path}")
+        except Exception as e:
+            print(f"Report error: {e}")
+
     async def run(self, args=None) -> int:
         parsed = self.parser.parse_args(args)
+
+        if getattr(parsed_args, 'import_burp', None):
+            return self._handle_import_burp(parsed_args)
+        if getattr(parsed_args, 'import_postman', None):
+            return self._handle_import_postman(parsed_args)
 
         if parsed.command == 'dashboard':
             return await self.run_dashboard(parsed.host, parsed.port)
