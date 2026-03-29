@@ -519,6 +519,11 @@
         createApp({
             setup() {
                 const activeTab = ref('scan');
+                let ws = null;
+                const currentUser = ref(null);
+                const token = ref(localStorage.getItem('token') || '');
+                const showLogin = ref(!token.value);
+                
                 const loading = ref(false);
                 const scanning = ref(false);
                 const activeScan = ref(null);
@@ -527,6 +532,126 @@
                 const scheduledTasks = ref([]);
                 const vulnerabilities = ref([]);
                 const postureScores = ref({});
+                
+                const login = async () => {
+                    try {
+                        const response = await axios.post('/api/auth/login', {
+                            username: loginForm.username,
+                            password: loginForm.password
+                        });
+                        if (response.data.success) {
+                            token.value = response.data.token;
+                            currentUser.value = response.data.user;
+                            localStorage.setItem('token', token.value);
+                            showLogin.value = false;
+                            ElMessage.success('登录成功');
+                            connectWebSocket();
+                        }
+                    } catch (e) {
+                        ElMessage.error('登录失败: ' + (e.response?.data?.error || e.message));
+                    }
+                };
+                
+                const logout = async () => {
+                    try {
+                        await axios.post('/api/auth/logout');
+                        token.value = '';
+                        currentUser.value = null;
+                        localStorage.removeItem('token');
+                        showLogin.value = true;
+                        ElMessage.success('已登出');
+                    } catch (e) {
+                        ElMessage.error('登出失败');
+                    }
+                };
+                
+                const checkAuth = async () => {
+                    if (token.value) {
+                        try {
+                            const response = await axios.get('/api/auth/user', {
+                                headers: { Authorization: 'Bearer ' + token.value }
+                            });
+                            if (response.data.success) {
+                                currentUser.value = response.data.user;
+                                showLogin.value = false;
+                            } else {
+                                token.value = '';
+                                showLogin.value = true;
+                            }
+                        } catch (e) {
+                            token.value = '';
+                            showLogin.value = true;
+                        }
+                    }
+                };
+                
+                const connectWebSocket = () => {
+                    try {
+                        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                        const wsUrl = protocol + '//' + window.location.host + '/ws';
+                        ws = new WebSocket(wsUrl);
+                        
+                        ws.onopen = () => {
+                            console.log('WebSocket connected');
+                            ElMessage.success('实时连接已建立');
+                        };
+                        
+                        ws.onmessage = (event) => {
+                            try {
+                                const msg = JSON.parse(event.data);
+                                handleWSMessage(msg);
+                            } catch (e) {
+                                console.error('WS message parse error:', e);
+                            }
+                        };
+                        
+                        ws.onerror = (error) => {
+                            console.error('WebSocket error:', error);
+                        };
+                        
+                        ws.onclose = () => {
+                            console.log('WebSocket closed, reconnecting in 5s...');
+                            setTimeout(connectWebSocket, 5000);
+                        };
+                    } catch (e) {
+                        console.error('WS connection failed:', e);
+                        setTimeout(connectWebSocket, 5000);
+                    }
+                };
+                
+                const handleWSMessage = (msg) => {
+                    switch(msg.type) {
+                        case 'task_progress':
+                            if (activeScan.value && activeScan.value.task_id === msg.data.task_id) {
+                                activeScan.value = {
+                                    ...activeScan.value,
+                                    progress: msg.data.progress || 0,
+                                    status: msg.data.status || '运行中',
+                                    phase: msg.data.phase || ''
+                                };
+                                if (msg.data.status === 'completed') {
+                                    ElMessage.success('扫描完成');
+                                    scanning.value = false;
+                                    activeScan.value = null;
+                                    refreshData();
+                                }
+                            }
+                            break;
+                        case 'scan_started':
+                            ElMessage.info(`扫描开始: ${msg.data.target}`);
+                            break;
+                        case 'vulnerability_found':
+                            vulnerabilities.value.push(msg.data);
+                            break;
+                        case 'stats_update':
+                            Object.assign(stats, msg.data);
+                            break;
+                        default:
+                            console.log('Unknown WS message:', msg.type);
+                    }
+                };
+                
+                const loginForm = reactive({ username: '', password: '' });
                 
                 const stats = reactive({
                     total_apis: 0,
@@ -742,9 +867,13 @@
                     });
                 };
                 
-                onMounted(() => {
-                    refreshData();
-                    refreshSchedules();
+                onMounted(async () => {
+                    await checkAuth();
+                    if (!showLogin.value) {
+                        refreshData();
+                        refreshSchedules();
+                        connectWebSocket();
+                    }
                 });
                 
                 return {

@@ -18,6 +18,8 @@ from .events import (
     WSMessage, TaskUpdateMessage, TaskStartedMessage,
     ClientMessage, ClientMessageType, EventType
 )
+from ..persistent_scheduler import PersistentScheduler
+from .auth import SimpleAuth
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ class DashboardServer:
         self.task_manager: Optional[TaskManager] = None
         self.orchestrator: Optional[ScanOrchestrator] = None
         self._ws_connections: set = set()
+        self._scheduler: Optional[PersistentScheduler] = None
+        self._auth: Optional[SimpleAuth] = None
 
     def _error_response(self, message: str, status: int = 400) -> web.Response:
         """统一错误响应格式"""
@@ -44,6 +48,8 @@ class DashboardServer:
     async def initialize(self):
         """初始化服务器"""
         self.task_manager = TaskManager(db_path="./results/dashboard.db")
+        self._scheduler = PersistentScheduler(db_path="./results/schedules.db")
+        self._auth = SimpleAuth(db_path="./results/auth.db")
         self.orchestrator = ScanOrchestrator(self.task_manager)
 
         self.app = web.Application(
@@ -83,6 +89,10 @@ class DashboardServer:
         self.app.router.add_get('/api/health', self._handle_health)
         self.app.router.add_get('/api/tasks/{task_id}/apis', self._handle_get_apis)
         self.app.router.add_get('/api/tasks/{task_id}/vulns', self._handle_get_vulns)
+        self.app.router.add_post('/api/auth/login', self._handle_login)
+        self.app.router.add_post('/api/auth/register', self._handle_register)
+        self.app.router.add_get('/api/auth/user', self._handle_get_user)
+        self.app.router.add_post('/api/auth/logout', self._handle_logout)
         self.app.router.add_post('/api/import/burp', self._handle_import_burp)
         self.app.router.add_post('/api/import/postman', self._handle_import_postman)
         self.app.router.add_post('/api/schedule', self._handle_create_schedule)
@@ -464,6 +474,82 @@ class DashboardServer:
         return web.json_response(health)
 
 
+
+    async def _handle_login(self, request: web.Request) -> web.Response:
+        """用户登录"""
+        try:
+            data = await request.json()
+            username = data.get('username', '')
+            password = data.get('password', '')
+            
+            if not username or not password:
+                return self._error_response('Username and password required')
+            
+            token = self._auth.login(username, password)
+            if not token:
+                return self._error_response('Invalid credentials', 401)
+            
+            return web.json_response({
+                'success': True,
+                'token': token,
+                'user': self._auth.verify_token(token)
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_register(self, request: web.Request) -> web.Response:
+        """用户注册"""
+        try:
+            data = await request.json()
+            username = data.get('username', '')
+            password = data.get('password', '')
+            role = data.get('role', 'user')
+            
+            if not username or not password:
+                return self._error_response('Username and password required')
+            
+            user_id = self._auth.register(username, password, role)
+            if not user_id:
+                return self._error_response('Username already exists', 400)
+            
+            return web.json_response({
+                'success': True,
+                'user_id': user_id
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_get_user(self, request: web.Request) -> web.Response:
+        """获取当前用户信息"""
+        try:
+            auth_header = request.headers.get('Authorization', '')
+            token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else auth_header
+            
+            user = self._auth.verify_token(token)
+            if not user:
+                return self._error_response('Unauthorized', 401)
+            
+            return web.json_response({
+                'success': True,
+                'user': user
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
+
+    async def _handle_logout(self, request: web.Request) -> web.Response:
+        """用户登出"""
+        try:
+            auth_header = request.headers.get('Authorization', '')
+            token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else auth_header
+            
+            self._auth.logout(token)
+            
+            return web.json_response({
+                'success': True,
+                'message': 'Logged out'
+            })
+        except Exception as e:
+            return self._error_response(str(e), 500)
 
     async def _handle_import_burp(self, request: web.Request) -> web.Response:
         """导入 BurpSuite 流量文件"""
