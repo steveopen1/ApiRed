@@ -21,6 +21,10 @@ from .storage import DBStorage, FileStorage, RealtimeOutput, OutputManager, get_
 from .collectors import JSFingerprintCache, JSParser, APIAggregator, HeadlessBrowserCollector
 from .collectors.api_collector import APIPathCombiner, ServiceAnalyzer
 from .collectors.js_ast_analyzer import JavaScriptASTAnalyzer
+from .collectors.swagger_discoverer import SwaggerDiscoverer, discover_swagger
+from .collectors.api_bypass import APIBypasser, SmartBypasser
+from .collectors.passive_sources import PassiveSourceCollector
+from .collectors.smart_filter import SmartFilter, prioritize_endpoints
 from .analyzers import APIScorer, APIEvidenceAggregator, ResponseCluster, TwoTierSensitiveDetector
 from .analyzers.response_baseline import ResponseBaselineLearner
 from .testers import FuzzTester, VulnerabilityTester, APIRequestTester, APIBypassTester
@@ -724,6 +728,14 @@ class ScanEngine:
         
         collector_results = {}
         
+        # === 新增: Swagger/OpenAPI 发现 ===
+        if 'swagger' in active_collectors:
+            collector_results['swagger'] = await self._collect_swagger()
+        
+        # === 新增: 被动源采集 ===
+        if 'passive' in active_collectors:
+            collector_results['passive'] = await self._collect_passive()
+        
         if 'js' in active_collectors:
             collector_results['js'] = await self._collect_js()
         
@@ -733,6 +745,88 @@ class ScanEngine:
             collector_results['api'] = await self._extract_apis()
         
         self._collector_results = collector_results
+        
+        # === 新增: 智能过滤 ===
+        collector_results = self._apply_smart_filter(collector_results)
+        
+        self._collector_results = collector_results
+    
+    async def _collect_swagger(self) -> Dict[str, Any]:
+        """采集 Swagger/OpenAPI 文档"""
+        discoverer = SwaggerDiscoverer(self._http_client)
+        swagger_endpoints = []
+        
+        try:
+            resp = await self._http_client.request(self.config.target, timeout=10)
+            if resp and resp.status_code == 200:
+                content = resp.text if hasattr(resp, 'text') else ''
+                swagger_urls = await discoverer.discover_from_html(content, self.config.target)
+                
+                for swagger_url in swagger_urls[:10]:
+                    doc = await discoverer.fetch_and_parse(swagger_url)
+                    if doc:
+                        swagger_endpoints.extend(doc.endpoints)
+        except Exception as e:
+            logger.debug(f"Swagger discovery error: {e}")
+        
+        common_urls = await discoverer.discover_common_paths(self.config.target)
+        for common_url in common_urls:
+            if any(e.url == common_url for e in swagger_endpoints):
+                continue
+            doc = await discoverer.fetch_and_parse(common_url)
+            if doc:
+                swagger_endpoints.extend(doc.endpoints)
+        
+        logger.info(f"Swagger discovered {len(swagger_endpoints)} endpoints")
+        
+        return {
+            'swagger_endpoints': [
+                {'path': e.path, 'method': e.method, 'summary': e.summary}
+                for e in swagger_endpoints
+            ],
+            'swagger_docs': len(discoverer.discovered_docs)
+        }
+    
+    async def _collect_passive(self) -> Dict[str, Any]:
+        """从被动源采集 URL"""
+        parsed = urlparse(self.config.target)
+        domain = parsed.netloc
+        
+        collector = PassiveSourceCollector(self._http_client)
+        urls = await collector.collect_from_all(domain)
+        
+        api_urls = collector.filter_api_urls(urls)
+        
+        logger.info(f"Passive collection: {len(urls)} total, {len(api_urls)} API URLs")
+        
+        return {
+            'total_urls': len(urls),
+            'api_urls': api_urls,
+            'source_stats': collector.get_stats()
+        }
+    
+    def _apply_smart_filter(self, collector_results: Dict) -> Dict:
+        """应用智能过滤减少冗余"""
+        all_endpoints = []
+        
+        if 'api' in collector_results:
+            for ep in collector_results['api'].get('endpoints', []):
+                all_endpoints.append({
+                    'url': ep.get('url', ep.get('path', '')),
+                    'method': ep.get('method', 'GET'),
+                    'confidence': ep.get('confidence', 0.5),
+                    'source': ep.get('source', 'default')
+                })
+        
+        if all_endpoints:
+            filter_instance = SmartFilter(max_endpoints=1000)
+            scored = filter_instance.score_endpoints(all_endpoints)
+            filtered = filter_instance.smart_filter(scored, strategy='balanced')
+            
+            logger.info(f"Smart filter: {len(all_endpoints)} -> {len(filtered)} endpoints "
+                        f"(removed {len(all_endpoints) - len(filtered)} duplicates)")
+        
+        return collector_results
     
     async def _collect_js(self) -> Dict[str, Any]:
         """采集JS资源 + 框架检测 + 浏览器动态采集 + 内联JS解析"""
