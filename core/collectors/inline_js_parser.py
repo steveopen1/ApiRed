@@ -310,6 +310,19 @@ class InlineJSParser:
         
         return api_paths, sensitive_resources
     
+    COMMON_API_SUFFIXES = [
+        'add', 'list', 'get', 'set', 'update', 'delete', 'remove', 'create', 'edit',
+        'view', 'show', 'detail', 'info', 'query', 'search', 'find', 'fetch',
+        'save', 'load', 'init', 'submit', 'post', 'put', 'check', 'verify',
+        'login', 'logout', 'auth', 'register', 'info', 'profile', 'page',
+        'export', 'import', 'upload', 'download', 'config', 'settings',
+        'menu', 'tree', 'treeList', 'select', 'options', 'combo',
+        'status', 'state', 'enable', 'disable', 'start', 'stop',
+        'count', 'sum', 'total', 'statistics', 'stats', 'summary',
+        'send', 'receive', 'push', 'pull', 'sync',
+        'new', 'all', 'self', 'other', 'public', 'private',
+    ]
+    
     def _url_filter_clean(self, path: str) -> str:
         """
         URL 清理函数
@@ -350,7 +363,11 @@ class InlineJSParser:
         
         if '/' not in path and not path_lower.startswith('http'):
             if path_lower not in ['api', 'v1', 'v2', 'v3']:
-                return ""
+                if len(path) < 2:
+                    return ""
+                if path_lower not in self.COMMON_API_SUFFIXES and not path_lower.isalpha():
+                    if not any(path_lower.endswith(suffix) for suffix in self.COMMON_API_SUFFIXES):
+                        return ""
         
         return path
     
@@ -926,3 +943,134 @@ class ResponseBasedAPIDiscovery:
         self.discovered_sensitive_resources.clear()
         self.discovered_ips.clear()
         self.discovered_domains.clear()
+
+
+class SmartPathCombiner:
+    """
+    智能路径组合器
+    参考 0x727/ChkApi filter_data() 的核心逻辑
+    
+    功能：
+    1. 从 JS 配置中提取 base_url（如 VUE_APP_BASEURL）
+    2. 分离 path_with_api（如 /api, /rest）和 path_without_api（如 /user/list）
+    3. 智能组合生成完整 API 路径
+    """
+    
+    API_PREFIXES = ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway', 'prod-api', 'test-api', 'pre-api']
+    
+    def __init__(self, base_url: str = ""):
+        self.base_url = base_url
+        self.tree_urls = set()
+        self.base_urls = set()
+        self.path_with_api_paths = set()
+        self.path_without_api_paths = set()
+    
+    def add_js_url(self, js_url: str) -> None:
+        """从 JS URL 中提取 base_url"""
+        if not js_url:
+            return
+        
+        parsed = urlparse(js_url)
+        
+        tree_url = f"{parsed.scheme}://{parsed.netloc}"
+        self.tree_urls.add(tree_url)
+        
+        if parsed.path and parsed.path != '/':
+            base = f"{parsed.scheme}://{parsed.netloc}"
+            self.base_urls.add(base)
+    
+    def add_config(self, config_url: str) -> None:
+        """从配置 URL（如 VUE_APP_BASEURL）中提取 base_url"""
+        if not config_url:
+            return
+        
+        if config_url.startswith('http'):
+            parsed = urlparse(config_url)
+            self.base_urls.add(f"{parsed.scheme}://{parsed.netloc}")
+            self.base_urls.add(config_url.rsplit('/', 1)[0] if '/' in parsed.path else config_url)
+        elif config_url.startswith('/'):
+            if self.base_url:
+                self.base_urls.add(self.base_url.rstrip('/') + config_url)
+    
+    def add_api_path(self, api_path: str) -> None:
+        """添加 API 路径并智能分类"""
+        if not api_path or len(api_path) < 2:
+            return
+        
+        if api_path.startswith('http'):
+            parsed = urlparse(api_path)
+            self.base_urls.add(f"{parsed.scheme}://{parsed.netloc}")
+            if parsed.path:
+                path = parsed.path
+                self._classify_path(path)
+        else:
+            self._classify_path(api_path)
+    
+    def _classify_path(self, path: str) -> None:
+        """分类路径：有 api 前缀 or 没有"""
+        path = path.strip().strip("'\"")
+        
+        if not path or path == '/':
+            return
+        
+        api_index = path.find('api/')
+        if api_index != -1:
+            api_prefix = path[:api_index] + 'api'
+            self.path_with_api_paths.add(api_prefix)
+            
+            remaining = path[api_index + 4:]
+            if remaining and remaining != '/':
+                self.path_without_api_paths.add('/' + remaining)
+        else:
+            clean_path = '/' + path.lstrip('/')
+            if clean_path not in ['/', '/api']:
+                self.path_without_api_paths.add(clean_path)
+    
+    def combine(self) -> List[str]:
+        """
+        组合生成所有可能的 API 路径
+        参考 ChkApi filter_data 的组合逻辑
+        """
+        results = []
+        
+        if not self.base_urls and not self.tree_urls:
+            return list(self.path_without_api_paths)
+        
+        all_bases = list(self.base_urls | self.tree_urls)
+        
+        if not self.path_with_api_paths:
+            self.path_with_api_paths.add('/api')
+        
+        for base in all_bases:
+            base = base.rstrip('/')
+            
+            for api_prefix in self.path_with_api_paths:
+                for no_api_path in self.path_without_api_paths:
+                    if no_api_path.startswith('/'):
+                        full_path = f"{base}{api_prefix}{no_api_path}"
+                    else:
+                        full_path = f"{base}{api_prefix}/{no_api_path}"
+                    results.append(full_path)
+            
+            for api_prefix in self.path_with_api_paths:
+                if api_prefix.startswith('/'):
+                    full_path = f"{base}{api_prefix}"
+                else:
+                    full_path = f"{base}/{api_prefix}"
+                results.append(full_path)
+        
+        return list(set(results))
+    
+    @classmethod
+    def from_js_content(cls, js_content: str, base_url: str = "") -> 'SmartPathCombiner':
+        """
+        从 JS 内容中智能提取和组合 API 路径
+        """
+        combiner = cls(base_url)
+        
+        env_pattern = re.compile(r'''['"](VUE_APP_\w+|BASE_URL|API_URL|BASE_API)['"]\s*:\s*['"]([^"']+)['"]''')
+        for match in env_pattern.findall(js_content):
+            config_value = match[1]
+            combiner.add_config(config_value)
+        
+        return combiner
