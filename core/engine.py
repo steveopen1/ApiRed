@@ -505,8 +505,20 @@ class ScanEngine:
                 if self.config.checkpoint_enabled:
                     await self._save_checkpoint()
                 self._emit('stage_complete', {'stage': 'collect', 'status': 'complete'})
-
+            
             if attack_mode in ['scan', 'all'] and not no_api_scan:
+                self._emit('stage_start', {'stage': 'analyze', 'status': 'running'})
+                if self._profiler:
+                    self._profiler.tracker.start_stage('api_scoring', input_count=0)
+                await self._run_analyzers()
+                self._emit_progress('analyze', 'api_scoring')
+                if self._profiler:
+                    self._profiler.tracker.finish_stage()
+                if self.config.checkpoint_enabled:
+                    await self._save_checkpoint()
+                self._emit('stage_complete', {'stage': 'analyze', 'status': 'complete'})
+            elif attack_mode == 'collect':
+                await self._score_apis()
                 self._emit('stage_start', {'stage': 'analyze', 'status': 'running'})
                 if self._profiler:
                     self._profiler.tracker.start_stage('api_scoring', input_count=0)
@@ -2482,7 +2494,9 @@ class ScanEngine:
         self._flux_results = flux_results
     
     async def _score_apis(self) -> Dict[str, Any]:
-        """API评分"""
+        """API评分 - 渗透测试思维：智能方法推断 + JSON响应验证"""
+        from .collectors.api_collector import APIMethodInferrer
+        
         endpoints = self.result.api_endpoints if self.result else []
         
         url_to_endpoint: Dict[str, Any] = {e.full_url: e for e in endpoints}
@@ -2490,7 +2504,7 @@ class ScanEngine:
         all_responses: List[Any] = []
         
         for endpoint in endpoints:
-            methods_to_try = ['GET', 'POST']
+            methods_to_try = APIMethodInferrer.infer_methods(endpoint.path)
             endpoint_found = False
             
             for method in methods_to_try:
@@ -2500,46 +2514,71 @@ class ScanEngine:
                         method=method
                     )
                     
-                    if response.status_code and 200 <= response.status_code < 400:
+                    content = response.content if hasattr(response, 'content') else ''
+                    content_type = response.headers.get('Content-Type', '') if hasattr(response, 'headers') else ''
+                    status_code = response.status_code if hasattr(response, 'status_code') else 0
+                    
+                    if status_code and 200 <= status_code < 400:
                         endpoint.method = method
-                        endpoint.status_code = response.status_code
+                        endpoint.status_code = status_code
                         endpoint.response_type = self._detect_response_type(response)
+                        
+                        is_json = APIMethodInferrer.is_json_response(content, content_type)
+                        is_html = APIMethodInferrer.is_html_response(content, content_type)
+                        
+                        if is_html:
+                            continue
+                        
+                        from .models import APIStatus
+                        endpoint.status = APIStatus.ALIVE
+                        endpoint_found = True
                         
                         from .utils.http_client import TaskResult
                         task_result = TaskResult(
                             url=endpoint.full_url,
                             method=method,
-                            status_code=response.status_code,
-                            content=response.content,
-                            content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
+                            status_code=status_code,
+                            content=content,
+                            content_bytes=content.encode() if isinstance(content, str) else content,
                             content_hash=getattr(response, 'content_hash', '')
                         )
                         all_responses.append(task_result)
                         
                         from .analyzers.response_cluster import TaskResult as RCTaskResult
                         rc_task_result = RCTaskResult(
-                            status_code=response.status_code,
-                            content=response.content.encode() if isinstance(response.content, str) else response.content,
-                            content_hash=response.content_hash
+                            status_code=status_code,
+                            content=content.encode() if isinstance(content, str) else content,
+                            content_hash=getattr(response, 'content_hash', '')
                         )
                         self._response_cluster.add_response(endpoint.api_id, rc_task_result)  # type: ignore[reportOptionalMemberAccess]
                         
-                        if not self._response_cluster.is_baseline_404(endpoint.api_id):  # type: ignore[reportOptionalMemberAccess]
-                            is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+                        if self._api_scorer:
+                            self._api_scorer.add_evidence(
+                                endpoint.full_url,
+                                'http_test',
+                                {},
+                                http_info={'status': status_code, 'content': content[:500] if content else '', 'is_json': is_json}
+                            )
+                        
+                        break
+                    elif status_code in [401, 403]:
+                        endpoint.status_code = status_code
+                        endpoint.method = method
+                        
+                        is_json = APIMethodInferrer.is_json_response(content, content_type)
+                        if is_json:
+                            from .models import APIStatus
+                            endpoint.status = APIStatus.ALIVE
+                            endpoint_found = True
                             
-                            if is_valid:
-                                from .models import APIStatus
-                                endpoint.status = APIStatus.ALIVE
-                                endpoint_found = True
-                                
-                                if self._api_scorer:
-                                    self._api_scorer.add_evidence(
-                                        endpoint.full_url,
-                                        'http_test',
-                                        {},
-                                        http_info={'status': response.status_code, 'content': response.content[:500] if response.content else ''}
-                                    )
-                                break
+                            if self._api_scorer:
+                                self._api_scorer.add_evidence(
+                                    endpoint.full_url,
+                                    'auth_required_api',
+                                    {},
+                                    http_info={'status': status_code, 'content': content[:500] if content else ''}
+                                )
+                            break
                     else:
                         from .utils.http_client import TaskResult
                         task_result = TaskResult(

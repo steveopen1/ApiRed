@@ -14,6 +14,163 @@ from urllib.parse import urlparse, urljoin
 logger = logging.getLogger(__name__)
 
 
+class APIMethodInferrer:
+    """
+    API HTTP 方法智能推断器
+    
+    渗透测试思维：根据路径名称推断应该使用的 HTTP 方法
+    - GET: 查询、获取列表、获取详情
+    - POST: 登录、注册、提交、创建、上传
+    - PUT: 更新、编辑
+    - (DELETE: 不探测，按用户要求)
+    """
+    
+    GET_KEYWORDS = {
+        'list', 'get', 'query', 'fetch', 'find', 'search', 'select',
+        'all', 'page', 'tree', 'treeList', 'info', 'detail', 'details',
+        'count', 'sum', 'total', 'statistics', 'stats', 'summary',
+        'config', 'settings', 'menu', 'options', 'menu', 'permissions',
+        'index', 'home', 'dashboard', 'profile', 'userinfo', 'info',
+        'acl', 'roles', 'rules', 'verify', 'check', 'validate',
+        'status', 'state', 'export', 'download', 'file', 'pdf', 'excel',
+        'login', 'logout', 'auth', 'sso', 'captcha', 'verify',
+    }
+    
+    POST_KEYWORDS = {
+        'add', 'create', 'new', 'insert', 'register', 'signup',
+        'login', 'auth', 'verify', 'submit', 'send', 'push',
+        'upload', 'import', 'submit', 'apply', 'enroll',
+        'save', 'store', 'confirm', 'accept', 'agree',
+        'publish', 'release', 'activate', 'enable',
+    }
+    
+    PUT_KEYWORDS = {
+        'update', 'edit', 'modify', 'set', 'change', 'replace',
+        'reset', 'restore', 'config', 'setting',
+        'move', 'copy', 'rename', 'archive',
+    }
+    
+    SENSITIVE_METHODS = {'POST', 'PUT', 'DELETE', 'PATCH'}
+    
+    @classmethod
+    def infer_methods(cls, path: str) -> List[str]:
+        """
+        根据路径推断应该使用的 HTTP 方法
+        
+        Args:
+            path: API 路径，如 /user/login, /admin/list
+            
+        Returns:
+            应该探测的 HTTP 方法列表
+        """
+        path_lower = path.lower()
+        segments = path_lower.strip('/').split('/')
+        
+        methods = set()
+        
+        for segment in segments:
+            for keyword in cls.POST_KEYWORDS:
+                if keyword in segment:
+                    methods.add('POST')
+                    break
+            
+            for keyword in cls.PUT_KEYWORDS:
+                if keyword in segment:
+                    methods.add('PUT')
+                    break
+            
+            for keyword in cls.GET_KEYWORDS:
+                if keyword in segment:
+                    methods.add('GET')
+                    break
+        
+        if not methods:
+            methods.add('GET')
+            methods.add('POST')
+        
+        return sorted(list(methods), key=lambda x: {'GET': 0, 'POST': 1, 'PUT': 2, 'PATCH': 3}.get(x, 9))
+    
+    @classmethod
+    def is_json_response(cls, content: str, content_type: str = "") -> bool:
+        """
+        判断响应是否为 JSON
+        
+        Args:
+            content: 响应内容
+            content_type: Content-Type 头
+            
+        Returns:
+            True if response is JSON
+        """
+        if 'application/json' in content_type.lower():
+            return True
+        
+        content = content.strip()
+        if content.startswith('{') or content.startswith('['):
+            return True
+        
+        try:
+            json.loads(content)
+            return True
+        except (json.JSONDecodeError, ValueError):
+            return False
+    
+    @classmethod
+    def is_html_response(cls, content: str, content_type: str = "") -> bool:
+        """
+        判断响应是否为 HTML
+        
+        Args:
+            content: 响应内容
+            content_type: Content-Type 头
+            
+        Returns:
+            True if response is HTML
+        """
+        if 'text/html' in content_type.lower():
+            return True
+        
+        content_lower = content.lower().strip()
+        if content_lower.startswith('<!doctype html') or content_lower.startswith('<html'):
+            return True
+        if '<body' in content_lower or '<head' in content_lower:
+            return True
+        if '<script' in content_lower and '<style' in content_lower:
+            return True
+        
+        return False
+    
+    @classmethod
+    def is_auth_required_response(cls, status_code: int, content: str, content_type: str = "") -> bool:
+        """
+        判断响应是否表示需要认证
+        
+        Args:
+            status_code: HTTP 状态码
+            content: 响应内容
+            content_type: Content-Type 头
+            
+        Returns:
+            True if response indicates authentication required
+        """
+        if status_code in [401, 403]:
+            return True
+        
+        if status_code == 200:
+            content_lower = content.lower()
+            auth_keywords = [
+                'not logged in', 'not login', 'not authorized',
+                'please login', 'please auth', 'token expired',
+                'unauthorized', 'forbidden', 'access denied',
+                'permission denied', '登录', '授权', '认证',
+            ]
+            for keyword in auth_keywords:
+                if keyword in content_lower:
+                    return True
+        
+        return False
+
+
 @dataclass
 class APIFindResult:
     """API发现结果"""
