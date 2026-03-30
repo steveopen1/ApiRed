@@ -292,7 +292,8 @@ class APIExtractor:
             
             if '/' not in line and not line_lower.startswith('http'):
                 if line_lower not in ['api', 'v1', 'v2', 'v3']:
-                    continue
+                    if len(line) < 2:
+                        continue
             
             for black_ext in cls.URL_EXT_BLACKLIST:
                 if line.split("?")[0].endswith(black_ext):

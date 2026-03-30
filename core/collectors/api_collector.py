@@ -842,7 +842,7 @@ class APIRouter:
         
         if '/' not in path and not path.lower().startswith('http'):
             if path.lower() not in ['api', 'v1', 'v2', 'v3']:
-                if not any(path.lower().startswith(kw) for kw in ['path:', 'url:', 'index:']):
+                if len(path) < 2:
                     return ""
         
         for prefix in ['path:', 'url:', 'index:']:
