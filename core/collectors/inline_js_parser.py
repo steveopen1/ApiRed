@@ -445,6 +445,9 @@ class InlineJSParser:
             if path_lower.endswith(ext):
                 return False
         
+        if path.startswith('data:') or path.startswith('javascript:'):
+            return False
+        
         return True
     
     def _is_valid_route(self, path: str) -> bool:

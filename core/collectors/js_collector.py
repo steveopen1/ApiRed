@@ -1959,6 +1959,7 @@ class JSParser:
             'axios': r'axios\.(get|post|put|delete)\s*\(\s*["\']([^"\']+)["\']',
             'router': r'router\.(get|post|put|delete)\s*\(\s*["\']([^"\']+)["\']',
             'api_direct': r'''["'](/api/[a-zA-Z0-9/{}?=&_-]+)["']''',
+            'path_with_keywords': r'''["'](/(?:user|users|admin|login|logout|register|student|teacher|course|order|product|api|v\d+|rest|oauth)[a-zA-Z0-9/_-]*)["']''',
         }
         
         urls = []

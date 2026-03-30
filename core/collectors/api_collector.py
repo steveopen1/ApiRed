@@ -2047,14 +2047,13 @@ class APIPathCombiner:
         for pattern in cls.INVALID_PATTERNS:
             if pattern.lower() in path_lower:
                 return False
+        
         if len(path) < 2:
             return False
-        if path.startswith('data:'):
+        
+        if path.startswith('data:') or path.startswith('javascript:'):
             return False
-        if path.startswith('javascript:'):
-            return False
-        if '/' not in path and len(path) < 4:
-            return False
+        
         return True
     
     @classmethod
