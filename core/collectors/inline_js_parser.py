@@ -441,6 +441,8 @@ class InlineJSParser:
         
         return path.strip()
     
+    VUE_ROUTE_PATTERN = re.compile(r'/:[^/]+\([^)]*\)\*|:[^/]+\*|\*\*')
+    
     def _is_valid_api_path(self, path: str) -> bool:
         """
         判断是否为有效的API路径
@@ -451,6 +453,7 @@ class InlineJSParser:
         3. 不以静态文件扩展名结尾
         4. 不以 data: 或 javascript: 开头
         5. 如果是单段路径（不带 /），必须是 api/v1/v2/v3 这样的标准前缀
+        6. 过滤 Vue Router 动态路由语法，如 /:path(.*)*、/:id* 等
         """
         if not path:
             return False
@@ -464,6 +467,9 @@ class InlineJSParser:
                 return False
         
         if path.startswith('data:') or path.startswith('javascript:'):
+            return False
+        
+        if self.VUE_ROUTE_PATTERN.search(path):
             return False
         
         if '/' not in path:
