@@ -517,25 +517,46 @@ class InlineJSParser:
     
     def generate_probe_paths(self) -> List[str]:
         """
-        生成用于探测的路径列表
+        生成用于探测的路径列表（渗透测试专家思维）
         
-        从提取的URL模板和路由生成可探测的路径
-        例如: /user/:id -> /user/1, /user/admin 等
+        从提取的URL模板、路由和API路径生成可探测的路径
+        1. 模板路由：/user/:id -> /user/1, /user/admin
+        2. 完整API路径直接保留
+        3. 使用SmartPathCombiner生成更多变体
         """
         probe_paths = []
+        
+        all_paths = set()
         
         for template in self.extracted_templates:
             path = template.replace(':id', '1')
             path = path.replace(':name', 'admin')
             path = path.replace(':uuid', '550e8400-e29b-41d4-a716-446655440000')
-            probe_paths.append(path)
+            all_paths.add(path)
         
         for route in self.extracted_routes:
-            if route not in probe_paths:
-                probe_paths.append(route)
+            all_paths.add(route)
         
         for path in self.extracted_paths:
-            if path not in probe_paths:
+            all_paths.add(path)
+        
+        combiner = SmartPathCombiner()
+        
+        for path in all_paths:
+            combiner.add_api_path(path)
+        
+        configs_content = str(self.extracted_configs)
+        if configs_content:
+            combiner.add_env_config(configs_content)
+        
+        smart_probes = combiner.generate_probes()
+        
+        max_probes = 500
+        if len(smart_probes) > max_probes:
+            smart_probes = smart_probes[:max_probes]
+        
+        for path in smart_probes:
+            if self._is_valid_api_path(path):
                 probe_paths.append(path)
         
         return probe_paths
@@ -959,129 +980,170 @@ class ResponseBasedAPIDiscovery:
 class SmartPathCombiner:
     """
     智能路径组合器
-    参考 0x727/ChkApi filter_data() 的核心逻辑
+    参考渗透测试专家的思路：智能组合 base_url + API 路径，生成更多探测目标
     
-    功能：
-    1. 从 JS 配置中提取 base_url（如 VUE_APP_BASEURL）
-    2. 分离 path_with_api（如 /api, /rest）和 path_without_api（如 /user/list）
-    3. 智能组合生成完整 API 路径
+    核心思路：
+    1. 从 JS 配置中提取 base_url（如 VUE_APP_BASEURL: "https://api.example.com/v1"）
+    2. 从 JS 中提取相对路径（如 /user/login, /admin/list）
+    3. 智能组合：
+       - 完整相对路径直接保留
+       - 单段路径与 base_url 组合
+       - 生成常见后缀变体（_list, _add, _edit, _delete 等）
     """
     
     API_PREFIXES = ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway', 'prod-api', 'test-api', 'pre-api']
     
+    COMMON_SUFFIXES = [
+        'list', 'add', 'edit', 'delete', 'remove', 'update', 'create', 'save',
+        'get', 'set', 'fetch', 'load', 'query', 'search', 'find',
+        'login', 'logout', 'auth', 'register', 'info', 'profile', 'detail',
+        'page', 'all', 'tree', 'treeList', 'select', 'options', 'combo',
+        'export', 'import', 'upload', 'download', 'submit', 'confirm',
+        'status', 'state', 'enable', 'disable', 'start', 'stop', 'reset',
+        'count', 'sum', 'total', 'statistics', 'stats', 'summary',
+        'config', 'settings', 'menu', 'verify', 'check', 'validate',
+        'send', 'receive', 'push', 'pull', 'sync', 'refresh',
+    ]
+    
     def __init__(self, base_url: str = ""):
         self.base_url = base_url
-        self.tree_urls = set()
-        self.base_urls = set()
-        self.path_with_api_paths = set()
-        self.path_without_api_paths = set()
+        self.base_urls: Set[str] = set()
+        self.api_paths: Set[str] = set()
     
-    def add_js_url(self, js_url: str) -> None:
-        """从 JS URL 中提取 base_url"""
-        if not js_url:
+    def add_base_url(self, url: str) -> None:
+        """添加 base_url"""
+        if not url:
             return
         
-        parsed = urlparse(js_url)
-        
-        tree_url = f"{parsed.scheme}://{parsed.netloc}"
-        self.tree_urls.add(tree_url)
-        
-        if parsed.path and parsed.path != '/':
-            base = f"{parsed.scheme}://{parsed.netloc}"
-            self.base_urls.add(base)
-    
-    def add_config(self, config_url: str) -> None:
-        """从配置 URL（如 VUE_APP_BASEURL）中提取 base_url"""
-        if not config_url:
-            return
-        
-        if config_url.startswith('http'):
-            parsed = urlparse(config_url)
+        if url.startswith('http'):
+            parsed = urlparse(url)
             self.base_urls.add(f"{parsed.scheme}://{parsed.netloc}")
-            self.base_urls.add(config_url.rsplit('/', 1)[0] if '/' in parsed.path else config_url)
-        elif config_url.startswith('/'):
+            if parsed.path and parsed.path != '/':
+                base_with_path = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                self.base_urls.add(base_with_path.rstrip('/'))
+        elif url.startswith('/'):
             if self.base_url:
-                self.base_urls.add(self.base_url.rstrip('/') + config_url)
+                self.base_urls.add(self.base_url.rstrip('/') + url)
     
-    def add_api_path(self, api_path: str) -> None:
-        """添加 API 路径并智能分类"""
-        if not api_path or len(api_path) < 2:
+    def add_env_config(self, config_line: str) -> None:
+        """从环境配置中提取 base_url（如 VUE_APP_BASEURL）"""
+        if not config_line:
             return
         
-        if api_path.startswith('http'):
-            parsed = urlparse(api_path)
-            self.base_urls.add(f"{parsed.scheme}://{parsed.netloc}")
+        patterns = [
+            r'["\'](VUE_APP_\w+|BASE_URL|API_URL|BASE_API)["\']\s*:\s*["\']([^"\']+)["\']',
+            r'baseURL\s*[=:]\s*["\']([^"\']+)["\']',
+            r'apiBase\s*[=:]\s*["\']([^"\']+)["\']',
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, config_line, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    url = match[-1]
+                else:
+                    url = match
+                if url and len(url) > 3:
+                    self.add_base_url(url)
+    
+    def add_api_path(self, path: str) -> None:
+        """添加 API 路径"""
+        if not path or len(path) < 2:
+            return
+        
+        if path.startswith('http'):
+            parsed = urlparse(path)
             if parsed.path:
-                path = parsed.path
-                self._classify_path(path)
+                self.api_paths.add(parsed.path)
+            self.add_base_url(path)
+        elif path.startswith('/'):
+            self.api_paths.add(path)
         else:
-            self._classify_path(api_path)
+            self.api_paths.add('/' + path)
     
-    def _classify_path(self, path: str) -> None:
-        """分类路径：有 api 前缀 or 没有"""
-        path = path.strip().strip("'\"")
+    def generate_probes(self) -> List[str]:
+        """
+        生成探测目标（渗透测试思维）
         
-        if not path or path == '/':
-            return
+        1. 完整路径直接保留
+        2. 单段路径与 base_url 组合
+        3. 生成常见后缀变体
+        """
+        results = set()
         
-        api_index = path.find('api/')
-        if api_index != -1:
-            api_prefix = path[:api_index] + 'api'
-            self.path_with_api_paths.add(api_prefix)
+        for path in self.api_paths:
+            path = path.strip().strip("'\"")
+            if not path or len(path) < 2:
+                continue
             
-            remaining = path[api_index + 4:]
-            if remaining and remaining != '/':
-                self.path_without_api_paths.add('/' + remaining)
-        else:
-            clean_path = '/' + path.lstrip('/')
-            if clean_path not in ['/', '/api']:
-                self.path_without_api_paths.add(clean_path)
-    
-    def combine(self) -> List[str]:
-        """
-        组合生成所有可能的 API 路径
-        参考 ChkApi filter_data 的组合逻辑
-        """
-        results = []
+            if path.count('/') >= 2:
+                results.add(path)
+                results.update(self._generate_suffix_variants(path))
+            elif path.count('/') == 1:
+                results.add(path)
+                results.update(self._generate_suffix_variants(path))
+            else:
+                if len(path) > 2 and not path.startswith(':'):
+                    results.add(path)
         
-        if not self.base_urls and not self.tree_urls:
-            return list(self.path_without_api_paths)
-        
-        all_bases = list(self.base_urls | self.tree_urls)
-        
-        if not self.path_with_api_paths:
-            self.path_with_api_paths.add('/api')
-        
-        for base in all_bases:
+        for base in self.base_urls:
             base = base.rstrip('/')
             
-            for api_prefix in self.path_with_api_paths:
-                for no_api_path in self.path_without_api_paths:
-                    if no_api_path.startswith('/'):
-                        full_path = f"{base}{api_prefix}{no_api_path}"
-                    else:
-                        full_path = f"{base}{api_prefix}/{no_api_path}"
-                    results.append(full_path)
-            
-            for api_prefix in self.path_with_api_paths:
-                if api_prefix.startswith('/'):
-                    full_path = f"{base}{api_prefix}"
+            for path in self.api_paths:
+                path = path.strip().strip("'\"")
+                if not path:
+                    continue
+                
+                if path.startswith('/'):
+                    full = f"{base}{path}"
                 else:
-                    full_path = f"{base}/{api_prefix}"
-                results.append(full_path)
+                    full = f"{base}/{path}"
+                results.add(full)
+                results.update(self._generate_suffix_variants(full))
         
-        return list(set(results))
+        return sorted(list(results))
+    
+    def _generate_suffix_variants(self, path: str) -> List[str]:
+        """
+        生成常见后缀变体
+        如 /user -> /user/list, /user/add, /user/edit, /user/delete
+        """
+        variants = []
+        path_lower = path.lower()
+        
+        has_suffix = any(path_lower.endswith(f'/{s}') or path_lower.endswith(f'_{s}') for s in self.COMMON_SUFFIXES)
+        if has_suffix:
+            return variants
+        
+        for suffix in self.COMMON_SUFFIXES:
+            variants.append(f"{path}/{suffix}")
+            variants.append(f"{path}_{suffix}")
+        
+        return variants
     
     @classmethod
-    def from_js_content(cls, js_content: str, base_url: str = "") -> 'SmartPathCombiner':
+    def from_content(cls, content: str, base_url: str = "") -> 'SmartPathCombiner':
         """
-        从 JS 内容中智能提取和组合 API 路径
+        从内容中智能提取和组合 API 路径
         """
         combiner = cls(base_url)
         
-        env_pattern = re.compile(r'''['"](VUE_APP_\w+|BASE_URL|API_URL|BASE_API)['"]\s*:\s*['"]([^"']+)['"]''')
-        for match in env_pattern.findall(js_content):
-            config_value = match[1]
-            combiner.add_config(config_value)
+        combiner.add_env_config(content)
+        
+        api_patterns = [
+            r'["\'](/[a-zA-Z0-9_/-]+)["\']',
+            r'path\s*[=:]\s*["\']([^"\']+)["\']',
+            r'url\s*[=:]\s*["\']([^"\']+)["\']',
+            r'api\s*[=:]\s*["\']([^"\']+)["\']',
+        ]
+        
+        for pattern in api_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    path = match[-1]
+                else:
+                    path = match
+                combiner.add_api_path(path)
         
         return combiner
