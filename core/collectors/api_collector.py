@@ -88,7 +88,7 @@ class APIMethodInferrer:
             methods.add('GET')
             methods.add('POST')
         
-        return sorted(list(methods), key=lambda x: {'GET': 0, 'POST': 1, 'PUT': 2, 'PATCH': 3}.get(x, 9))
+        return sorted(list(methods), key=lambda x: {'POST': 0, 'PUT': 1, 'GET': 2, 'PATCH': 3}.get(x, 9))
     
     @classmethod
     def is_json_response(cls, content: str, content_type: str = "") -> bool:

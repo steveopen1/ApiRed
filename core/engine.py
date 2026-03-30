@@ -2494,7 +2494,7 @@ class ScanEngine:
         self._flux_results = flux_results
     
     async def _score_apis(self) -> Dict[str, Any]:
-        """API评分 - 渗透测试思维：智能方法推断 + JSON响应验证"""
+        """API评分 - 渗透测试思维：智能方法推断 + JSON响应验证 + 有参探测"""
         from .collectors.api_collector import APIMethodInferrer
         
         endpoints = self.result.api_endpoints if self.result else []
@@ -2502,6 +2502,18 @@ class ScanEngine:
         url_to_endpoint: Dict[str, Any] = {e.full_url: e for e in endpoints}
         
         all_responses: List[Any] = []
+        
+        COMMON_PARAMS = {
+            'page': '1', 'pageNum': '1', 'page_no': '1', 'p': '1',
+            'pageSize': '10', 'page_size': '10', 'size': '10', 'limit': '10', 'ps': '10',
+            'keyword': 'test', 'kw': 'test', 'search': 'test', 'query': 'test', 'q': 'test',
+            'id': '1', 'ids': '1', 'uid': '1', 'userId': '1', 'id': 'admin',
+            'name': 'admin', 'username': 'admin', 'user': 'admin',
+            'status': '1', 'state': '1', 'type': '1', 'typeId': '1',
+            'key': 'test', 'value': 'test', 'val': 'test',
+            'token': 'test', 'Authorization': 'Bearer test',
+            'file': 'test', 'data': '{"test": 1}',
+        }
         
         for endpoint in endpoints:
             methods_to_try = APIMethodInferrer.infer_methods(endpoint.path)
@@ -2532,6 +2544,45 @@ class ScanEngine:
                         from .models import APIStatus
                         endpoint.status = APIStatus.ALIVE
                         endpoint_found = True
+                        
+                        from .testers.parameter_extractor import APIParameterExtractor
+                        param_extractor = APIParameterExtractor()
+                        extracted_params = param_extractor.extract_from_response(content)
+                        
+                        if extracted_params and not endpoint_found:
+                            param_dict = {}
+                            for p in extracted_params[:5]:
+                                if hasattr(p, 'name') and hasattr(p, 'example_value'):
+                                    param_dict[p.name] = p.example_value
+                                elif hasattr(p, 'name'):
+                                    param_dict[p.name] = COMMON_PARAMS.get(p.name, 'test')
+                            
+                            if param_dict:
+                                try:
+                                    if method == 'GET':
+                                        from urllib.parse import urlencode
+                                        params_url = endpoint.full_url + '?' + urlencode(param_dict)
+                                        param_response = await self._http_client.request(params_url, method='GET')
+                                    else:
+                                        param_response = await self._http_client.request(
+                                            endpoint.full_url,
+                                            method=method,
+                                            data=param_dict if method in ['POST', 'PUT'] else None,
+                                            json_data=param_dict if method == 'POST' else None
+                                        )
+                                    
+                                    if param_response and hasattr(param_response, 'status_code'):
+                                        param_status = param_response.status_code
+                                        param_content = param_response.content if hasattr(param_response, 'content') else ''
+                                        param_ct = param_response.headers.get('Content-Type', '') if hasattr(param_response, 'headers') else ''
+                                        
+                                        if param_status and 200 <= param_status < 400:
+                                            if APIMethodInferrer.is_json_response(param_content, param_ct):
+                                                if not APIMethodInferrer.is_html_response(param_content, param_ct):
+                                                    endpoint.status = APIStatus.ALIVE
+                                                    endpoint_found = True
+                                except Exception:
+                                    pass
                         
                         from .utils.http_client import TaskResult
                         task_result = TaskResult(
@@ -2584,51 +2635,97 @@ class ScanEngine:
                         task_result = TaskResult(
                             url=endpoint.full_url,
                             method=method,
-                            status_code=response.status_code,
-                            content=response.content if hasattr(response, 'content') and response.content else '',
+                            status_code=status_code,
+                            content=content if content else '',
                             content_bytes=b'',
                             content_hash=''
                         )
                         all_responses.append(task_result)
-                        
+                
                 except Exception:
                     continue
             
             if not endpoint_found:
-                try:
-                    response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
-                        endpoint.full_url,
-                        method=endpoint.method
-                    )
-                    from .utils.http_client import TaskResult
-                    task_result = TaskResult(
-                        url=endpoint.full_url,
-                        method=endpoint.method,
-                        status_code=response.status_code,
-                        content=response.content,
-                        content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
-                        content_hash=getattr(response, 'content_hash', '')
-                    )
-                    all_responses.append(task_result)
-                    
-                    from .analyzers.response_cluster import TaskResult as RCTaskResult
-                    rc_task_result = RCTaskResult(
-                        status_code=response.status_code,
-                        content=response.content.encode() if isinstance(response.content, str) else response.content,
-                        content_hash=response.content_hash
-                    )
-                    self._response_cluster.add_response(endpoint.api_id, rc_task_result)  # type: ignore[reportOptionalMemberAccess]
-                    
-                    if not self._response_cluster.is_baseline_404(endpoint.api_id):  # type: ignore[reportOptionalMemberAccess]
-                        is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+                from urllib.parse import urlencode
+                
+                for method in ['POST', 'PUT'] if endpoint.method == 'GET' else ['GET']:
+                    for param_key in ['key', 'id', 'page', 'name', 'data']:
+                        COMMON_PARAMS_404 = {param_key: 'test', 'value': 'test'}
                         
-                        if is_valid:
-                            from .models import APIStatus
-                            endpoint.status = APIStatus.ALIVE
-                            endpoint.status_code = response.status_code
-                            endpoint.response_type = self._detect_response_type(response)
-                except Exception:
-                    pass
+                        try:
+                            if method in ['POST', 'PUT']:
+                                response = await self._http_client.request(
+                                    endpoint.full_url,
+                                    method=method,
+                                    data=urlencode(COMMON_PARAMS_404),
+                                    headers={'Content-Type': 'application/x-www-form-urlencoded'}
+                                )
+                            else:
+                                response = await self._http_client.request(
+                                    endpoint.full_url + '?' + urlencode(COMMON_PARAMS_404),
+                                    method=method
+                                )
+                            
+                            if response and hasattr(response, 'status_code'):
+                                status = response.status_code
+                                if status and 200 <= status < 400:
+                                    endpoint.method = method
+                                    endpoint.status_code = status
+                                    endpoint.response_type = self._detect_response_type(response)
+                                    
+                                    content = response.content if hasattr(response, 'content') else ''
+                                    ct = response.headers.get('Content-Type', '') if hasattr(response, 'headers') else ''
+                                    
+                                    if APIMethodInferrer.is_json_response(content, ct):
+                                        if not APIMethodInferrer.is_html_response(content, ct):
+                                            endpoint.status = APIStatus.ALIVE
+                                            endpoint_found = True
+                                            break
+                        except:
+                            pass
+                    
+                    if endpoint_found:
+                        break
+                
+                if not endpoint_found:
+                    try:
+                        response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
+                            endpoint.full_url,
+                            method=endpoint.method
+                        )
+                        from .utils.http_client import TaskResult
+                        task_result = TaskResult(
+                            url=endpoint.full_url,
+                            method=endpoint.method,
+                            status_code=response.status_code,
+                            content=response.content,
+                            content_bytes=response.content.encode() if isinstance(response.content, str) else response.content,
+                            content_hash=getattr(response, 'content_hash', '')
+                        )
+                        all_responses.append(task_result)
+                        
+                        from .analyzers.response_cluster import TaskResult as RCTaskResult
+                        rc_task_result = RCTaskResult(
+                            status_code=response.status_code,
+                            content=response.content.encode() if isinstance(response.content, str) else response.content,
+                            content_hash=response.content_hash
+                        )
+                        self._response_cluster.add_response(endpoint.api_id, rc_task_result)  # type: ignore[reportOptionalMemberAccess]
+                        
+                        status_code = response.status_code if hasattr(response, 'status_code') else 0
+                        if status_code == 404 or status_code == 410:
+                            continue
+                        
+                        if not self._response_cluster.is_baseline_404(endpoint.api_id):  # type: ignore[reportOptionalMemberAccess]
+                            is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
+                            
+                            if is_valid:
+                                from .models import APIStatus
+                                endpoint.status = APIStatus.ALIVE
+                                endpoint.status_code = response.status_code
+                                endpoint.response_type = self._detect_response_type(response)
+                    except:
+                        pass
         
         if self._response_baseline and all_responses:
             try:
