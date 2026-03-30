@@ -38,9 +38,9 @@ class BrowserResource:
     resource_type: str  # js, api, page, screenshot
     content: str
     method: str = "GET"
-    api_patterns: List[str] = None
-    vulnerabilities: List[str] = None
-    screenshots: List[str] = None
+    api_patterns: Optional[List[str]] = None
+    vulnerabilities: Optional[List[str]] = None
+    screenshots: Optional[List[str]] = None
     
     def __post_init__(self):
         if self.api_patterns is None:
@@ -103,7 +103,7 @@ class HeadlessBrowserCollector:
             return False
         
         try:
-            from playwright.async_api import async_playwright
+            from playwright.async_api import async_playwright  # type: ignore
             
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
@@ -516,7 +516,7 @@ class HeadlessBrowserCollector:
         await self.close()
 
 
-async def create_browser_collector(config: Optional[Dict] = None) -> HeadlessBrowserCollector:
+async def create_browser_collector(config: Optional[Dict] = None) -> Optional[HeadlessBrowserCollector]:
     """创建无头浏览器采集器"""
     collector = HeadlessBrowserCollector(config)
     success = await collector.initialize(headless=True)

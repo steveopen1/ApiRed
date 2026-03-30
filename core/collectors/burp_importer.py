@@ -134,7 +134,7 @@ class BurpSuiteImporter:
                         status_code=status_code,
                         content_length=int(row.get('Response length', 0)),
                         content_type=row.get('Content-type', ''),
-                        source=TrafficSource.BURP_CSV if 'Burp' in str(row) else TrafficSource.PROXY_LOG
+                        source=TrafficSource.BURP_CSV if 'Burp' in str(row) else TrafficSource.PROXY_LOG  # type: ignore
                     )
                 
                 transaction = ProxyTransaction(
@@ -545,7 +545,7 @@ def import_burp_file(file_path: str) -> BurpSuiteImporter:
             try:
                 import copy
                 test_importer = BurpSuiteImporter()
-                test_importer.import_csv = lambda c: copy.deepcopy(importer.import_csv(c))
+                test_importer.import_csv = lambda c: copy.deepcopy(importer.import_csv(c))  # type: ignore
                 format_handler(content)
                 break
             except Exception:

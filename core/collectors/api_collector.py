@@ -35,7 +35,7 @@ class TFIDFUrlClassifier:
     - 位置权重：越靠前的段越可能是API前缀
     """
     
-    def __init__(self, known_prefixes: Set[str] = None, known_resources: Set[str] = None):
+    def __init__(self, known_prefixes: Optional[Set[str]] = None, known_resources: Optional[Set[str]] = None):
         self.known_prefixes = known_prefixes or set()
         self.known_resources = known_resources or set()
         self.segment_freq: Dict[str, int] = {}
@@ -1029,7 +1029,7 @@ class APIRouter:
     VERSION_PREFIX_PATTERN = re.compile(r'^v\d+$', re.IGNORECASE)
     
     @classmethod
-    def auto_classify_urls_enhanced(cls, urls: List[str], custom_prefixes: set = None, custom_resources: set = None) -> Dict[str, List[str]]:
+    def auto_classify_urls_enhanced(cls, urls: List[str], custom_prefixes: Optional[set] = None, custom_resources: Optional[set] = None) -> Dict[str, List[str]]:
         """
         混合算法 URL 分类（知识库 + 统计增强）
         
@@ -1104,7 +1104,7 @@ class APIRouter:
                 'path_with_api_paths': [],
                 'path_with_no_api_paths': list(all_api_paths),
                 '_identified_keywords': [],
-                '_method': 'enhanced',
+                '_method': ['enhanced'],
             }
         
         total_urls = len(segment_urls)
@@ -1225,7 +1225,7 @@ class APIRouter:
             'path_with_api_paths': sorted(list(path_with_api_paths)),
             'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
             '_identified_keywords': sorted(list(identified_api_keywords)),
-            '_method': 'enhanced',
+            '_method': ['enhanced'],
         }
     
     @classmethod
@@ -1309,7 +1309,7 @@ class APIRouter:
                 'path_with_api_paths': sorted(list(path_with_api_paths)),
                 'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
                 '_identified_keywords': sorted(list(identified_api_keywords)),
-                '_method': method
+                '_method': [method]
             }
             
         except Exception as e:
@@ -1407,7 +1407,7 @@ URL 列表：
                     'path_with_api_paths': sorted(list(path_with_api_paths)),
                     'path_with_no_api_paths': sorted(list(path_with_no_api_paths)),
                     '_identified_keywords': sorted(list(identified_api_keywords)),
-                    '_method': 'ai'
+                    '_method': ['ai']
                 }
                 
             except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -1909,7 +1909,7 @@ class APIAggregator:
                     method=api.method,
                     source_type=source_type,
                     source_url=api.base_url,
-                    confidence='medium'
+                    confidence=0.5
                 )
             except Exception as e:
                 logger.debug(f"Fusion engine add failed: {e}")
@@ -1939,7 +1939,7 @@ class APIAggregator:
                 'total_apis': len(self.apis),
             }
         
-        fusion_stats = self._fusion_engine.get_stats()
+        fusion_stats = self._fusion_engine.get_stats()  # type: ignore
         return {
             'fusion_enabled': True,
             'total_apis': len(self.apis),
@@ -1954,7 +1954,7 @@ class APIAggregator:
         if not self._fusion_engine:
             return self.get_all()
         
-        high_conf = self._fusion_engine.get_high_confidence()
+        high_conf = self._fusion_engine.get_high_confidence()  # type: ignore
         high_conf_urls = {ep.full_url for ep in high_conf}
         
         return [api for api in self.apis.values() 
@@ -1965,7 +1965,7 @@ class APIAggregator:
         if not self._fusion_engine:
             return []
         
-        confirmed = self._fusion_engine.get_runtime_confirmed()
+        confirmed = self._fusion_engine.get_runtime_confirmed()  # type: ignore
         confirmed_urls = {ep.full_url for ep in confirmed}
         
         return [api for api in self.apis.values()
@@ -2138,10 +2138,10 @@ class APIDictionaryLoader:
     
     ALL_DICTIONARY_URLS = SECLISTS_API_URLS + API_WORDLIST_URLS
     
-    _cached_prefixes: set = None
-    _cached_resources: set = None
+    _cached_prefixes: Optional[set] = None
+    _cached_resources: Optional[set] = None
     _cache_loaded: bool = False
-    _cache_loaded_urls: set = None
+    _cache_loaded_urls: Optional[set] = None
     
     @classmethod
     def _is_valid_api_segment(cls, segment: str) -> bool:
@@ -2181,7 +2181,7 @@ class APIDictionaryLoader:
         Returns:
             (api_prefixes, resource_paths) 元组
         """
-        import aiohttp
+        import aiohttp  # type: ignore
         
         api_prefixes = set()
         resource_paths = set()

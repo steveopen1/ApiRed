@@ -311,7 +311,8 @@ class JavaScriptASTAnalyzer:
         graphql_info = GraphQLInfo(
             operation_type=op_type,
             operation_name=op_name,
-            fields=fields
+            fields=fields,
+            variables={}
         )
         self.graphql_operations.append(graphql_info)
     
@@ -345,7 +346,7 @@ class JavaScriptASTAnalyzer:
         
         for pattern in env_patterns:
             for match in re.finditer(pattern, content):
-                if match.lastindex >= 2:
+                if match.lastindex is not None and match.lastindex >= 2:
                     key = match.group(1)
                     value = match.group(2)
                     self.env_configs[key] = value
@@ -432,7 +433,7 @@ class JavaScriptASTAnalyzer:
         
         for pattern in header_patterns:
             for match in re.finditer(pattern, content, re.IGNORECASE):
-                if match.lastindex >= 2:
+                if match.lastindex is not None and match.lastindex >= 2:
                     header_name = match.group(2)
                     header_value = match.group(3) if match.lastindex >= 3 else match.group(0)
                     self.headers[header_name] = header_value
@@ -583,7 +584,7 @@ def extract_api_paths_from_js(js_content: str) -> List[str]:
     return analyzer.get_api_paths()
 
 
-def JavaScriptAnalyzer(content: str = None):
+def JavaScriptAnalyzer(content: Optional[str] = None):
     """
     JavaScript综合分析器
     

@@ -114,9 +114,9 @@ class JSExtractor:
         
         if WEBPACK_ANALYZER_AVAILABLE:
             try:
-                chunks = WebpackAnalyzer.extract_chunks(js_content)
-                modules = WebpackAnalyzer.extract_modules(js_content)
-                webpack_paths = WebpackAnalyzer.extract_webpack_chunk_paths(js_content)
+                chunks = WebpackAnalyzer.extract_chunks(js_content)  # type: ignore
+                modules = WebpackAnalyzer.extract_modules(js_content)  # type: ignore
+                webpack_paths = WebpackAnalyzer.extract_webpack_chunk_paths(js_content)  # type: ignore
                 paths.update(chunks.keys())
                 paths.update(modules)
                 paths.update(webpack_paths)
@@ -421,7 +421,7 @@ class EnhancedJSCollector:
             if isinstance(result, Exception):
                 continue
             
-            url, success, found_urls, api_paths = result
+            url, success, found_urls, api_paths = result  # type: ignore[misc]
             
             if success:
                 for found_url in found_urls:

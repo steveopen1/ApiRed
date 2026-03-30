@@ -130,7 +130,7 @@ class PassiveSourceCollector:
         ),
     }
 
-    def __init__(self, http_client=None, api_keys: Dict[str, str] = None):
+    def __init__(self, http_client=None, api_keys: Optional[Dict[str, str]] = None):
         self.http_client = http_client
         self.api_keys = api_keys or {}
         self.collected_urls: Set[str] = set()

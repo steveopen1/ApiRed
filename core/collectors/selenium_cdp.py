@@ -48,10 +48,10 @@ class SeleniumCDPCollector:
     def create_driver(self, chromedriver_path: str = "/usr/bin/chromedriver") -> bool:
         """创建 Selenium WebDriver"""
         try:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.service import Service
-            from selenium.webdriver.chrome.options import Options
-            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium import webdriver  # type: ignore
+            from selenium.webdriver.chrome.service import Service  # type: ignore
+            from selenium.webdriver.chrome.options import Options  # type: ignore
+            from selenium.webdriver.support.ui import WebDriverWait  # type: ignore
             
             options = Options()
             options.add_argument('--no-sandbox')
@@ -65,7 +65,8 @@ class SeleniumCDPCollector:
             
             service = Service(executable_path=chromedriver_path)
             self.driver = webdriver.Chrome(service=service, options=options)
-            
+            self.WebDriverWait = WebDriverWait
+
             self.driver.execute_cdp_cmd(
                 'Network.setExtraHTTPHeaders',
                 {"headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}}
@@ -83,7 +84,7 @@ class SeleniumCDPCollector:
         
         try:
             self.driver.get(url)
-            WebDriverWait(self.driver, wait).until(
+            self.WebDriverWait(self.driver, wait).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
             time.sleep(2)

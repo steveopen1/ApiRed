@@ -12,7 +12,7 @@ from urllib.parse import urljoin, urlparse
 from functools import lru_cache
 
 try:
-    import regex
+    import regex  # type: ignore
     HAS_REGEX = True
 except ImportError:
     HAS_REGEX = False
@@ -610,13 +610,14 @@ class ResponseBasedAPIDiscovery:
                 
                 if HAS_TLDEXTRACT and self.target_domain:
                     try:
-                        extracted_domain = tldextract.extract(domain)
-                        extracted_target = tldextract.extract(self.target_domain)
-                        if extracted_domain.subdomain:
-                            self._realtime.output_subdomain(domain, source=source_url)
-                        if extracted_domain.domain == extracted_target.domain and extracted_domain.suffix == extracted_target.suffix:
-                            if not extracted_domain.subdomain:
-                                self._realtime.output_rootdomain(domain, source=source_url)
+                        extracted_domain = tldextract.extract(domain)  # type: ignore
+                        extracted_target = tldextract.extract(self.target_domain)  # type: ignore
+                        if extracted_domain and extracted_target:
+                            if extracted_domain.subdomain:
+                                self._realtime.output_subdomain(domain, source=source_url)
+                            if extracted_domain.domain == extracted_target.domain and extracted_domain.suffix == extracted_target.suffix:
+                                if not extracted_domain.subdomain:
+                                    self._realtime.output_rootdomain(domain, source=source_url)
                         continue
                     except Exception:
                         pass
@@ -719,10 +720,11 @@ class ResponseBasedAPIDiscovery:
         
         if HAS_TLDEXTRACT:
             try:
-                extracted_domain = tldextract.extract(domain)
-                extracted_target = tldextract.extract(target)
-                if extracted_domain.domain == extracted_target.domain:
-                    return True
+                extracted_domain = tldextract.extract(domain)  # type: ignore
+                extracted_target = tldextract.extract(target)  # type: ignore
+                if extracted_domain and extracted_target:
+                    if extracted_domain.domain == extracted_target.domain:
+                        return True
             except Exception:
                 pass
         

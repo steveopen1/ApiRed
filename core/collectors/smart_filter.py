@@ -103,7 +103,7 @@ class SmartFilter:
     def score_endpoints(
         self,
         endpoints: List[Dict[str, Any]],
-        source_weights: Dict[str, float] = None
+        source_weights: Optional[Dict[str, float]] = None
     ) -> List[ScoredEndpoint]:
         """
         对端点列表进行评分和排序
@@ -327,7 +327,7 @@ class SmartFilter:
     def filter_by_content_diff(
         self,
         responses: List[Dict[str, Any]],
-        baseline: Dict[str, Any] = None,
+        baseline: Optional[Dict[str, Any]] = None,
         min_diff_ratio: float = 0.1
     ) -> List[Dict[str, Any]]:
         """

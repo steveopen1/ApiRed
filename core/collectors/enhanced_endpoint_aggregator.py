@@ -411,8 +411,8 @@ class EnhancedEndpointAggregator:
                 raw_evidence=source_info.get('raw_evidence', '') if source_info else '',
             ))
             
-            if hasattr(api, 'params') and api.params:
-                for p in api.params:
+            if hasattr(api, 'params') and api.params:  # type: ignore[attr-defined]
+                for p in api.params:  # type: ignore
                     if p not in existing.params:
                         existing.params.append(p)
             
@@ -431,7 +431,7 @@ class EnhancedEndpointAggregator:
         return endpoint
     
     def add_endpoint(self, url: str, method: str = "GET",
-                     source_type: SourceType = None,
+                     source_type: Optional[SourceType] = None,
                      source_url: str = "",
                      confidence: str = "low",
                      runtime_observed: bool = False,

@@ -45,7 +45,7 @@ class JSFingerprintCache:
         self._max_memory_items = max_memory_items
         
         cache_class = LFUCache if use_lfu else LRUCache
-        self._memory_cache: cache_class = cache_class(max_size=max_memory_items, ttl=3600)
+        self._memory_cache: Any = cache_class(max_size=max_memory_items, ttl=3600)
     
     def get_cache_key(self, content: bytes) -> str:
         """计算内容哈希作为缓存键"""
@@ -694,7 +694,7 @@ class JSParser:
     def _check_esprima_available(self) -> bool:
         """检查 esprima 是否可用"""
         try:
-            import esprima
+            import esprima  # type: ignore
             self._ast_parser = esprima
             return True
         except ImportError:
@@ -1189,10 +1189,10 @@ class JSParser:
             if resource in js_lower:
                 resources.add(resource)
         
-        suffixes = self._filter_invalid_fragments(list(suffixes), is_suffix=True)
-        resources = self._filter_invalid_fragments(list(resources), is_suffix=False)
+        suffixes_list = self._filter_invalid_fragments(list(suffixes), is_suffix=True)
+        resources_list = self._filter_invalid_fragments(list(resources), is_suffix=False)
         
-        return (list(suffixes), list(resources))
+        return (suffixes_list, resources_list)
     
     def _filter_invalid_fragments(self, fragments: List[str], is_suffix: bool = False) -> List[str]:
         """
@@ -1560,7 +1560,7 @@ class JSParser:
             提取的 API 路由列表
         """
         try:
-            tree = self._ast_parser.parse(js_content, js_content_type='script')
+            tree = self._ast_parser.parse(js_content, js_content_type='script')  # type: ignore
             return self._traverse_ast(tree.body)
         except Exception as e:
             logger.warning(f"AST解析异常: {e}")

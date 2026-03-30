@@ -10,6 +10,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
 from .base import BaseAgent, AgentConfig, AgentResult, Action
+from ..knowledge_base import KnowledgeBase
 
 
 class ScannerAgent(BaseAgent):
@@ -22,6 +23,7 @@ class ScannerAgent(BaseAgent):
         self.api_results = []
         self.static_urls = []
         self.prediction_cache = {}
+        self.knowledge_base: Optional[KnowledgeBase] = None
     
     async def plan(self, context: Dict) -> List[Action]:
         actions = [

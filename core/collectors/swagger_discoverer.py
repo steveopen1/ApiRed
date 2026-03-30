@@ -10,7 +10,7 @@ Swagger/OpenAPI 自动发现模块
 
 import re
 import json
-import yaml
+import yaml  # type: ignore
 import logging
 from typing import List, Dict, Set, Optional, Any, Tuple
 from urllib.parse import urljoin, urlparse

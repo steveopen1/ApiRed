@@ -416,7 +416,7 @@ class APIBypasser:
         
         return results
 
-    def generate_bypass_matrix(self, urls: List[str], methods: List[str] = None) -> List[BypassResult]:
+    def generate_bypass_matrix(self, urls: List[str], methods: Optional[List[str]] = None) -> List[BypassResult]:
         """
         生成 Bypass 矩阵
         

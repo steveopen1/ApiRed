@@ -9,6 +9,7 @@ import os
 import re
 import json
 import logging
+from enum import Enum
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -47,12 +48,13 @@ from .agents import ScannerAgent, AnalyzerAgent, TesterAgent, AgentConfig
 from .agents import Orchestrator, DiscoverAgent, TestAgent, ReflectAgent
 from .agents.orchestrator import ScanContext
 from .knowledge_base import KnowledgeBase
-from .models import ScanResult, APIEndpoint
+from .models import ScanResult, APIEndpoint, Severity
 from .framework import FrameworkDetector
 from .exporters import ReportExporter, OpenAPIExporter, AttackChainExporter
 from .observability import RunProfiler
 
 from .fingerprint import FingerprintEngine, FingerprintResult
+from .unified_fuzzer import UnifiedFuzzer
 from .unified_fusion import UnifiedFusionEngine, FusedEndpoint, SourceType, EndpointType, ConfidenceLevel
 from .secret_matcher import SecretMatcher, SecretMatch, SecretType, RiskLevel
 from .vuln_prioritizer import VulnPrioritizer, VulnCandidate, VulnPriority, VulnCategory
@@ -434,9 +436,9 @@ class ScanEngine:
         try:
             requests_session = None
             if hasattr(self._http_client, '_session'):
-                requests_session = self._http_client._session
+                requests_session = self._http_client._session  # type: ignore[reportOptionalMemberAccess]
             elif hasattr(self._http_client, 'session'):
-                requests_session = self._http_client.session
+                requests_session = self._http_client.session  # type: ignore[reportOptionalMemberAccess]
                 
             self._fingerprint_engine = FingerprintEngine(session=requests_session)
             logger.info(f"指纹引擎已加载: {len(self._fingerprint_engine.get_fingerprints())} 条规则")
@@ -473,6 +475,13 @@ class ScanEngine:
             return await self._run_agent_mode()
         
         await self.initialize()
+        
+        assert self._api_aggregator is not None, "_api_aggregator not initialized"
+        assert self._http_client is not None, "_http_client not initialized"
+        assert self._fuzz_tester is not None, "_fuzz_tester not initialized"
+        assert self._vulnerability_tester is not None, "_vulnerability_tester not initialized"
+        assert self._sensitive_detector is not None, "_sensitive_detector not initialized"
+        assert self._response_cluster is not None, "_response_cluster not initialized"
         
         if self._profiler:
             self._profiler.tracker.start_stage('initialization', input_count=1)
@@ -547,6 +556,8 @@ class ScanEngine:
         finally:
             await self.cleanup()
         
+        if self.result is None:
+            self.result = ScanResult(target_url=self.config.target)
         return self.result
     
     async def _run_agent_mode(self) -> ScanResult:
@@ -583,8 +594,9 @@ class ScanEngine:
                 errors=["AI API key not configured - using rule-based mode"]
             )
         else:
-            from .ai import LLMClient
-            ai_client = LLMClient()
+            from .ai import LLMClient, AIConfig
+            ai_config = AIConfig()
+            ai_client = LLMClient(ai_config)
             self.result = ScanResult(
                 target_url=self.config.target,
                 start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -758,9 +770,9 @@ class ScanEngine:
         swagger_endpoints = []
         
         try:
-            resp = await self._http_client.request(self.config.target, timeout=10)
+            resp = await self._http_client.request(self.config.target, timeout=10)  # type: ignore[reportOptionalMemberAccess]
             if resp and resp.status_code == 200:
-                content = resp.text if hasattr(resp, 'text') else ''
+                content = resp.content if hasattr(resp, 'content') else ''
                 swagger_urls = await discoverer.discover_from_html(content, self.config.target)
                 
                 for swagger_url in swagger_urls[:10]:
@@ -871,7 +883,7 @@ class ScanEngine:
             except Exception as e:
                 logger.warning(f"Browser collection failed: {e}")
         
-        response = await self._http_client.request(
+        response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
             self.config.target,
             headers={'Cookie': self.config.cookies} if self.config.cookies else None
         )
@@ -903,7 +915,7 @@ class ScanEngine:
             if absolute_js_url not in js_urls:
                 js_urls.append(absolute_js_url)
                 try:
-                    js_response = await self._http_client.request(absolute_js_url)
+                    js_response = await self._http_client.request(absolute_js_url)  # type: ignore[reportOptionalMemberAccess]
                     if js_response.status_code == 200:
                         js_content = js_response.content
                         js_content_all += js_content + "\n"
@@ -952,7 +964,7 @@ class ScanEngine:
                                         if js_resolver_url and js_resolver_url not in js_urls:
                                             js_urls.append(js_resolver_url)
                                             try:
-                                                js_resolver_response = await self._http_client.request(js_resolver_url)
+                                                js_resolver_response = await self._http_client.request(js_resolver_url)  # type: ignore[reportOptionalMemberAccess]
                                                 if js_resolver_response.status_code == 200:
                                                     resolver_content = js_resolver_response.content
                                                     if isinstance(resolver_content, str):
@@ -1031,7 +1043,7 @@ class ScanEngine:
             
             for js_url in js_urls:
                 try:
-                    js_response = await self._http_client.request(js_url)
+                    js_response = await self._http_client.request(js_url)  # type: ignore[reportOptionalMemberAccess]
                     if js_response.status_code == 200:
                         alive_js.append({
                             'url': js_url,
@@ -1055,7 +1067,7 @@ class ScanEngine:
     FUZZ_SUFFIXES = FUZZ_SUFFIXES
     PATH_FRAGMENTS = PATH_FRAGMENTS
     
-    async def _probe_parent_paths(self, js_results: List, additional_paths: List[str] = None) -> Dict[str, Set[str]]:
+    async def _probe_parent_paths(self, js_results: List, additional_paths: Optional[List[str]] = None) -> Dict[str, Set[str]]:
         """
         探测父路径是否可访问，并进一步探测常见 RESTful 端点、业务后缀和JS路径模板
         
@@ -1137,9 +1149,9 @@ class ScanEngine:
         self, 
         base_url: str, 
         parent_paths_to_probe: Set[str],
-        path_templates: Set[str] = None,
-        js_suffixes: Set[str] = None,
-        js_resources: Set[str] = None
+        path_templates: Optional[Set[str]] = None,
+        js_suffixes: Optional[Set[str]] = None,
+        js_resources: Optional[Set[str]] = None
     ) -> Dict[str, Set[str]]:
         """并发探测父路径（使用 Semaphore 控制并发数）"""
         if path_templates is None:
@@ -1168,7 +1180,7 @@ class ScanEngine:
         
         async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
             try:
-                response = await self._http_client.request(url, method=method, timeout=5)
+                response = await self._http_client.request(url, method=method, timeout=5)  # type: ignore[reportOptionalMemberAccess]
                 return response.status_code
             except Exception:
                 if method == 'HEAD':
@@ -1237,9 +1249,9 @@ class ScanEngine:
         self, 
         base_url: str, 
         parent_paths_to_probe: Set[str],
-        path_templates: Set[str] = None,
-        js_suffixes: Set[str] = None,
-        js_resources: Set[str] = None
+        path_templates: Optional[Set[str]] = None,
+        js_suffixes: Optional[Set[str]] = None,
+        js_resources: Optional[Set[str]] = None
     ) -> Dict[str, Set[str]]:
         """并发探测父路径"""
         if path_templates is None:
@@ -1266,7 +1278,7 @@ class ScanEngine:
         
         async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
             try:
-                response = await self._http_client.request(url, method=method, timeout=5)
+                response = await self._http_client.request(url, method=method, timeout=5)  # type: ignore[reportOptionalMemberAccess]
                 return response.status_code
             except Exception:
                 if method == 'HEAD':
@@ -1314,16 +1326,14 @@ class ScanEngine:
             elif status_code == 404:
                 logger.info(f"Parent path returns 404, but will probe sub-paths for fuzzing: {parent_path}")
                 await do_probe_sub_paths()
+            elif status_code:
+                logger.debug(f"Parent path returns {status_code}, still probing sub-paths: {parent_path}")
+                await do_probe_sub_paths()
             else:
-                if status_code:
-                    logger.debug(f"Parent path returns {status_code}, still probing sub-paths: {parent_path}")
-                    await do_probe_sub_paths()
-                else:
-                    logger.debug(f"Parent path not reachable, still probing sub-paths: {parent_path}")
-                    await do_probe_sub_paths()
-                    return None
-                
-                return (parent_path, sub_endpoints, status_code if status_code else 0)
+                logger.debug(f"Parent path not reachable, still probing sub-paths: {parent_path}")
+                await do_probe_sub_paths()
+            
+            return (parent_path, sub_endpoints, status_code if status_code else 0)
         
         tasks = [probe_single_path(p) for p in parent_paths_to_probe]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1477,7 +1487,7 @@ class ScanEngine:
             full_url = base_url + base + suffix
             start_time = time.time()
             try:
-                response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                response = await self._http_client.request(full_url, method='HEAD', timeout=5)  # type: ignore[reportOptionalMemberAccess]
                 elapsed = time.time() - start_time
                 if response.status_code and 200 <= response.status_code < 400:
                     self._fuzz_batch_scheduler.record_success(elapsed)
@@ -1485,7 +1495,7 @@ class ScanEngine:
             except Exception:
                 elapsed = time.time() - start_time
                 try:
-                    response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    response = await self._http_client.request(full_url, method='GET', timeout=5)  # type: ignore[reportOptionalMemberAccess]
                     elapsed = time.time() - start_time
                     if response.status_code and 200 <= response.status_code < 400:
                         self._fuzz_batch_scheduler.record_success(elapsed)
@@ -1551,7 +1561,7 @@ class ScanEngine:
             full_url = base_url + base + path
             start_time = time.time()
             try:
-                response = await self._http_client.request(full_url, method='HEAD', timeout=5)
+                response = await self._http_client.request(full_url, method='HEAD', timeout=5)  # type: ignore[reportOptionalMemberAccess]
                 elapsed = time.time() - start_time
                 if response.status_code and 200 <= response.status_code < 400:
                     self._fuzz_batch_scheduler.record_success(elapsed)
@@ -1559,7 +1569,7 @@ class ScanEngine:
             except Exception:
                 elapsed = time.time() - start_time
                 try:
-                    response = await self._http_client.request(full_url, method='GET', timeout=5)
+                    response = await self._http_client.request(full_url, method='GET', timeout=5)  # type: ignore[reportOptionalMemberAccess]
                     elapsed = time.time() - start_time
                     if response.status_code and 200 <= response.status_code < 400:
                         self._fuzz_batch_scheduler.record_success(elapsed)
@@ -1592,7 +1602,7 @@ class ScanEngine:
         4. 响应中的URL
         """
         try:
-            main_response = await self._http_client.request(self.config.target, timeout=10)
+            main_response = await self._http_client.request(self.config.target, timeout=10)  # type: ignore[reportOptionalMemberAccess]
             if main_response and main_response.status_code == 200:
                 content = main_response.content
                 
@@ -1628,7 +1638,7 @@ class ScanEngine:
             js_urls = await self._extract_all_js_urls()
             for js_url in js_urls:
                 try:
-                    js_response = await self._http_client.request(js_url, timeout=10)
+                    js_response = await self._http_client.request(js_url, timeout=10)  # type: ignore[reportOptionalMemberAccess]
                     if js_response and js_response.status_code == 200:
                         content = js_response.content
                         
@@ -1681,18 +1691,18 @@ class ScanEngine:
             
             logger.info(f"Recursive JS extraction depth {depth+1}, processing {len(current_batch)} URLs...")
             
-            tasks = [self._http_client.request(url, timeout=10) for url in current_batch]
+            tasks = [self._http_client.request(url, timeout=10) for url in current_batch]  # type: ignore[reportOptionalMemberAccess]
             responses = await asyncio.gather(*tasks, return_exceptions=True)
             
             new_pending = []
             for url, response in zip(current_batch, responses):
                 if url in visited_urls:
                     continue
-                if response and not isinstance(response, Exception) and hasattr(response, 'status_code') and response.status_code == 200:
+                if response and not isinstance(response, Exception) and getattr(response, 'status_code', 0) == 200:
                     visited_urls.add(url)
-                    all_js_content[url] = response.content
+                    all_js_content[url] = getattr(response, 'content', '')
                     
-                    new_js_urls = self._extract_js_imports_from_content(response.content)
+                    new_js_urls = self._extract_js_imports_from_content(getattr(response, 'content', ''))
                     for new_url in new_js_urls:
                         normalized = self._normalize_js_url(new_url)
                         if normalized and normalized not in visited_urls and normalized not in pending_urls:
@@ -1751,7 +1761,7 @@ class ScanEngine:
         """提取所有JS URL"""
         js_urls = []
         try:
-            response = await self._http_client.request(self.config.target, timeout=10)
+            response = await self._http_client.request(self.config.target, timeout=10)  # type: ignore[reportOptionalMemberAccess]
             if response and response.status_code == 200:
                 script_pattern = re.compile(r'<script[^>]+src=["\']([^"\']+\.js)["\']', re.IGNORECASE)
                 for match in script_pattern.findall(response.content):
@@ -2041,16 +2051,6 @@ class ScanEngine:
             'tokens', 'token', 'friends', 'friend'
         }
         
-        def get_segment_priority(seg: str) -> int:
-            seg_lower = seg.lower()
-            if seg_lower in ACTION_SUFFIXES:
-                return 3
-            if seg_lower in RESOURCE_WORDS:
-                return 2
-            if any(kw in seg_lower for kw in ['user', 'order', 'product', 'account', 'admin']):
-                return 1
-            return 0
-        
         segments = sorted(list(path_segments), key=len, reverse=True)
         
         CRUD_SUFFIXES = {
@@ -2170,7 +2170,7 @@ class ScanEngine:
                             base_url=spec_result.base_url or "",
                             url_type="api_path"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': f'api_spec:{spec_result.spec_type}'}
                         )
@@ -2179,7 +2179,7 @@ class ScanEngine:
             except Exception as e:
                 logger.error(f"Error parsing API spec: {e}")
         
-        js_results = self._js_cache.get_all()
+        js_results = self._js_cache.get_all()  # type: ignore[reportOptionalMemberAccess]
         existing_paths = set()
         
         for js_result in js_results:
@@ -2194,7 +2194,7 @@ class ScanEngine:
                         base_url="",
                         url_type="api_path"
                     )
-                    self._api_aggregator.add_api(
+                    self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                         api_find_result,
                         source_info={'source': 'js_fingerprint_cache'}
                     )
@@ -2214,7 +2214,7 @@ class ScanEngine:
                         base_url="",
                         url_type="generated"
                     )
-                    self._api_aggregator.add_api(
+                    self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                         api_find_result,
                         source_info={'source': f'framework_{self._detected_framework}'}
                     )
@@ -2236,7 +2236,7 @@ class ScanEngine:
                             base_url="",
                             url_type="discovered"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': 'inline_js_parser'}
                         )
@@ -2256,7 +2256,7 @@ class ScanEngine:
                             base_url="",
                             url_type="route"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': 'inline_js_parser'}
                         )
@@ -2275,7 +2275,7 @@ class ScanEngine:
                             base_url="",
                             url_type="discovered"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': 'response_discovery'}
                         )
@@ -2306,7 +2306,7 @@ class ScanEngine:
                             base_url=base_url,
                             url_type="discovered"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': 'browser_collector'}
                         )
@@ -2325,7 +2325,7 @@ class ScanEngine:
                             base_url="",
                             url_type="finder"
                         )
-                        self._api_aggregator.add_api(
+                        self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                             api_find_result,
                             source_info={'source': 'api_path_finder'}
                         )
@@ -2345,7 +2345,7 @@ class ScanEngine:
                         base_url="",
                         url_type="probed"
                     )
-                    self._api_aggregator.add_api(
+                    self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                         api_find_result,
                         source_info={'source': f'probed_parent:{parent_path}'}
                     )
@@ -2364,7 +2364,7 @@ class ScanEngine:
                         base_url="",
                         url_type="fuzzed"
                     )
-                    self._api_aggregator.add_api(
+                    self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                         api_find_result,
                         source_info={'source': f'fuzz_api:{parent_path}'}
                     )
@@ -2383,12 +2383,12 @@ class ScanEngine:
                     base_url="",
                     url_type="fuzzed"
                 )
-                self._api_aggregator.add_api(
+                self._api_aggregator.add_api(  # type: ignore[reportOptionalMemberAccess]
                     api_find_result,
                     source_info={'source': 'cross_source_fuzz'}
                 )
         
-        raw_endpoints = self._api_aggregator.get_all()
+        raw_endpoints = self._api_aggregator.get_all()  # type: ignore[reportOptionalMemberAccess]
         final_endpoints = []
         
         for endpoint in raw_endpoints:
@@ -2431,7 +2431,12 @@ class ScanEngine:
         
         if self._incremental_scanner:
             try:
-                js_urls = list(self._js_cache.get_all_urls()) if self._js_cache else []
+                js_urls = []
+                if self._js_cache:
+                    all_js_results = self._js_cache.get_all()
+                    for js_result in all_js_results:
+                        if hasattr(js_result, 'urls'):
+                            js_urls.extend(js_result.urls)
                 snapshot_id = self._incremental_scanner.save_snapshot(
                     target=self.config.target,
                     apis=[{'path': e.path, 'method': e.method, 'status': getattr(e, 'status', '')} for e in final_endpoints],
@@ -2490,7 +2495,7 @@ class ScanEngine:
             
             for method in methods_to_try:
                 try:
-                    response = await self._http_client.request(
+                    response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
                         endpoint.full_url,
                         method=method
                     )
@@ -2517,9 +2522,9 @@ class ScanEngine:
                             content=response.content.encode() if isinstance(response.content, str) else response.content,
                             content_hash=response.content_hash
                         )
-                        self._response_cluster.add_response(endpoint.api_id, rc_task_result)
+                        self._response_cluster.add_response(endpoint.api_id, rc_task_result)  # type: ignore[reportOptionalMemberAccess]
                         
-                        if not self._response_cluster.is_baseline_404(endpoint.api_id):
+                        if not self._response_cluster.is_baseline_404(endpoint.api_id):  # type: ignore[reportOptionalMemberAccess]
                             is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
                             
                             if is_valid:
@@ -2541,7 +2546,7 @@ class ScanEngine:
                             url=endpoint.full_url,
                             method=method,
                             status_code=response.status_code,
-                            content=response.content if hasattr(response, 'content') else None,
+                            content=response.content if hasattr(response, 'content') and response.content else '',
                             content_bytes=b'',
                             content_hash=''
                         )
@@ -2552,7 +2557,7 @@ class ScanEngine:
             
             if not endpoint_found:
                 try:
-                    response = await self._http_client.request(
+                    response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
                         endpoint.full_url,
                         method=endpoint.method
                     )
@@ -2573,9 +2578,9 @@ class ScanEngine:
                         content=response.content.encode() if isinstance(response.content, str) else response.content,
                         content_hash=response.content_hash
                     )
-                    self._response_cluster.add_response(endpoint.api_id, rc_task_result)
+                    self._response_cluster.add_response(endpoint.api_id, rc_task_result)  # type: ignore[reportOptionalMemberAccess]
                     
-                    if not self._response_cluster.is_baseline_404(endpoint.api_id):
+                    if not self._response_cluster.is_baseline_404(endpoint.api_id):  # type: ignore[reportOptionalMemberAccess]
                         is_valid = self._response_baseline.is_valid_api(task_result) if self._response_baseline else True
                         
                         if is_valid:
@@ -2637,7 +2642,7 @@ class ScanEngine:
             if endpoint.is_high_value:
                 high_value_api_ids.add(endpoint.api_id)
             try:
-                response = await self._http_client.request(
+                response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
                     endpoint.full_url,
                     method=endpoint.method
                 )
@@ -2649,18 +2654,24 @@ class ScanEngine:
             except Exception as e:
                 logger.debug(f"Sensitive detection request error: {e}")
         
-        sensitive_findings = self._sensitive_detector.detect(
+        sensitive_findings = self._sensitive_detector.detect(  # type: ignore[reportOptionalMemberAccess]
             responses_collected,
             high_value_api_ids
         )
         
-        from .models import SensitiveData, Severity
+        from .models import SensitiveData, Severity as ModelSeverity
+        from .analyzers.sensitive_detector import Severity as DetectorSeverity
         for finding in sensitive_findings:
+            try:
+                severity_value = finding.severity.value if isinstance(finding.severity, Enum) else finding.severity
+                model_severity = ModelSeverity(severity_value)
+            except (ValueError, AttributeError):
+                model_severity = ModelSeverity.MEDIUM
             sensitive_data = SensitiveData(
                 api_id=finding.location,
                 data_type=finding.data_type,
                 matches=finding.matches,
-                severity=finding.severity,
+                severity=model_severity,
                 evidence=finding.evidence,
                 context=finding.context,
                 location=finding.location
@@ -2672,7 +2683,7 @@ class ScanEngine:
         
         return {
             'sensitive_count': len(sensitive_findings),
-            'findings': [f.to_dict() for f in sensitive_findings]
+            'findings': [asdict(f) for f in sensitive_findings]
         }
     
     def _process_sensitive_resources_from_js(self):
@@ -2701,7 +2712,7 @@ class ScanEngine:
                 api_id=resource_path,
                 data_type='sensitive_resource',
                 matches=[resource_path],
-                severity='medium',
+                severity=Severity.MEDIUM,
                 evidence=resource_path,
                 context='JS/HTML extraction',
                 location=resource_path
@@ -2739,7 +2750,7 @@ class ScanEngine:
             
             if flux_config.get('fingerprint', {}).get('enabled', True) and self._fingerprint_engine:
                 try:
-                    fp_response = await self._http_client.request(target)
+                    fp_response = await self._http_client.request(target)  # type: ignore[reportOptionalMemberAccess]
                     fp_results = self._fingerprint_engine.match(fp_response)
                     flux_results['fingerprints'] = [r.to_dict() for r in fp_results[:20]]
                     logger.info(f"[FLUX] 指纹识别完成: 发现 {len(flux_results['fingerprints'])} 个组件")
@@ -2748,7 +2759,7 @@ class ScanEngine:
             
             if flux_config.get('waf', {}).get('enabled', True) and self._waf_detector:
                 try:
-                    waf_response = await self._http_client.request(target)
+                    waf_response = await self._http_client.request(target)  # type: ignore[reportOptionalMemberAccess]
                     waf_result = self._waf_detector.detect(waf_response)
                     if waf_result:
                         flux_results['waf_detected'] = waf_result.waf_name
@@ -2822,7 +2833,7 @@ class ScanEngine:
                         try:
                             source_type = FusionSourceType(source_type_val) if source_type_val else FusionSourceType.UNKNOWN
                         except (ValueError, AttributeError):
-                            source_type = None
+                            source_type = FusionSourceType.UNKNOWN
                         
                         is_high_value = getattr(endpoint, 'is_high_value', False)
                         status_code_val = getattr(endpoint, 'status_code', 0) if is_high_value else 0
@@ -2832,7 +2843,7 @@ class ScanEngine:
                             method=endpoint.method,
                             source_type=source_type,
                             source_url='',
-                            confidence='medium',
+                            confidence=0.5,
                             runtime_observed=is_high_value,
                             status_code=status_code_val,
                         )
@@ -2849,8 +2860,9 @@ class ScanEngine:
                 try:
                     if self.result.vulnerabilities:
                         vuln_dicts = [v.to_dict() if hasattr(v, 'to_dict') else v for v in self.result.vulnerabilities]
-                        candidates = self._vuln_prioritizer.analyze_findings(vuln_dicts)
-                        prioritized = [c.to_dict() for c in candidates[:30]]
+                        vuln_dicts_only = [d for d in vuln_dicts if isinstance(d, dict)]
+                        candidates = self._vuln_prioritizer.analyze_findings(vuln_dicts_only)
+                        prioritized = [c.to_dict() if hasattr(c, 'to_dict') else c for c in candidates[:30]]
                         flux_results['prioritized_vulns'] = prioritized
                         logger.info(f"[FLUX] 漏洞优先级排序完成: {len(prioritized)} 个漏洞")
                 except Exception as e:
@@ -2913,7 +2925,7 @@ class ScanEngine:
                 if not all_params:
                     all_params = ['id', 'page']
                 
-                results = await self._fuzz_tester.fuzz_parameters(
+                results = await self._fuzz_tester.fuzz_parameters(  # type: ignore[reportOptionalMemberAccess]
                     endpoint.full_url,
                     endpoint.method,
                     all_params
@@ -3155,6 +3167,9 @@ class ScanEngine:
         category = selection.test_category
         param_name = selection.param_name
         
+        if self._vulnerability_tester is None:
+            return None
+        
         if category == TestCategory.SQL_INJECTION:
             return await self._vulnerability_tester.test_sql_injection(
                 endpoint.full_url, 
@@ -3204,7 +3219,7 @@ class ScanEngine:
                 endpoint.method
             )
         elif category == TestCategory.JWT_SECURITY:
-            return await self._vulnerability_tester.test_jwt_security(endpoint.full_url)
+            return await self._vulnerability_tester.test_jwt_security(endpoint.full_url, token='')
         elif category == TestCategory.RATE_LIMIT:
             return await self._vulnerability_tester.test_bypass_techniques(
                 endpoint.full_url,
@@ -3306,7 +3321,7 @@ class ScanEngine:
         
         for endpoint in self.result.api_endpoints if self.result else []:
             try:
-                response = await self._http_client.request(
+                response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
                     endpoint.full_url,
                     method=endpoint.method,
                     headers={'Cookie': self.config.cookies} if self.config.cookies else None
@@ -3319,7 +3334,7 @@ class ScanEngine:
                         url=endpoint.full_url,
                         method=endpoint.method,
                         original_status=original_status,
-                        headers={'Cookie': self.config.cookies} if self.config.cookies else None
+                        headers={'Cookie': self.config.cookies} if self.config.cookies else {}
                     )
                     
                     for finding in bypass_findings:
@@ -3347,7 +3362,7 @@ class ScanEngine:
                             vuln = Vulnerability(
                                 api_id=endpoint.api_id,
                                 vuln_type='bypass',
-                                severity='medium',
+                                severity=Severity.MEDIUM,
                                 evidence=finding.details,
                                 payload=finding.technique,
                                 remediation=f"Implement bypass protection for {finding.category} techniques"
@@ -3355,10 +3370,11 @@ class ScanEngine:
                             self.result.vulnerabilities.append(vuln)
                             
                             if self._realtime_output:
+                                severity_str = Severity.MEDIUM.value if hasattr(Severity.MEDIUM, 'value') else 'medium'
                                 self._realtime_output.output_vulnerability(
                                     vuln_type='bypass',
                                     endpoint=endpoint.full_url,
-                                    severity='medium',
+                                    severity=severity_str,
                                     details=finding.details,
                                     payload=finding.technique
                                 )
@@ -3425,7 +3441,14 @@ class ScanEngine:
         try:
             attack_chain_exporter = AttackChainExporter()
             html_path = self._output_manager.get_attack_chain_path() if output_mgr else os.path.join(self.config.output_dir, 'attack_chain.html')
-            attack_chain_exporter.generate_html_report(self.result, html_path)
+            if self.result:
+                endpoints_data = [e.to_dict() if hasattr(e, 'to_dict') else e for e in self.result.api_endpoints]
+                endpoints_data_only = [d for d in endpoints_data if isinstance(d, dict)]
+                vulns_data = [v.to_dict() if hasattr(v, 'to_dict') else v for v in self.result.vulnerabilities]
+                vulns_data_only = [d for d in vulns_data if isinstance(d, dict)]
+                chains = attack_chain_exporter.generate_chains(endpoints_data_only, vulns_data_only)
+                attack_chain_exporter.generate_html(chains, target=self.config.target)
+            logger.info(f"Attack chain report generated: {html_path}")
         except Exception as e:
                 logger.error(f"Attack chain export error: {e}")
         

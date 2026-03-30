@@ -672,16 +672,6 @@ class ApiPathCombiner:
         ]
 
     @staticmethod
-    def _is_likely_id(s: str) -> bool:
-        """判断是否为ID"""
-        return (
-            s.isdigit() or
-            bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
-            (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
-        )
-
-    @staticmethod
     def _is_meaningful_segment(s: str) -> bool:
         """
         判断路径段是否有实际意义（知识库辅助判断）
@@ -710,40 +700,6 @@ class ApiPathCombiner:
             return False
 
         return True
-
-    @staticmethod
-    def extract_base_path(api_path: str) -> Optional[str]:
-        """
-        提取代理/网关前缀（统计学+知识库+ID检测混合）
-
-        对于 /inspect/login/checkCode/getCheckCode：
-        - 'login' 是常见资源 → 有意义
-        - 'checkCode' 是驼峰资源 → 有意义
-        - 'getCheckCode' 是常见后缀 → 有意义
-        - 所以第一段没有实际意义的 segment 就是代理前缀: /inspect
-        """
-        if not api_path:
-            return None
-
-        path = api_path.strip('/')
-        parts = path.split('/')
-
-        for i, part in enumerate(parts):
-            if part.lower() in ApiPathCombiner.NON_RESOURCE_SEGMENTS:
-                if i == 0:
-                    return None
-                return '/' + '/'.join(parts[:i])
-
-        first_meaningful_idx = 0
-        for i in range(len(parts) - 1, -1, -1):
-            if ApiPathCombiner._is_meaningful_segment(parts[i]):
-                first_meaningful_idx = i
-                break
-
-        if first_meaningful_idx > 0:
-            return '/' + '/'.join(parts[:first_meaningful_idx])
-
-        return None
 
     @staticmethod
     def extract_base_path(api_path: str) -> Optional[str]:
@@ -842,6 +798,10 @@ class ApiPathCombiner:
         parts = path.split('/')
 
         api_prefix_index = ApiPathCombiner.find_api_prefix_index(api_path)
+
+        first_parent: Optional[str] = None
+        api_prefix: Optional[str] = None
+        resource_path: Optional[str] = None
 
         if api_prefix_index is not None:
             if api_prefix_index == 0:
@@ -1027,7 +987,7 @@ class ApiPathCombiner:
         self,
         all_load_url: List[Dict[str, str]],
         all_api_paths: List[DiscoveredAPI],
-        js_contents: Dict[str, str] = None
+        js_contents: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         智能组合API路径 - 完整拼接矩阵
@@ -1218,7 +1178,7 @@ class ApiPathCombiner:
 
                 for version in version_prefixes:
                     for resource in all_resource_paths:
-                        full_url = f"{parsed_base.scheme}://{parsed_base.netloc}{first_parent_clean}{api_prefix}{version}{resource}"
+                        full_url = f"{parsed_base.scheme}://{parsed_base.netloc}{first_parent_clean}{api_prefix}{version}{resource}"  # type: ignore
                         if full_url not in variant_urls:
                             variant_urls.append(full_url)
 
@@ -1261,7 +1221,7 @@ class ApiPathCombiner:
         self,
         base_url: str,
         paths_to_probe: List[str],
-        suffixes: List[str] = None
+        suffixes: Optional[List[str]] = None
     ) -> List[str]:
         """
         生成探测URL列表
