@@ -309,14 +309,13 @@ Examples:
     async def run(self, args=None) -> int:
         parsed = self.parser.parse_args(args)
 
-        if getattr(parsed_args, 'import_burp', None):
-            return self._handle_import_burp(parsed_args)
-        if getattr(parsed_args, 'import_postman', None):
-            return self._handle_import_postman(parsed_args)
+        if getattr(parsed, 'import_burp', None):
+            return self._handle_import_burp(parsed)
+        if getattr(parsed, 'import_postman', None):
+            return self._handle_import_postman(parsed)
 
         if parsed.command == 'dashboard':
             return await self.run_dashboard(parsed.host, parsed.port)
-            return 0
 
         if parsed.command == 'scan' or parsed.command is None:
             return await self.run_scan(parsed)
@@ -324,8 +323,9 @@ Examples:
         self.parser.print_help()
         return 1
 
-    async def run_dashboard(self, host: str, port: int):
+    async def run_dashboard(self, host: str, port: int) -> int:
         await run_server(host=host, port=port)
+        return 0
 
 
 def main():
