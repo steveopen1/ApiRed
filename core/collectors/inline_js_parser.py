@@ -314,7 +314,7 @@ class InlineJSParser:
         'add', 'list', 'get', 'set', 'update', 'delete', 'remove', 'create', 'edit',
         'view', 'show', 'detail', 'info', 'query', 'search', 'find', 'fetch',
         'save', 'load', 'init', 'submit', 'post', 'put', 'check', 'verify',
-        'login', 'logout', 'auth', 'register', 'info', 'profile', 'page',
+        'login', 'logout', 'auth', 'register', 'profile', 'page',
         'export', 'import', 'upload', 'download', 'config', 'settings',
         'menu', 'tree', 'treeList', 'select', 'options', 'combo',
         'status', 'state', 'enable', 'disable', 'start', 'stop',
@@ -360,14 +360,6 @@ class InlineJSParser:
         for indicator in self.CONTENT_TYPE_INDICATORS:
             if indicator in path_lower:
                 return ""
-        
-        if '/' not in path and not path_lower.startswith('http'):
-            if path_lower not in ['api', 'v1', 'v2', 'v3']:
-                if len(path) < 2:
-                    return ""
-                if path_lower not in self.COMMON_API_SUFFIXES and not path_lower.isalpha():
-                    if not any(path_lower.endswith(suffix) for suffix in self.COMMON_API_SUFFIXES):
-                        return ""
         
         return path
     
@@ -450,7 +442,16 @@ class InlineJSParser:
         return path.strip()
     
     def _is_valid_api_path(self, path: str) -> bool:
-        """判断是否为有效的API路径"""
+        """
+        判断是否为有效的API路径
+        
+        规则：
+        1. 非空
+        2. 长度 >= 2
+        3. 不以静态文件扩展名结尾
+        4. 不以 data: 或 javascript: 开头
+        5. 如果是单段路径（不带 /），必须是 api/v1/v2/v3 这样的标准前缀
+        """
         if not path:
             return False
         
@@ -464,6 +465,10 @@ class InlineJSParser:
         
         if path.startswith('data:') or path.startswith('javascript:'):
             return False
+        
+        if '/' not in path:
+            if path_lower not in ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway']:
+                return False
         
         return True
     
