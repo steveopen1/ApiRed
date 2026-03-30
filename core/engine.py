@@ -70,6 +70,7 @@ from .cicd_scanner import CICDScanner, CICDVulnResult
 from .cloud_security import CloudBucketTester, CloudSecretScanner, CloudVulnResult
 from .api_posture import SecurityPostureAnalyzer, analyze_security_posture, APICoverageAnalyzer
 from .config.api_patterns import COMMON_API_PATHS, RESTFUL_SUFFIXES, FUZZ_SUFFIXES, PATH_FRAGMENTS
+from .config.probe_patterns import ACTION_SUFFIXES, RESOURCE_WORDS, CRUD_SUFFIXES
 
 
 @dataclass
@@ -1146,18 +1147,13 @@ class ScanEngine:
         
         logger.info(f"Probing {len(parent_paths_to_probe)} parent paths + {len(path_templates)} templates + {len(js_suffixes)} suffixes + {len(js_resources)} resources...")
         
-        if self.config.concurrency_probe:
-            probed_results = await self._probe_parent_paths_concurrent(
-                base_url, parent_paths_to_probe, path_templates, js_suffixes, js_resources
-            )
-        else:
-            probed_results = await self._probe_parent_paths_serial(
-                base_url, parent_paths_to_probe, path_templates, js_suffixes, js_resources
-            )
+        probed_results = await self._do_probe_parent_paths(
+            base_url, parent_paths_to_probe, path_templates, js_suffixes, js_resources
+        )
         
         return probed_results
     
-    async def _probe_parent_paths_serial(
+    async def _do_probe_parent_paths(
         self, 
         base_url: str, 
         parent_paths_to_probe: Set[str],
@@ -1165,7 +1161,7 @@ class ScanEngine:
         js_suffixes: Optional[Set[str]] = None,
         js_resources: Optional[Set[str]] = None
     ) -> Dict[str, Set[str]]:
-        """并发探测父路径（使用 Semaphore 控制并发数）"""
+        """执行父路径探测（合并后的统一实现）"""
         if path_templates is None:
             path_templates = set()
         if js_suffixes is None:
@@ -1188,7 +1184,8 @@ class ScanEngine:
                     template_fragments.add(part)
         all_suffixes.update([f'/{f}' for f in template_fragments])
         
-        semaphore = asyncio.Semaphore(5)
+        max_concurrent = 100 if self.config.concurrency_probe else 5
+        semaphore = asyncio.Semaphore(max_concurrent)
         
         async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
             try:
@@ -1199,7 +1196,7 @@ class ScanEngine:
                     return await try_request(url, 'GET')
             return None
         
-        async def probe_with_semaphore(parent_path: str) -> Tuple[str, Set[str], int]:
+        async def probe_parent_path(parent_path: str) -> Tuple[str, Set[str], int]:
             async with semaphore:
                 full_url = base_url + parent_path
                 status_code = await try_request(full_url)
@@ -1245,109 +1242,7 @@ class ScanEngine:
                 
                 return (parent_path, sub_endpoints, status_code if status_code else 0)
         
-        tasks = [probe_with_semaphore(p) for p in parent_paths_to_probe]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in results:
-            if isinstance(result, tuple) and len(result) == 3:
-                parent_path, sub_endpoints, status_code = result
-                if sub_endpoints:
-                    probed_results[parent_path] = sub_endpoints
-                    logger.info(f"Found {len(sub_endpoints)} sub-endpoints via parent path: {parent_path}")
-        
-        return probed_results
-    
-    async def _probe_parent_paths_concurrent(
-        self, 
-        base_url: str, 
-        parent_paths_to_probe: Set[str],
-        path_templates: Optional[Set[str]] = None,
-        js_suffixes: Optional[Set[str]] = None,
-        js_resources: Optional[Set[str]] = None
-    ) -> Dict[str, Set[str]]:
-        """并发探测父路径"""
-        if path_templates is None:
-            path_templates = set()
-        if js_suffixes is None:
-            js_suffixes = set()
-        if js_resources is None:
-            js_resources = set()
-        probed_results = {}
-        
-        all_suffixes = set()
-        all_suffixes.update(self.RESTFUL_SUFFIXES)
-        all_suffixes.update([f'/{p}' for p in self.COMMON_API_PATHS])
-        all_suffixes.update([f'/{p}' for p in self.PATH_FRAGMENTS])
-        all_suffixes.update([f'/{s}' for s in js_suffixes])
-        
-        template_fragments = set()
-        for template in path_templates:
-            parts = template.strip('/').split('/')
-            for part in parts:
-                if part and not part.startswith('{') and len(part) > 1:
-                    template_fragments.add(part)
-        all_suffixes.update([f'/{f}' for f in template_fragments])
-        
-        async def try_request(url: str, method: str = 'HEAD') -> Optional[int]:
-            try:
-                response = await self._http_client.request(url, method=method, timeout=5)  # type: ignore[reportOptionalMemberAccess]
-                return response.status_code
-            except Exception:
-                if method == 'HEAD':
-                    return await try_request(url, 'GET')
-            return None
-        
-        async def probe_single_path(parent_path: str) -> Tuple[str, Set[str], int]:
-            full_url = base_url + parent_path
-            sub_endpoints = set()
-            status_code = await try_request(full_url)
-            
-            async def do_probe_sub_paths():
-                async def probe_sub_path(suffix: str) -> Optional[str]:
-                    if '/' in suffix.lstrip('/'):
-                        sub_path = suffix.lstrip('/')
-                    else:
-                        sub_path = parent_path.rstrip('/') + '/' + suffix.lstrip('/') if suffix else parent_path
-                    sub_url = base_url + '/' + sub_path.lstrip('/')
-                    sub_status = await try_request(sub_url)
-                    if sub_status and 200 <= sub_status < 400:
-                        return '/' + sub_path.lstrip('/')
-                    return None
-                
-                sub_tasks = [probe_sub_path(s) for s in list(all_suffixes)[:100]]
-                sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
-                
-                for result in sub_results:
-                    if result and isinstance(result, str):
-                        sub_endpoints.add(result)
-                
-                for resource in list(js_resources)[:30]:
-                    for suffix in list(self.RESTFUL_SUFFIXES)[:20]:
-                        combined = f'/{resource}{suffix}' if suffix else f'/{resource}'
-                        sub_url = base_url + parent_path.rstrip('/') + combined
-                        sub_status = await try_request(sub_url)
-                        if sub_status and 200 <= sub_status < 400:
-                            sub_endpoints.add(parent_path.rstrip('/') + combined)
-            
-            if status_code and 200 <= status_code < 400:
-                logger.info(f"Parent path accessible: {parent_path} (status: {status_code})")
-                await do_probe_sub_paths()
-            elif status_code in (401, 403):
-                logger.info(f"Parent path exists (auth required): {parent_path} (status: {status_code})")
-                await do_probe_sub_paths()
-            elif status_code == 404:
-                logger.info(f"Parent path returns 404, but will probe sub-paths for fuzzing: {parent_path}")
-                await do_probe_sub_paths()
-            elif status_code:
-                logger.debug(f"Parent path returns {status_code}, still probing sub-paths: {parent_path}")
-                await do_probe_sub_paths()
-            else:
-                logger.debug(f"Parent path not reachable, still probing sub-paths: {parent_path}")
-                await do_probe_sub_paths()
-            
-            return (parent_path, sub_endpoints, status_code if status_code else 0)
-        
-        tasks = [probe_single_path(p) for p in parent_paths_to_probe]
+        tasks = [probe_parent_path(p) for p in parent_paths_to_probe]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         for result in results:
@@ -1882,205 +1777,6 @@ class ScanEngine:
         priority_targets = []
         
         segments = sorted(list(path_segments), key=len, reverse=True)
-        
-        ACTION_SUFFIXES = {
-            'login', 'logout', 'register', 'signup', 'signin', 'signout', 'signin', 'signout',
-            'forgot', 'reset', 'resetpwd', 'forgotpwd', 'verify', 'validate', 'confirm', 'authorize', 'authentication', 'authenticate',
-            'oauth', 'sso', 'token', 'refresh', 'revoke', 'jwt', 'cas', 'saml',
-            'search', 'query', 'suggest', 'autocomplete', 'lookup', 'find', 'filter', 'browse',
-            'sort', 'order', 'page', 'paginate', 'list', 'lists', 'getlist', 'getall', 'getpage',
-            'hot', 'trending', 'recommend', 'recommendation', 'related', 'similar', 'popular',
-            'export', 'import', 'download', 'upload', 'batch', 'sync', 'synchronize', 'transfer',
-            'backup', 'restore', 'migrate', 'clone', 'duplicate', 'replicate', 'archive',
-            'subscribe', 'unsubscribe', 'follow', 'unfollow', 'like', 'unlike', 'favorite', 'bookmark',
-            'share', 'comment', 'forward', 'comment', 'reply', 'discuss', 'collaborate',
-            'pay', 'payment', 'refund', 'cancel', 'close', 'checkout', 'status', 'history', 'transaction',
-            'enable', 'disable', 'activate', 'deactivate', 'lock', 'unlock', 'freeze', 'unfreeze',
-            'open', 'start', 'start', 'stop', 'pause', 'resume', 'reset', 'reboot', 'shutdown',
-            'submit', 'submit', 'approve', 'reject', 'accept', 'deny', 'admit', 'discharge',
-            'settings', 'preference', 'options', 'setup', 'init', 'initialize', 'permission', 'configure', 'config',
-            'detail', 'detail', 'info', 'information', 'profile', 'view', 'read', 'fetch', 'load', 'get', 'retrieve',
-            'add', 'create', 'create', 'edit', 'update', 'modify', 'patch', 'put', 'delete', 'remove', 'delete',
-            'set', 'save', 'save', 'store', 'persist', 'commit', 'rollback',
-            'stat', 'stats', 'statistics', 'stats', 'report', 'reports', 'summary', 'total', 'count', 'sum', 'analytics', 'metric', 'metrics',
-            'callback', 'notify', 'notice', 'notification', 'alert', 'alerts', 'alarm', 'alarms', 'push', 'pull', 'message', 'send',
-            'image', 'images', 'video', 'videos', 'audio', 'file', 'files', 'document', 'documents', 'avatar', 'thumbnail', 'stream', 'media', 'upload', 'download',
-            'location', 'map', 'geo', 'geolocation', 'nearby', 'distance', 'route', 'gps', 'coordinate', 'lat', 'lng', 'position',
-            'call', 'call', 'dial', 'hangup', 'answer', 'transfer', 'conference', 'voip',
-            'check', 'check', 'inspect', 'examine', 'test', 'trial', 'simulate', 'preview',
-            'deploy', 'deploy', 'publish', 'release', 'build', 'compile', 'compile', 'package',
-            'track', 'track', 'trace', 'monitor', 'monitor', 'observe', 'watch', 'surveillance', 'recon',
-            'manage', 'manage', 'control', 'operate', 'operate', 'dispatch', 'schedule', 'plan',
-            'enroll', 'enroll', 'register', 'admit', 'appointment', 'booking', 'reserve', 'reservation', 'queue',
-            'prescribe', 'prescribe', 'diagnose', 'diagnose', 'treat', 'treat', 'therapy', 'cure',
-            'charge', 'charge', 'fee', 'cost', 'price', 'quote', 'estimate', 'calculate', 'compute',
-            'claim', 'claim', 'insure', 'insure', 'underwrite', 'underwrite', 'assess', 'evaluate',
-            'produce', 'produce', 'manufacture', 'manufacture', 'assembly', 'fabricate', 'quality', 'inspect', 'qc',
-            'calibrate', 'calibrate', 'maintain', 'maintain', 'repair', 'repair', 'service', 'spare',
-            'disarm', 'disarm', 'engage', 'engage', 'combat', 'mission', 'tactic', 'strategic', 'command', 'deploy', 'evacuate',
-            'grade', 'grade', 'score', 'score', 'evaluate', 'assess', 'test', 'quiz', 'exam', 'examine',
-            'read', 'read', 'write', 'write', 'readwrite', 'execute', 'run', 'process', 'query',
-            'investigate', 'investigate', 'analyze', 'analyze', 'study', 'survey', 'probe', 'scan',
-            'enroll', 'enroll', 'graduate', 'graduate', 'scholarship', 'tuition', 'fee',
-            'allocate', 'allocate', 'distribute', 'distribute', 'supply', 'supply', 'procure', 'purchase',
-            'match', 'match', 'matchmake', 'matchmaking', 'rank', 'rank', 'leaderboard', 'rating',
-            'browse', 'browse', 'preview', 'preview', 'advertise', 'advertising', 'impression', 'click', 'conversion',
-            'brighten', 'dim', 'dim', 'turn_on', 'turn_off', 'toggle', 'automate', 'scene', 'trigger', 'action',
-            'ota', 'ota', 'firmware', 'upgrade', 'patch', 'hotfix',
-            'deposit', 'withdraw', 'balance', 'transfer', 'exchange', 'recharge', 'bind', 'unbind',
-            'dispense', 'refer', 'admission', 'discharge', 'consult', 'followup', 'administer', 'record', 'print',
-            'present', 'absent', 'hand_in', 'drop', 'withdraw', 'waive', 'exempt', 'remind', 'attend',
-            'complete', 'progress', 'handle', 'apply', 'announce', 'address', 'measure', 'aggregate',
-            'classify', 'brief', 'debrief', 'decode', 'encrypt', 'standby', 'surrender', 'disengage',
-            'optimize', 'identify', 'discover', 'forecast', 'shipping', 'discount', 'promotion',
-            'commission', 'exercise', 'transmit', 'locate', 'receive', 'leave', 'join', 'invite', 'mark',
-            'default', 'method', 'secure', 'assign',
-            'quality_check', 'acknowledge', 'clear', 'collect', 'certificate', 'excuse', 'timer', 'pair',
-            'reward', 'gift', 'evolve', 'trade', 'ready', 'train', 'drill', 'equip', 'refuel', 'encode', 'decrypt',
-            'review', 'select', 'rate', 'redeem', 'coupon', 'wechat', 'alipay', 'card', 'cart', 'return', 'pickup', 'deliver',
-            'play', 'end', 'quit', 'ban', 'mute', 'kick', 'admin', 'active', 'arm'
-        }
-        
-        RESOURCE_WORDS = {
-            'user', 'users', 'account', 'accounts', 'order', 'orders', 'product', 'products',
-            'item', 'items', 'admin', 'auth', 'token', 'role', 'roles', 'permission', 'permissions',
-            'menu', 'menus', 'config', 'configuration', 'system', 'log', 'logs', 'monitor', 'tool', 'tools',
-            'file', 'files', 'document', 'documents', 'folder', 'folders',
-            'category', 'categories', 'catalog', 'catalogs', 'tag', 'tags', 'label', 'labels',
-            'article', 'articles', 'post', 'posts', 'blog', 'blogs', 'news', 'comment', 'comments',
-            'customer', 'customers', 'client', 'clients', 'employee', 'employees', 'member', 'members',
-            'payment', 'payments', 'transaction', 'transactions', 'invoice', 'invoices', 'receipt', 'receipts',
-            'address', 'addresses', 'notification', 'notifications', 'message', 'messages', 'msg',
-            'device', 'devices', 'gateway', 'gateways', 'sensor', 'sensors', 'alarm', 'alarms', 'rule', 'rules',
-            'warehouse', 'warehouses', 'delivery', 'deliveries', 'driver', 'drivers', 'vehicle', 'vehicles',
-            'route', 'routes', 'server', 'servers', 'cluster', 'clusters', 'node', 'nodes',
-            'guild', 'guilds', 'clan', 'clans', 'team', 'teams', 'party', 'parties',
-            'hospital', 'hospitals', 'department', 'departments', 'doctor', 'doctors', 'nurse', 'nurses',
-            'patient', 'patients', 'appointment', 'appointments', 'prescription', 'prescriptions',
-            'license', 'licenses', 'permit', 'permits', 'certificate', 'certificates',
-            'service', 'services', 'news', 'document', 'documents', 'report', 'reports',
-            'mail', 'mails', 'email', 'emails', 'rank', 'ranks', 'character', 'characters',
-            'hospital', 'clinic', 'clinics', 'pharmacy', 'pharmacies', 'laboratory', 'labs',
-            'diagnosis', 'diagnoses', 'treatment', 'treatments', 'surgery', 'surgeries',
-            'drug', 'drugs', 'medicine', 'medicines', 'vaccine', 'vaccines',
-            'plant', 'plants', 'station', 'stations', 'substation', 'substations',
-            'transformer', 'transformers', 'generator', 'generators', 'turbine', 'turbines',
-            'power', 'powers', 'grid', 'grids', 'network', 'networks', 'system', 'systems',
-            'meter', 'meters', 'reading', 'readings', 'consumption', 'usage',
-            'oil', 'oils', 'gas', 'gases', 'petroleum', 'refinery', 'refineries',
-            'pipeline', 'pipelines', 'tank', 'tanks', 'storage', 'storages',
-            'solar', 'wind', 'hydro', 'nuclear', 'renewable', 'energy', 'energies',
-            'production', 'productions', 'output', 'outputs', 'capacity', 'capacities',
-            'load', 'loads', 'demand', 'demands', 'supply', 'supplies', 'distribution',
-            'maintenance', 'inspections', 'repair', 'fault', 'faults', 'incident', 'incidents',
-            'citizen', 'citizens', 'resident', 'residents', 'affair', 'affairs',
-            'approval', 'approvals', 'office', 'offices', 'bureau', 'bureaus',
-            'region', 'regions', 'district', 'districts', 'province', 'provinces',
-            'city', 'cities', 'county', 'counties', 'street', 'streets',
-            'population', 'demographics', 'census', 'petition', 'petitions',
-            'proposal', 'proposals', 'feedback', 'suggestions', 'announcement', 'announcements',
-            'emergency', 'emergencies', 'disaster', 'disasters', 'relief', 'shelter',
-            'traffic', 'transportation', 'parking', 'environmental',
-            'personnel', 'troop', 'troops', 'unit', 'units', 'squad', 'squads',
-            'platoon', 'platoons', 'company', 'companies', 'battalion', 'battalions',
-            'regiment', 'regiments', 'brigade', 'brigades', 'division', 'divisions',
-            'mission', 'missions', 'operation', 'operations', 'task', 'tasks', 'order', 'orders',
-            'intel', 'intelligence', 'surveillance', 'reconnaissance', 'scout', 'scouts',
-            'equipment', 'weapons', 'vehicles', 'aircraft', 'ships', 'supplies', 'logistics',
-            'communication', 'communications', 'signal', 'signals', 'cryptography', 'cipher',
-            'security', 'clearance', 'classification', 'access', 'authentication', 'authorization',
-            'briefing', 'briefings', 'debrief', 'debriefs', 'map', 'maps', 'location', 'locations',
-            'position', 'positions', 'gps', 'coordinate', 'coordinates',
-            'radar', 'sonar', 'jamming', 'electronic_warfare', 'cyber', 'network', 'it',
-            'training', 'exercises', 'drills', 'simulation', 'readiness', 'assessment',
-            'student', 'students', 'teacher', 'teachers', 'professor', 'professors', 'faculty', 'faculties',
-            'course', 'courses', 'class', 'classes', 'lesson', 'lessons', 'lecture', 'lectures',
-            'assignment', 'assignments', 'homework', 'exam', 'exams', 'quiz', 'quizzes',
-            'grade', 'grades', 'score', 'scores', 'transcript', 'transcripts',
-            'enrollment', 'enrollments', 'registration', 'schedule', 'schedules',
-            'attendance', 'presence', 'absence', 'leave', 'vacation',
-            'major', 'majors', 'school', 'schools', 'college', 'colleges', 'university', 'universities',
-            'library', 'libraries', 'book', 'books', 'journal', 'journals', 'publication', 'publications',
-            'resource', 'resources', 'material', 'materials', 'content', 'contents',
-            'discussion', 'discussions', 'forum', 'forums',
-            'parent', 'parents', 'guardian', 'guardians', 'family', 'families',
-            'fee', 'fees', 'scholarship', 'scholarships',
-            'diploma', 'diplomas', 'degree', 'degrees',
-            'shipment', 'shipments', 'package', 'packages', 'parcel', 'parcels',
-            'truck', 'trucks', 'fleet', 'fleets',
-            'waypoint', 'waypoints', 'destination', 'destinations', 'tracking',
-            'pickup', 'pickups', 'courier', 'couriers', 'express', 'standard', 'freight', 'cargo',
-            'container', 'containers', 'airline', 'airlines', 'flight', 'flights', 'airport', 'airports',
-            'port', 'ports', 'shipping', 'vessel', 'vessels', 'voyage', 'voyages', 'booking', 'reservations', 'ticket', 'tickets',
-            'shop', 'shops', 'store', 'stores', 'cart', 'carts', 'wishlist', 'wishlists',
-            'vip', 'vips', 'brand', 'brands', 'promotion', 'promotions', 'discount', 'discounts', 'coupon', 'coupons',
-            'inventory', 'inventories', 'stock', 'stocks', 'supplier', 'suppliers', 'purchase', 'purchases', 'procurement',
-            'review', 'reviews', 'rating', 'ratings', 'recommendations', 'similar',
-            'thing', 'things', 'hub', 'hubs', 'controller', 'controllers',
-            'home', 'homes', 'room', 'rooms', 'scene', 'scenes', 'automation',
-            'camera', 'cameras', 'doorbell', 'doorbells', 'lock', 'locks',
-            'light', 'lights', 'switch', 'switches', 'outlet', 'outlets',
-            'thermostat', 'thermostats', 'ac', 'heater', 'humidifier', 'purifier',
-            'tv', 'television', 'speaker', 'speakers', 'display', 'displays',
-            'family', 'families', 'firmware', 'ota', 'update', 'updates',
-            'data', 'datas', 'telemetry', 'analytics',
-            'rule', 'rules', 'trigger', 'triggers',
-            'player', 'players', 'avatar', 'avatars', 'inventory', 'inventories',
-            'equipment', 'skills', 'skill', 'level', 'levels', 'exp', 'experience',
-            'mission', 'missions', 'quest', 'quests', 'dungeon', 'dungeons', 'boss', 'bosses',
-            'match', 'matches', 'matchmaking', 'leaderboard', 'rank', 'ranks', 'rating',
-            'currency', 'currencies', 'coin', 'coins', 'gem', 'gems', 'cash',
-            'shop', 'shops', 'store', 'stores', 'deal', 'deals', 'offer', 'offers',
-            'ad', 'ads', 'advertising', 'impression', 'click', 'conversion',
-            'channel', 'channels', 'server', 'servers', 'anti_cheat',
-            'ledger', 'ledger', 'budget', 'budgets', 'cost', 'costs', 'expense', 'expenses',
-            'revenue', 'revenues', 'profit', 'profits', 'margin', 'tax', 'taxes', 'invoice', 'invoices',
-            'statement', 'statements', 'reconciliation', 'clearing', 'settlement',
-            'compliance', 'aml', 'kyc', 'fraud', 'risk', 'audit', 'audits',
-            'merchants', 'merchant', 'pos', 'atmp', 'branch', 'branches', 'teller',
-            'underwriting', 'claim', 'claims', 'policy', 'policies', 'premium', 'insurer',
-            'exchange', 'currency', 'rate', 'rates', 'interest', 'credit', 'debit',
-            'investment', 'fund', 'funds', 'stock', 'bonds', 'asset', 'assets', 'portfolio',
-            'gateway', 'api', 'apis', 'v1', 'v2', 'v3', 'v4', 'rest', 'soap', 'graphql', 'rpc', 'svc', 'service',
-            'ws', 'websocket', 'mqtt', 'coap', 'gateway', 'edge', 'fog',
-            'open', 'public', 'internal', 'external', 'secure', 'encrypted',
-            'cards', 'card', 'bond', 'bonds', 'insurance', 'balance', 'loans', 'loan', 'deposits', 'deposit',
-            'withdraw', 'withdrawals', 'transfers', 'transfer',
-            'imaging', 'radiology', 'examination', 'examinations', 'anesthesia', 'specimen', 'recovery',
-            'batch', 'batches', 'defect', 'defects', 'workorder', 'workorders', 'process', 'processes',
-            'machines', 'machine', 'alerts', 'alert', 'events', 'event', 'parameter', 'parameters', 'actuator', 'actuators',
-            'search', 'plans', 'plan', 'domains', 'domain', 'workspace', 'workspaces', 'project', 'projects',
-            'integration', 'integrations', 'secrets', 'secret', 'dns', 'dns',
-            'records', 'record', 'archives', 'archive', 'regulations', 'supervision', 'statistics', 'stat',
-            'dashboard', 'dashboards', 'inspection', 'specimen',
-            'command', 'commands', 'corps', 'specimen',
-            'medical_record', 'medical_records', 'result', 'results', 'pacs', 'ward', 'wards', 'lab', 'labs', 'health', 'healths',
-            'feed', 'feeds', 'setting', 'settings', 'subscriptions', 'subscription', 'webhook', 'webhooks', 'profile', 'profiles',
-            'certs', 'ssl', 'oauth', 'keys', 'key',
-            'recipe', 'recipes', 'rework', 'quality', 'robot', 'robots', 'plc', 'plcs', 'line', 'lines',
-            'receivers', 'receiver', 'sender', 'senders', 'history', 'track', 'status',
-            'sku', 'goods', 'price', 'prices', 'chain', 'merchandise', 'recommend', 'related',
-            'tokens', 'token', 'friends', 'friend'
-        }
-        
-        segments = sorted(list(path_segments), key=len, reverse=True)
-        
-        CRUD_SUFFIXES = {
-            'list', 'detail', 'add', 'create', 'edit', 'update', 'delete', 'remove',
-            'get', 'set', 'info', 'profile', 'settings', 'config', 'index',
-            'search', 'query', 'fetch', 'load', 'save', 'submit', 'submit'
-        }
-        
-        RESOURCE_WORDS = {
-            'user', 'users', 'account', 'order', 'orders', 'product', 'products',
-            'item', 'items', 'admin', 'login', 'logout', 'auth', 'token',
-            'role', 'roles', 'permission', 'menu', 'config', 'system',
-            'dict', 'dept', 'log', 'monitor', 'tool', 'file', 'files',
-            'category', 'categories', 'tag', 'tags', 'article', 'articles',
-            'customer', 'customers', 'employee', 'employees', 'organization',
-            'payment', 'payments', 'transaction', 'transactions', 'invoice', 'invoices',
-            'address', 'addresses', 'notification', 'notifications', 'message', 'messages'
-        }
         
         def get_segment_priority(seg: str) -> int:
             seg_lower = seg.lower()
