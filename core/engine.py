@@ -921,7 +921,7 @@ class ScanEngine:
                         js_content_all += js_content + "\n"
                         alive_js.append({'url': js_url, 'content': js_content})
                         
-                        inline_parser.parse_html(js_content)
+                        inline_parser.parse_html(f'<script>{js_content}</script>')
                         response_discovery.discover_from_response(
                             js_url, js_content,
                             js_response.headers.get('Content-Type', 'application/javascript')
