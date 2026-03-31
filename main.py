@@ -317,7 +317,7 @@ Examples:
         if parsed.command == 'dashboard':
             return await self.run_dashboard(parsed.host, parsed.port)
 
-        if parsed.command == 'scan' or parsed.command is None:
+        if parsed.command == 'scan':
             return await self.run_scan(parsed)
 
         self.parser.print_help()

@@ -7,6 +7,7 @@ import re
 import os
 import yaml
 import hashlib
+import asyncio
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -214,6 +215,76 @@ class FrameworkDetector:
                 endpoints.append(endpoint)
         
         return endpoints
+    
+    async def verify_endpoints(
+        self, 
+        endpoints: List[str], 
+        http_client, 
+        base_url: str,
+        timeout: float = 5.0
+    ) -> List[str]:
+        """
+        验证端点是否真实存在（多来源验证）
+        
+        验证标准：
+        1. 响应状态码在 200-399 范围内
+        2. Content-Type 包含 json 或 xml
+        3. 响应体可解析为 JSON 或 XML
+        
+        Args:
+            endpoints: 待验证的端点列表
+            http_client: HTTP 客户端
+            base_url: 目标基础 URL
+            timeout: 请求超时时间
+            
+        Returns:
+            验证通过的端点列表
+        """
+        verified = []
+        
+        async def probe_endpoint(endpoint: str) -> Optional[str]:
+            full_url = base_url.rstrip('/') + endpoint
+            try:
+                response = await http_client.request(full_url, method='GET', timeout=timeout)
+                if not response:
+                    return None
+                    
+                status_code = response.status_code
+                if status_code < 200 or status_code >= 400:
+                    return None
+                
+                content_type = response.headers.get('Content-Type', '').lower()
+                
+                is_json = 'json' in content_type
+                is_xml = 'xml' in content_type
+                
+                if not is_json and not is_xml:
+                    content = response.content[:500] if response.content else b''
+                    try:
+                        content_str = content.decode('utf-8', errors='ignore')
+                        if content_str.strip().startswith(('{', '[')):
+                            is_json = True
+                        elif '<' in content_str and ('xml' in content_str.lower() or 'response' in content_str.lower()):
+                            is_xml = True
+                    except:
+                        pass
+                
+                if is_json or is_xml:
+                    return endpoint
+                    
+            except Exception:
+                pass
+            return None
+        
+        tasks = [probe_endpoint(ep) for ep in endpoints]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if result and isinstance(result, str):
+                verified.append(result)
+        
+        logger.info(f"Framework endpoint verification: {len(verified)}/{len(endpoints)} passed")
+        return verified
     
     def list_rules(self) -> List[str]:
         """列出所有已加载的规则"""

@@ -4,14 +4,19 @@ Realtime Output Module
 """
 
 import os
+import re
 import logging
 import threading
 from typing import Set, List, Optional
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+
+STATIC_EXTENSIONS = {'.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.map', '.html', '.htm', '.xml', '.txt', '.md', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.tar', '.gz'}
+STATIC_PATH_PREFIXES = ['/static/', '/assets/', '/images/', '/css/', '/js/', '/lib/', '/font/', '/fonts/', '/media/', '/img/', '/pic/', '/style/', '/styles/']
 
 class RealtimeOutput:
     """
@@ -113,9 +118,29 @@ class RealtimeOutput:
             with open(self.rootdomains_file, 'a', encoding='utf-8') as f:
                 f.write(rootdomain + '\n')
     
+    def _is_static_resource(self, path: str) -> bool:
+        """判断是否为静态资源路径"""
+        path_lower = path.lower()
+        if '?' in path:
+            path_lower = path_lower.split('?')[0]
+        path_lower = path_lower.strip()
+        
+        for ext in STATIC_EXTENSIONS:
+            if path_lower.endswith(ext):
+                return True
+        
+        for prefix in STATIC_PATH_PREFIXES:
+            if path_lower.startswith(prefix):
+                return True
+        
+        return False
+    
     def output_api(self, api_path: str, method: str = "GET", source: str = ""):
         """输出 API 路径"""
         if not api_path:
+            return
+        
+        if self._is_static_resource(api_path):
             return
         
         timestamp = datetime.now().strftime("%H:%M:%S")

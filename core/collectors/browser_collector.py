@@ -5,6 +5,7 @@ Headless Browser Collector
 """
 
 import asyncio
+import os
 import re
 import logging
 from typing import Dict, List, Any, Optional, Set
@@ -106,10 +107,19 @@ class HeadlessBrowserCollector:
             from playwright.async_api import async_playwright  # type: ignore
             
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
-                headless=headless,
-                args=['--no-sandbox', '--disable-dev-shm-usage']
-            )
+            
+            headless_shell_path = '/root/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell'
+            if os.path.exists(headless_shell_path):
+                self.browser = await self.playwright.chromium.launch(
+                    executable_path=headless_shell_path,
+                    headless=headless,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
+            else:
+                self.browser = await self.playwright.chromium.launch(
+                    headless=headless,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
             self.context = await self.browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

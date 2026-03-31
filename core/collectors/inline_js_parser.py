@@ -62,6 +62,59 @@ class PathValidationConstants:
         '\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~',
         '[', ']', '(', ')', '{', '}', '<', '>',
     ]
+    
+    GARBAGE_PATH_PREFIXES = ['#', '&', ',', '/..', '..']
+    
+    GARBAGE_PATH_PATTERNS = [
+        'DocumentSummaryInformation', 'SummaryInformation',
+        'canvas.style', 'TileMatrix=', 'FORMAT=image',
+    ]
+    
+    GARBAGE_PATH_KEYWORDS = [
+        'shadowoffset', 'axispointer', 'labelmargin', 'itemwidth', 'barwidth',
+        'seriesindex', 'nodegap', 'textalign', 'bordertype', 'showminlabel',
+        'clockwise', 'circular', 'rotatelabel', 'itemwidth', 'itemheight',
+        'officedocument', 'docprops', 'xl/worksheets', 'vba_', 'meta-inf',
+        'shadowoffsetx', 'shadowoffsety', 'axistick', 'labelrotate',
+        'borderwidth', 'borderradius', 'bordersize', 'bordercolor',
+    ]
+    
+    ECHARTS_CONFIG_KEYWORDS = [
+        'color', 'width', 'height', 'size', 'radius', 'margin', 'padding',
+        'border', 'background', 'shadow', 'opacity', 'visible', 'display',
+        'align', 'position', 'top', 'left', 'right', 'bottom', 'center',
+        'font', 'text', 'label', 'title', 'legend', 'tooltip', 'axis',
+        'line', 'bar', 'pie', 'scatter', 'graph', 'tree', 'map', 'radar',
+        'animation', 'transition', 'effect', 'emphasis', 'select', 'blur',
+        'item', 'symbol', 'node', 'edge', 'link', 'arrow', 'dot',
+        'lineStyle', 'areaStyle', 'textStyle', 'labelStyle', 'tooltipStyle',
+        'normal', 'select', 'emphasis', 'shadow', 'shadowOffset', 'shadowBlur',
+        'rotate', 'scale', 'translate', 'transform', 'matrix', 'origin',
+        'show', 'hide', 'toggle', 'update', 'set', 'get', 'reset',
+        'min', 'max', 'average', 'sum', 'count', 'percent', 'value',
+        'start', 'end', 'time', 'date', 'datetime', 'range', 'interval',
+        'format', 'precision', 'decimals', 'round', 'floor', 'ceil',
+        'type', 'kind', 'style', 'mode', 'state', 'status', 'phase',
+        'inside', 'outside', 'across', 'horizontal', 'vertical', 'angle',
+        'clockwise', 'auto', 'reverse', 'offset', 'gap', 'split',
+        'smooth', 'curved', 'straight', 'polyline', 'step', 'dotted', 'dashed',
+        'solid', 'open', 'close', 'connect', 'merge', 'split', 'bound',
+    ]
+    
+    VALID_API_KEYWORDS = [
+        'login', 'logout', 'register', 'auth', 'token', 'user', 'users',
+        'admin', 'dashboard', 'menu', 'config', 'setting', 'settings', 'profile',
+        'list', 'get', 'add', 'edit', 'delete', 'update', 'query', 'search',
+        'export', 'import', 'upload', 'download', 'file', 'document',
+        'role', 'permission', 'access', 'resource', 'system', 'log', 'dict',
+        'order', 'orders', 'product', 'products', 'payment', 'account', 'session',
+        'component', 'callcomponent', 'rpc', 'service', 'controller',
+        'captcha', 'verify', 'sms', 'email', 'message', 'notify',
+        'workflow', 'process', 'task', 'approve', 'audit', 'office',
+        'api', 'v1', 'v2', 'v3', 'rest', 'graphql', 'gateway',
+        'health', 'info', 'status', 'version',
+        'nav', 'navigate', 'route', 'router',
+    ]
 
 
 @lru_cache(maxsize=1)
@@ -180,6 +233,10 @@ class InlineJSParser:
         '\\', '$', '@', '*', '+', '-', '|', '!', '%', '^', '~',
         '[', ']', '(', ')', '{', '}', '<', '>',
     ]
+    GARBAGE_PATH_PREFIXES = PathValidationConstants.GARBAGE_PATH_PREFIXES
+    GARBAGE_PATH_PATTERNS = PathValidationConstants.GARBAGE_PATH_PATTERNS
+    GARBAGE_PATH_KEYWORDS = PathValidationConstants.GARBAGE_PATH_KEYWORDS
+    VALID_API_KEYWORDS = PathValidationConstants.VALID_API_KEYWORDS
     
     def __init__(self):
         self.extracted_paths: Set[str] = set()
@@ -439,7 +496,17 @@ class InlineJSParser:
         if '/' in path:
             path = '/' + path.split('/', 1)[1]
         
-        return path.strip()
+        path = path.strip()
+        
+        if not path:
+            return ""
+        
+        if path.startswith('/../'):
+            path = path[3:]
+        elif path.startswith('../'):
+            path = '/' + path[3:]
+        
+        return path
     
     VUE_ROUTE_PATTERN = re.compile(r'/:[^/]+\([^)]*\)\*|:[^/]+\*|\*\*')
     
@@ -454,6 +521,9 @@ class InlineJSParser:
         4. 不以 data: 或 javascript: 开头
         5. 如果是单段路径（不带 /），必须是 api/v1/v2/v3 这样的标准前缀
         6. 过滤 Vue Router 动态路由语法，如 /:path(.*)*、/:id* 等
+        7. 过滤垃圾路径前缀（#、&、, 等）
+        8. 过滤垃圾路径模式（ECharts配置、Office XML等）
+        9. 必须包含有效 API 关键词
         """
         if not path:
             return False
@@ -462,6 +532,7 @@ class InlineJSParser:
             return False
         
         path_lower = path.lower()
+        
         for ext in self.STATIC_FILE_EXTENSIONS:
             if path_lower.endswith(ext):
                 return False
@@ -472,11 +543,77 @@ class InlineJSParser:
         if self.VUE_ROUTE_PATTERN.search(path):
             return False
         
+        for prefix in self.GARBAGE_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return False
+        
+        for pattern in self.GARBAGE_PATH_PATTERNS:
+            if pattern.lower() in path_lower:
+                return False
+        
+        garbage_keyword_count = sum(1 for kw in self.GARBAGE_PATH_KEYWORDS if kw in path_lower)
+        if garbage_keyword_count >= 1:
+            return False
+        
+        if self._is_likely_echarts_config(path):
+            return False
+        
         if '/' not in path:
             if path_lower not in ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway']:
                 return False
         
+        has_valid_keyword = any(kw in path_lower for kw in self.VALID_API_KEYWORDS)
+        if not has_valid_keyword:
+            return False
+        
         return True
+    
+    ECHARTS_CONFIG_KEYWORDS = [
+        'color', 'width', 'height', 'size', 'radius', 'margin', 'padding',
+        'border', 'background', 'shadow', 'opacity', 'visible', 'display',
+        'align', 'position', 'top', 'left', 'right', 'bottom', 'center',
+        'font', 'text', 'label', 'title', 'legend', 'tooltip', 'axis',
+        'line', 'bar', 'pie', 'scatter', 'graph', 'tree', 'map', 'radar',
+        'animation', 'transition', 'effect', 'emphasis', 'select', 'blur',
+        'item', 'symbol', 'node', 'edge', 'link', 'edge', 'arrow', 'dot',
+        'lineStyle', 'areaStyle', 'textStyle', 'labelStyle', 'tooltipStyle',
+        'normal', 'select', 'emphasis', 'shadow', 'shadowOffset', 'shadowBlur',
+        'rotate', 'scale', 'translate', 'transform', 'matrix', 'origin',
+        'show', 'hide', 'toggle', 'update', 'set', 'get', 'reset',
+        'min', 'max', 'average', 'sum', 'count', 'percent', 'value',
+        'start', 'end', 'time', 'date', 'datetime', 'range', 'interval',
+        'format', 'precision', 'decimals', 'round', 'floor', 'ceil',
+        'type', 'kind', 'style', 'mode', 'state', 'status', 'phase',
+        'inside', 'outside', 'across', 'horizontal', 'vertical', 'angle',
+        'clockwise', 'auto', 'reverse', 'align', 'offset', 'gap', 'split',
+        'smooth', 'curved', 'straight', 'polyline', 'step', 'dotted', 'dashed',
+        'solid', 'open', 'close', 'connect', 'merge', 'split', 'bound',
+    ]
+    
+    def _is_likely_echarts_config(self, path: str) -> bool:
+        """判断路径是否像 ECharts 配置（驼峰命名的配置项）"""
+        if not path or len(path) < 2:
+            return False
+        
+        if '/' not in path:
+            return False
+        
+        segments = path.split('/')
+        last_segment = segments[-1].lower()
+        
+        if not last_segment:
+            return False
+        
+        if '.' in last_segment:
+            return False
+        
+        camel_case_count = sum(1 for c in last_segment if c.isupper())
+        if camel_case_count >= 2:
+            keyword_match = sum(1 for kw in self.ECHARTS_CONFIG_KEYWORDS if kw in last_segment)
+            if keyword_match >= 1:
+                return True
+        
+        return False
     
     def _is_valid_route(self, path: str) -> bool:
         """判断是否为有效的路由"""
@@ -993,6 +1130,13 @@ class SmartPathCombiner:
     
     API_PREFIXES = ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway', 'prod-api', 'test-api', 'pre-api']
     
+    GARBAGE_PATH_PREFIXES = PathValidationConstants.GARBAGE_PATH_PREFIXES
+    GARBAGE_PATH_PATTERNS = PathValidationConstants.GARBAGE_PATH_PATTERNS
+    GARBAGE_PATH_KEYWORDS = PathValidationConstants.GARBAGE_PATH_KEYWORDS
+    VALID_API_KEYWORDS = PathValidationConstants.VALID_API_KEYWORDS
+    STATIC_FILE_EXTENSIONS = PathValidationConstants.STATIC_FILE_EXTENSIONS
+    ECHARTS_CONFIG_KEYWORDS = PathValidationConstants.ECHARTS_CONFIG_KEYWORDS
+    
     COMMON_SUFFIXES = [
         'list', 'add', 'edit', 'delete', 'remove', 'update', 'create', 'save',
         'get', 'set', 'fetch', 'load', 'query', 'search', 'find',
@@ -1004,6 +1148,88 @@ class SmartPathCombiner:
         'config', 'settings', 'menu', 'verify', 'check', 'validate',
         'send', 'receive', 'push', 'pull', 'sync', 'refresh',
     ]
+    
+    def _clean_path(self, path: str) -> str:
+        """清理路径字符串"""
+        if not path:
+            return ""
+        path = path.strip()
+        path = path.lstrip("'\"")
+        path = path.rstrip("'\"")
+        path = path.split('?')[0]
+        path = path.split('#')[0]
+        if path.startswith('http://'):
+            path = path[7:]
+        elif path.startswith('https://'):
+            path =path[8:]
+        if '/' in path:
+            path = '/' + path.split('/', 1)[1]
+        path = path.strip()
+        if not path:
+            return ""
+        if path.startswith('/../'):
+            path = path[3:]
+        elif path.startswith('../'):
+            path = '/' + path[3:]
+        return path
+    
+    def _is_valid_api_path(self, path: str) -> bool:
+        """判断是否为有效的API路径"""
+        if not path or len(path) < 2:
+            return False
+        path_lower = path.lower()
+        for ext in self.STATIC_FILE_EXTENSIONS:
+            if path_lower.endswith(ext):
+                return False
+        if path.startswith('data:') or path.startswith('javascript:'):
+            return False
+        for prefix in self.GARBAGE_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return False
+        for pattern in self.GARBAGE_PATH_PATTERNS:
+            if pattern.lower() in path_lower:
+                return False
+        garbage_keyword_count = sum(1 for kw in self.GARBAGE_PATH_KEYWORDS if kw in path_lower)
+        if garbage_keyword_count >= 1:
+            return False
+        if self._is_likely_echarts_config(path):
+            return False
+        if '/' not in path:
+            if path_lower not in ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway']:
+                return False
+        has_valid_keyword = any(kw in path_lower for kw in self.VALID_API_KEYWORDS)
+        if not has_valid_keyword:
+            return False
+        return True
+    
+    def _is_likely_echarts_config(self, path: str) -> bool:
+        """判断路径是否像 ECharts 配置（仅对短路径生效）"""
+        if not path or len(path) < 2:
+            return False
+        
+        segment_count = path.count('/')
+        if segment_count > 2:
+            return False
+        
+        if '/' not in path:
+            return False
+        
+        segments = path.split('/')
+        last_segment = segments[-1]
+        if not last_segment:
+            return False
+        if '.' in last_segment:
+            return False
+        
+        last_segment_lower = last_segment.lower()
+        
+        has_camel_case = sum(1 for c in last_segment if c.isupper()) >= 2
+        keyword_match = sum(1 for kw in self.ECHARTS_CONFIG_KEYWORDS if kw in last_segment_lower)
+        
+        if has_camel_case and keyword_match >= 1:
+            return True
+        
+        return False
     
     def __init__(self, base_url: str = ""):
         self.base_url = base_url
@@ -1051,15 +1277,22 @@ class SmartPathCombiner:
         if not path or len(path) < 2:
             return
         
+        cleaned = self._clean_path(path)
+        if not cleaned:
+            return
+        
+        if not self._is_valid_api_path(cleaned):
+            return
+        
         if path.startswith('http'):
             parsed = urlparse(path)
             if parsed.path:
                 self.api_paths.add(parsed.path)
             self.add_base_url(path)
         elif path.startswith('/'):
-            self.api_paths.add(path)
+            self.api_paths.add(cleaned)
         else:
-            self.api_paths.add('/' + path)
+            self.api_paths.add('/' + cleaned)
     
     def generate_probes(self) -> List[str]:
         """

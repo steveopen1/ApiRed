@@ -1890,9 +1890,62 @@ class ScanEngine:
         js_results = self._js_cache.get_all()  # type: ignore[reportOptionalMemberAccess]
         existing_paths = set()
         
+        from .collectors.inline_js_parser import PathValidationConstants
+        
+        def _is_likely_echarts_config(path: str) -> bool:
+            """判断路径是否像 ECharts 配置"""
+            if not path or len(path) < 2:
+                return False
+            segment_count = path.count('/')
+            if segment_count > 2:
+                return False
+            if '/' not in path:
+                return False
+            segments = path.split('/')
+            last_segment = segments[-1]
+            if not last_segment:
+                return False
+            if '.' in last_segment:
+                return False
+            last_segment_lower = last_segment.lower()
+            has_camel_case = sum(1 for c in last_segment if c.isupper()) >= 2
+            keyword_match = sum(1 for kw in PathValidationConstants.ECHARTS_CONFIG_KEYWORDS if kw in last_segment_lower)
+            if has_camel_case and keyword_match >= 1:
+                return True
+            return False
+        
+        def _is_valid_path(path: str) -> bool:
+            """Validate API path"""
+            if not path or len(path) < 2:
+                return False
+            path_lower = path.lower()
+            for ext in PathValidationConstants.STATIC_FILE_EXTENSIONS:
+                if path_lower.endswith(ext):
+                    return False
+            for prefix in PathValidationConstants.GARBAGE_PATH_PREFIXES:
+                if path.startswith(prefix):
+                    return False
+            for pattern in PathValidationConstants.GARBAGE_PATH_PATTERNS:
+                if pattern.lower() in path_lower:
+                    return False
+            garbage_count = sum(1 for kw in PathValidationConstants.GARBAGE_PATH_KEYWORDS if kw in path_lower)
+            if garbage_count >= 1:
+                return False
+            if _is_likely_echarts_config(path):
+                return False
+            if '/' not in path:
+                if path_lower not in ['api', 'v1', 'v2', 'v3', 'rest', 'restapi', 'service', 'gateway']:
+                    return False
+            has_valid_kw = any(kw in path_lower for kw in PathValidationConstants.VALID_API_KEYWORDS)
+            if not has_valid_kw:
+                return False
+            return True
+        
         for js_result in js_results:
             try:
                 for api_path in js_result.apis:
+                    if not _is_valid_path(api_path):
+                        continue
                     existing_paths.add(api_path)
                     from .collectors.api_collector import APIFindResult
                     api_find_result = APIFindResult(
@@ -1911,7 +1964,20 @@ class ScanEngine:
         
         if self._detected_framework and self._framework_detector:
             framework_endpoints = self._framework_detector.generate_endpoints(self._detected_framework)
-            for endpoint in framework_endpoints:
+            
+            verified_framework_endpoints = []
+            if framework_endpoints and self._http_client:
+                try:
+                    verified_framework_endpoints = await self._framework_detector.verify_endpoints(
+                        framework_endpoints,
+                        self._http_client,
+                        self.config.target
+                    )
+                except Exception as e:
+                    logger.debug(f"Framework endpoint verification error: {e}")
+                    verified_framework_endpoints = framework_endpoints
+            
+            for endpoint in verified_framework_endpoints:
                 if endpoint not in existing_paths:
                     existing_paths.add(endpoint)
                     from .collectors.api_collector import APIFindResult
@@ -1934,6 +2000,8 @@ class ScanEngine:
             if inline_api_paths:
                 logger.info(f"Adding {len(inline_api_paths)} API paths from inline JS parser")
                 for api_path in inline_api_paths:
+                    if not _is_valid_path(api_path):
+                        continue
                     if api_path not in existing_paths:
                         existing_paths.add(api_path)
                         from .collectors.api_collector import APIFindResult
@@ -1954,6 +2022,8 @@ class ScanEngine:
                 logger.info(f"Adding {len(inline_routes)} routes from inline JS parser")
                 for route in inline_routes:
                     normalized_route = route if route.startswith('/') else f'/{route}'
+                    if not _is_valid_path(normalized_route):
+                        continue
                     if normalized_route not in existing_paths:
                         existing_paths.add(normalized_route)
                         from .collectors.api_collector import APIFindResult
@@ -1973,6 +2043,8 @@ class ScanEngine:
             if response_discovered:
                 logger.info(f"Adding {len(response_discovered)} paths from response discovery")
                 for path in response_discovered:
+                    if not _is_valid_path(path):
+                        continue
                     if path not in existing_paths:
                         existing_paths.add(path)
                         from .collectors.api_collector import APIFindResult
@@ -2004,6 +2076,8 @@ class ScanEngine:
                         path = '/' + api_path
                         base_url = ""
                     
+                    if not _is_valid_path(path):
+                        continue
                     if path not in existing_paths:
                         existing_paths.add(path)
                         from .collectors.api_collector import APIFindResult
@@ -2023,6 +2097,8 @@ class ScanEngine:
             if finder_api_paths:
                 logger.info(f"Adding {len(finder_api_paths)} API paths from ApiPathFinder")
                 for api_path in finder_api_paths:
+                    if not _is_valid_path(api_path):
+                        continue
                     if api_path not in existing_paths and len(api_path) > 1:
                         existing_paths.add(api_path)
                         from .collectors.api_collector import APIFindResult
