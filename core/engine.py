@@ -71,6 +71,8 @@ from .cloud_security import CloudBucketTester, CloudSecretScanner, CloudVulnResu
 from .api_posture import SecurityPostureAnalyzer, analyze_security_posture, APICoverageAnalyzer
 from .config.api_patterns import COMMON_API_PATHS, RESTFUL_SUFFIXES, FUZZ_SUFFIXES, PATH_FRAGMENTS
 from .config.probe_patterns import ACTION_SUFFIXES, RESOURCE_WORDS, CRUD_SUFFIXES
+from .collectors.oss_collector import OSSCollector, OSSEndpoint, get_oss_collector, CloudProvider
+from .testers.oss_vuln_tester import OSSVulnTester, OSSVulnResult as OSSVulnTestResult, OSSVulnType, RiskLevel as OSSRiskLevel
 
 
 @dataclass
@@ -179,6 +181,7 @@ class ScanEngine:
         self._running = False
         self._checkpoint: Optional[ScanCheckpoint] = None
         self._collector_results: Dict[str, Any] = {}
+        self._oss_collector = None
         self._callbacks: Dict[str, List[Any]] = {
             'stage_start': [],
             'stage_progress': [],
@@ -754,37 +757,55 @@ class ScanEngine:
                 logger.debug(f"  {endpoint.path}: generated {len(payloads)} SQL injection payloads")
         
         logger.info("Phase 2 完成")
-    
+
     async def _run_collectors(self):
         """运行采集阶段"""
         self._current_stage = 0
-        
+
         active_collectors = self.config.collectors or ['js', 'api']
-        
+
         collector_results = {}
-        
+
+        oss_collector = get_oss_collector()
+        oss_collector.reset()
+
         # === 新增: Swagger/OpenAPI 发现 ===
         if 'swagger' in active_collectors:
             collector_results['swagger'] = await self._collect_swagger()
-        
+            if 'swagger_endpoints' in collector_results['swagger']:
+                for ep in collector_results['swagger']['swagger_endpoints']:
+                    oss_collector.on_swagger_parsed(ep)
+
         # === 新增: 被动源采集 ===
         if 'passive' in active_collectors:
             collector_results['passive'] = await self._collect_passive()
-        
+            if 'api_urls' in collector_results['passive']:
+                oss_collector.on_path_extracted(collector_results['passive']['api_urls'])
+
         if 'js' in active_collectors:
             collector_results['js'] = await self._collect_js()
-        
+            if 'js_content_all' in collector_results['js']:
+                oss_collector.on_js_collected(collector_results['js']['js_content_all'])
+            if 'js_urls' in collector_results['js']:
+                for js_url in collector_results['js']['js_urls']:
+                    oss_collector.collect("js_url", js_url)
+
         self._collector_results = collector_results
-        
+
         if 'api' in active_collectors:
             collector_results['api'] = await self._extract_apis()
-        
+
         self._collector_results = collector_results
-        
+
         # === 新增: 智能过滤 ===
         collector_results = self._apply_smart_filter(collector_results)
-        
+
         self._collector_results = collector_results
+
+        oss_summary = oss_collector.get_summary()
+        logger.info(f"[OSS Collector] Found {oss_summary['total_count']} OSS endpoints: {oss_summary['by_provider']}")
+
+        self._oss_collector = oss_collector
     
     async def _collect_swagger(self) -> Dict[str, Any]:
         """采集 Swagger/OpenAPI 文档"""
@@ -2800,8 +2821,77 @@ class ScanEngine:
         
         if 'bypass' in active_testers:
             tester_results['bypass'] = await self._run_bypass_test()
-        
+
+        if 'oss' in active_testers:
+            tester_results['oss'] = await self._run_oss_test()
+
         self._tester_results = tester_results
+
+    async def _run_oss_test(self) -> Dict[str, Any]:
+        """OSS 存储桶漏洞测试 (终极测试项)"""
+        oss_results = {
+            'total_buckets': 0,
+            'vulnerabilities': [],
+            'by_provider': {}
+        }
+
+        oss_collector = getattr(self, '_oss_collector', None)
+        if not oss_collector:
+            oss_collector = get_oss_collector()
+
+        oss_endpoints = oss_collector.get_all_endpoints()
+
+        if not oss_endpoints:
+            logger.info("[OSS Tester] No OSS endpoints found, skipping OSS vulnerability testing")
+            return oss_results
+
+        oss_results['total_buckets'] = len(oss_endpoints)
+        logger.info(f"[OSS Tester] Testing {len(oss_endpoints)} OSS endpoints")
+
+        oss_tester = OSSVulnTester(self._http_client)
+
+        all_vulns = []
+
+        for endpoint in oss_endpoints:
+            try:
+                vulns = await oss_tester.test_bucket(
+                    bucket_url=endpoint.full_url,
+                    bucket_name=endpoint.bucket,
+                    region=endpoint.region,
+                    provider=endpoint.provider.value
+                )
+
+                for vuln in vulns:
+                    vuln_dict = {
+                        'type': vuln.vuln_type.value if hasattr(vuln.vuln_type, 'value') else str(vuln.vuln_type),
+                        'bucket': vuln.bucket,
+                        'region': vuln.region,
+                        'provider': vuln.provider,
+                        'url': vuln.url,
+                        'risk_level': vuln.risk_level.value if hasattr(vuln.risk_level, 'value') else str(vuln.risk_level),
+                        'verified': vuln.verified,
+                        'payload': vuln.payload,
+                        'description': vuln.description,
+                        'poc': vuln.poc,
+                        'remediation': vuln.remediation
+                    }
+                    all_vulns.append(vuln_dict)
+
+                    logger.warning(f"[OSS Vuln] {vuln.bucket} ({vuln.provider}): {vuln.description}")
+
+                    provider_key = vuln.provider
+                    if provider_key not in oss_results['by_provider']:
+                        oss_results['by_provider'][provider_key] = []
+                    oss_results['by_provider'][provider_key].append(vuln.description)
+
+            except Exception as e:
+                logger.debug(f"[OSS Tester] Error testing {endpoint.full_url}: {e}")
+
+        oss_results['vulnerabilities'] = all_vulns
+
+        logger.info(f"[OSS Tester] Found {len(all_vulns)} OSS vulnerabilities")
+
+        return oss_results
     
     async def _run_fuzz_test(self) -> Dict[str, Any]:
         """模糊测试"""
