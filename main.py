@@ -241,6 +241,29 @@ Examples:
         print(f"High Value APIs: {result.high_value_apis}")
         print(f"Vulnerabilities: {len(result.vulnerabilities)}")
         print(f"Sensitive Data: {len(result.sensitive_data)}")
+        
+        if result.statistics and 'api_verification' in result.statistics:
+            verif = result.statistics['api_verification']
+            print(f"\n{'='*60}")
+            print(f"API Verification Results")
+            print(f"{'='*60}")
+            print(f"Total APIs: {verif.get('total_apis', 0)}")
+            print(f"Valid JSON Responses: {verif.get('valid_json_count', 0)}")
+            print(f"Unique Content: {verif.get('unique_content_count', 0)}")
+            
+            valid_json_apis = verif.get('valid_json_apis', [])
+            if valid_json_apis:
+                print(f"\n--- Valid JSON Responses ---")
+                for api in valid_json_apis[:20]:
+                    preview = api.get('response_preview', '')[:50].replace('\n', ' ').replace('\r', '')
+                    print(f"  [{api.get('method', 'GET'):6}] {api.get('path', '')} ({api.get('content_length', 0)} bytes)")
+            
+            unique_apis = verif.get('unique_content_apis', [])
+            if unique_apis:
+                print(f"\n--- Valid JSON + Unique Content ---")
+                for api in unique_apis[:20]:
+                    preview = api.get('response_preview', '')[:50].replace('\n', ' ').replace('\r', '')
+                    print(f"  [{api.get('method', 'GET'):6}] {api.get('path', '')} ({api.get('content_length', 0)} bytes)")
 
         if result.errors:
             print(f"\nErrors: {len(result.errors)}")

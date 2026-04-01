@@ -3297,10 +3297,52 @@ class ScanEngine:
             'bypass_results': bypass_results
         }
     
+    async def _verify_apis_for_report(self):
+        """API验证阶段 - 验证有效JSON响应和唯一内容"""
+        if not self.result or not self.result.api_endpoints:
+            return
+        
+        try:
+            from .collectors.api_verifier import APIVerifier
+            
+            api_paths = [ep.path for ep in self.result.api_endpoints]
+            
+            if not api_paths:
+                return
+            
+            verifier = APIVerifier(
+                http_client=self._http_client,
+                base_url=self.config.target,
+                timeout=10.0,
+                cookies=self.config.cookies
+            )
+            
+            verification_result = await verifier.verify_apis(api_paths)
+            
+            self.result.statistics['api_verification'] = verification_result.to_dict()
+            
+            output_mgr = self._output_manager if hasattr(self, '_output_manager') else None
+            results_base = output_mgr.results_dir if output_mgr else self.config.output_dir
+            
+            verifier.save_results(verification_result, results_base)
+            
+            verifier.print_categorized_results(verification_result)
+            
+            logger.info(
+                f"[API Verifier] 验证完成: 总API={verification_result.total_apis}, "
+                f"有效JSON={len(verification_result.valid_json_apis)}, "
+                f"唯一内容={len(verification_result.unique_content_apis)}"
+            )
+            
+        except Exception as e:
+            logger.debug(f"API verification error: {e}")
+    
     async def _stage_reporting(self):
         """报告生成阶段"""
         if not self.file_storage or not self.result:
             return
+        
+        await self._verify_apis_for_report()
         
         scan_dict = self.result.to_dict()
         
