@@ -57,6 +57,7 @@ class SwaggerDoc:
     endpoints: List[SwaggerEndpoint] = field(default_factory=list)
     tags: List[Dict[str, str]] = field(default_factory=list)
     security_definitions: Dict[str, Any] = field(default_factory=dict)
+    url_prefix: str = ""
 
 
 class SwaggerDiscoverer:
@@ -121,6 +122,70 @@ class SwaggerDiscoverer:
     def __init__(self, http_client=None):
         self.http_client = http_client
         self.discovered_docs: List[SwaggerDoc] = []
+
+    VERSION_PATTERNS = [
+        r'^v\d+$',
+        r'^api-docs$',
+        r'^swagger$',
+        r'^swagger\.json$',
+        r'^openapi\.json$',
+        r'^openapi\.yaml$',
+        r'^openapi\.yml$',
+        r'^api-docs\.json$',
+        r'^swagger\.yaml$',
+        r'^swagger\.yml$',
+    ]
+
+    def _extract_url_prefix(self, url: str) -> str:
+        """
+        从 Swagger URL 中提取父路径前缀
+
+        例如:
+        - /gateway/v2/api-docs -> /gateway
+        - /api/v1/swagger.json -> /api
+        - /admin/swagger-ui.html -> /admin
+        - /v2/api-docs -> ""
+
+        算法:
+        1. 解析 URL 获取路径
+        2. 识别版本标识 (v1, v2, v3, api-docs, swagger 等)
+        3. 版本标识之前的部分就是父路径前缀
+
+        Returns:
+            父路径前缀，如 "/gateway" 或 ""
+        """
+        if not url:
+            return ""
+
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+
+        if not path:
+            return ""
+
+        parts = path.split('/')
+
+        if len(parts) < 2:
+            return ""
+
+        for i, part in enumerate(parts):
+            for pattern in self.VERSION_PATTERNS:
+                if re.match(pattern, part, re.IGNORECASE):
+                    if i > 0:
+                        return '/' + '/'.join(parts[:i])
+                    return ""
+
+        last_part = parts[-1].lower()
+        for pattern in self.VERSION_PATTERNS:
+            if re.match(pattern, last_part, re.IGNORECASE):
+                if len(parts) > 1:
+                    return '/' + '/'.join(parts[:-1])
+                return ""
+
+        if len(parts) > 1:
+            return '/' + '/'.join(parts[:-1])
+
+        return ""
 
     async def discover_from_html(self, html_content: str, base_url: str) -> List[str]:
         """
@@ -284,35 +349,67 @@ class SwaggerDiscoverer:
         
         return None
 
+    def _apply_url_prefix(self, path: str, url_prefix: str, base_path: str) -> str:
+        """
+        将 URL 前缀应用到路径
+
+        优先级: url_prefix > base_path > path
+
+        例如:
+        - path="/actuator/env", url_prefix="/gateway", base_path="/" -> "/gateway/actuator/env"
+        - path="/actuator/env", url_prefix="", base_path="/api" -> "/api/actuator/env"
+        - path="/actuator/env", url_prefix="", base_path="" -> "/actuator/env"
+        """
+        if not path:
+            return path
+
+        if not path.startswith('/'):
+            path = '/' + path
+
+        if url_prefix:
+            return url_prefix + path
+
+        if base_path:
+            if not base_path.startswith('/'):
+                base_path = '/' + base_path
+            return base_path + path
+
+        return path
+
     def _parse_swagger_2(self, data: Dict, url: str) -> SwaggerDoc:
         """解析 Swagger 2.0 文档"""
         version = SwaggerVersion.SWAGGER_2
-        
+
+        url_prefix = self._extract_url_prefix(url)
+        base_path = data.get('basePath', '')
+
         doc = SwaggerDoc(
             url=url,
             version=version,
             title=data.get('info', {}).get('title', ''),
             description=data.get('info', {}).get('description', ''),
-            base_path=data.get('basePath', ''),
+            base_path=base_path,
             host=data.get('host', ''),
             schemes=data.get('schemes', []),
             security_definitions=data.get('securityDefinitions', {}),
             tags=data.get('tags', []),
+            url_prefix=url_prefix,
         )
-        
+
         paths = data.get('paths', {})
         definitions = data.get('definitions', {})
-        
+
         for path, path_item in paths.items():
+            full_path = self._apply_url_prefix(path, url_prefix, base_path)
             for method, operation in path_item.items():
                 if method not in ('get', 'post', 'put', 'delete', 'patch', 'head', 'options'):
                     continue
-                
+
                 if not isinstance(operation, dict):
                     continue
-                
+
                 endpoint = SwaggerEndpoint(
-                    path=path,
+                    path=full_path,
                     method=method.upper(),
                     summary=operation.get('summary', ''),
                     description=operation.get('description', ''),
@@ -323,12 +420,12 @@ class SwaggerDiscoverer:
                     tags=operation.get('tags', []),
                     security=operation.get('security', data.get('security', [])),
                 )
-                
+
                 if 'requestBody' in operation:
                     endpoint.request_body = operation['requestBody']
-                
+
                 doc.endpoints.append(endpoint)
-        
+
         return doc
 
     def _parse_openapi_3(self, data: Dict, url: str) -> SwaggerDoc:
@@ -338,10 +435,12 @@ class SwaggerDiscoverer:
             version = SwaggerVersion.OPENAPI_3_1
         else:
             version = SwaggerVersion.OPENAPI_3_0
-        
+
         servers = data.get('servers', [])
         host = servers[0].get('url', '') if servers else ''
-        
+
+        url_prefix = self._extract_url_prefix(url)
+
         doc = SwaggerDoc(
             url=url,
             version=version,
@@ -349,26 +448,28 @@ class SwaggerDiscoverer:
             description=data.get('info', {}).get('description', ''),
             host=host,
             tags=data.get('tags', []),
+            url_prefix=url_prefix,
         )
-        
+
         if servers and len(servers) > 1:
             doc.schemes = [s.get('url', '') for s in servers]
-        
+
         components = data.get('components', {})
         doc.security_definitions = components.get('securitySchemes', {})
-        
+
         paths = data.get('paths', {})
-        
+
         for path, path_item in paths.items():
+            full_path = self._apply_url_prefix(path, url_prefix, "")
             for method, operation in path_item.items():
                 if method not in ('get', 'post', 'put', 'delete', 'patch', 'head', 'options'):
                     continue
-                
+
                 if not isinstance(operation, dict):
                     continue
-                
+
                 endpoint = SwaggerEndpoint(
-                    path=path,
+                    path=full_path,
                     method=method.upper(),
                     summary=operation.get('summary', ''),
                     description=operation.get('description', ''),
@@ -378,17 +479,17 @@ class SwaggerDiscoverer:
                     tags=operation.get('tags', []),
                     security=operation.get('security', []),
                 )
-                
+
                 parameters = operation.get('parameters', [])
                 if not parameters and 'requestBody' not in operation:
                     parameters = path_item.get('parameters', [])
                 endpoint.parameters = parameters
-                
+
                 if 'requestBody' in operation:
                     endpoint.request_body = operation['requestBody']
-                
+
                 doc.endpoints.append(endpoint)
-        
+
         return doc
 
     def get_all_endpoints(self) -> List[SwaggerEndpoint]:
