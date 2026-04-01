@@ -73,6 +73,7 @@ from .config.api_patterns import COMMON_API_PATHS, RESTFUL_SUFFIXES, FUZZ_SUFFIX
 from .config.probe_patterns import ACTION_SUFFIXES, RESOURCE_WORDS, CRUD_SUFFIXES
 from .collectors.oss_collector import OSSCollector, OSSEndpoint, get_oss_collector, CloudProvider
 from .testers.oss_vuln_tester import OSSVulnTester, OSSVulnResult as OSSVulnTestResult, OSSVulnType, RiskLevel as OSSRiskLevel
+from .collectors.browser_enhancer import SensitiveInfoExtractor, PathPrefixLearner
 
 
 @dataclass
@@ -182,6 +183,8 @@ class ScanEngine:
         self._checkpoint: Optional[ScanCheckpoint] = None
         self._collector_results: Dict[str, Any] = {}
         self._oss_collector = None
+        self._sensitive_info_extractor = SensitiveInfoExtractor()
+        self._path_prefix_learner = PathPrefixLearner()
         self._callbacks: Dict[str, List[Any]] = {
             'stage_start': [],
             'stage_progress': [],
@@ -1046,6 +1049,21 @@ class ScanEngine:
         logger.info(f"ApiPathFinder discovered {len(finder_api_paths)} API paths from JS")
         logger.info(f"Discovered {len(js_params)} JS parameters for fuzzing: {list(js_params)[:20]}")
         
+        if js_content_all:
+            sensitive_findings = self._sensitive_info_extractor.extract_from_js(js_content_all, self.config.target)
+            if sensitive_findings:
+                logger.info(f"Extracted {len(sensitive_findings)} sensitive findings from JS")
+                for finding in sensitive_findings[:10]:
+                    logger.debug(f"  [{finding.info_type}] {finding.value} from {finding.source}")
+        
+        if browser_api_endpoints:
+            for api in browser_api_endpoints:
+                self._path_prefix_learner.learn_from_url(api)
+        
+        response_sensitive = self._sensitive_info_extractor.extract_from_response(response.content, self.config.target)
+        if response_sensitive:
+            logger.info(f"Extracted {len(response_sensitive)} sensitive findings from response")
+        
         return {
             'total_js': len(js_urls),
             'alive_js': len(alive_js),
@@ -1061,7 +1079,10 @@ class ScanEngine:
             'ast_routes': list(ast_routes),
             'env_configs': dict(env_configs),
             'sensitive_resources': list(all_extracted.get('sensitive_resources', [])),
-            'response_sensitive_resources': list(all_discovered.get('sensitive_resources', []))
+            'response_sensitive_resources': list(all_discovered.get('sensitive_resources', [])),
+            'sensitive_findings': self._sensitive_info_extractor.get_all_findings(),
+            'path_prefixes': list(self._path_prefix_learner.get_all_prefixes()),
+            'path_mappings': self._path_prefix_learner.get_mappings()
         }
     
     async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
@@ -2301,6 +2322,8 @@ class ScanEngine:
         if 'sensitive' in active_analyzers:
             analyzer_results['sensitive'] = await self._detect_sensitive()
         
+        self._process_browser_enhancer_findings()
+        
         self._analyzer_results = analyzer_results
         
         flux_results = await self._flux_enhanced_detection()
@@ -2668,6 +2691,52 @@ class ScanEngine:
             )
             if self.result:
                 self.result.sensitive_data.append(sensitive_data)
+    
+    def _process_browser_enhancer_findings(self):
+        """处理从 browser_enhancer.SensitiveInfoExtractor 提取的敏感信息"""
+        if not self._collector_results or 'js' not in self._collector_results:
+            return
+        
+        js_result = self._collector_results['js']
+        sensitive_findings = js_result.get('sensitive_findings', [])
+        
+        if not sensitive_findings:
+            return
+        
+        logger.info(f"Processing {len(sensitive_findings)} sensitive findings from browser_enhancer")
+        
+        from .models import SensitiveData, Severity as ModelSeverity
+        
+        for finding in sensitive_findings:
+            if not hasattr(finding, 'info_type'):
+                continue
+            
+            severity_map = {
+                'credential': ModelSeverity.HIGH,
+                'api_key': ModelSeverity.HIGH,
+                'secret': ModelSeverity.HIGH,
+                'token': ModelSeverity.MEDIUM,
+                'internal_ip': ModelSeverity.LOW,
+                'phone': ModelSeverity.LOW,
+                'email': ModelSeverity.LOW,
+            }
+            
+            severity = severity_map.get(finding.info_type, ModelSeverity.MEDIUM)
+            
+            sensitive_data = SensitiveData(
+                api_id='',
+                data_type=finding.info_type,
+                matches=[finding.value],
+                severity=severity,
+                evidence=finding.value,
+                context=finding.context or finding.source,
+                location=finding.source
+            )
+            
+            if self.result:
+                self.result.sensitive_data.append(sensitive_data)
+        
+        logger.info(f"Added {len(sensitive_findings)} sensitive findings to scan result")
     
     async def _flux_enhanced_detection(self):
         """

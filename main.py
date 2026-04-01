@@ -19,6 +19,14 @@ from core.dashboard.server import run_server
 from core.collectors import BurpSuiteImporter, PostmanCollectionImporter
 from core.scheduled_testing import CronScheduler
 from core.exporters.enhanced_html_reporter import EnhancedHtmlReporter
+from core.report.enhanced_report import (
+    ReportGenerator,
+    POCGenerator,
+    RemediationGenerator,
+    Severity,
+    Vulnerability,
+    SensitiveFinding
+)
 
 
 class CLI:
@@ -114,6 +122,12 @@ Examples:
                                  help='Enable industry-specific test cases')
         
         scan_parser.add_argument('--verbose', '-v', action='store_true')
+        scan_parser.add_argument('--sensitive-info', choices=['on', 'off'], default='on',
+                                  help='Enable sensitive info detection (default: on)')
+        scan_parser.add_argument('--poc', choices=['on', 'off'], default='on',
+                                  help='Generate POC for vulnerabilities (default: on)')
+        scan_parser.add_argument('--remediation', choices=['on', 'off'], default='on',
+                                  help='Generate remediation suggestions (default: on)')
 
         dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')
         dash_parser.add_argument('--host', default='0.0.0.0')
@@ -241,7 +255,36 @@ Examples:
         print(f"High Value APIs: {result.high_value_apis}")
         print(f"Vulnerabilities: {len(result.vulnerabilities)}")
         print(f"Sensitive Data: {len(result.sensitive_data)}")
+
+        if result.sensitive_data and len(result.sensitive_data) > 0:
+            print(f"\n--- Sensitive Data Found ---")
+            for item in result.sensitive_data[:10]:
+                if isinstance(item, dict):
+                    info_type = item.get('type', 'unknown')
+                    value = item.get('value', 'N/A')
+                    source = item.get('source', 'N/A')
+                    print(f"  [{info_type}] {value} (from {source})")
+                elif hasattr(item, 'info_type'):
+                    print(f"  [{item.info_type}] {item.value} (from {item.source})")
         
+        if result.vulnerabilities and len(result.vulnerabilities) > 0:
+            poc_gen = POCGenerator()
+            remediation_gen = RemediationGenerator()
+            print(f"\n--- Vulnerabilities with POC ---")
+            for vuln in result.vulnerabilities[:10]:
+                vuln_name = vuln.name if hasattr(vuln, 'name') else str(vuln)
+                vuln_type = vuln.type if hasattr(vuln, 'type') else 'unknown'
+                vuln_url = vuln.url if hasattr(vuln, 'url') else ''
+                print(f"  [{vuln_type}] {vuln_name} - {vuln_url}")
+                
+                if hasattr(vuln, 'payload') and vuln.payload:
+                    print(f"      Payload: {vuln.payload[:100]}")
+                
+                if getattr(parsed_args, 'poc', 'on') == 'on':
+                    vuln_key = vuln_type.lower().replace(' ', '_')
+                    remediation = remediation_gen.get_remediation(vuln_key)
+                    if remediation:
+                        print(f"      Remediation: {remediation.immediate}")        
         if result.statistics and 'api_verification' in result.statistics:
             verif = result.statistics['api_verification']
             print(f"\n{'='*60}")
