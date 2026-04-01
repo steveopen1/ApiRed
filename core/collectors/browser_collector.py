@@ -147,6 +147,8 @@ class HeadlessBrowserCollector:
     async def _setup_interceptors(self):
         """设置请求和响应拦截器"""
         self._js_content_set = set()
+        self._intercepted_apis = []
+        self._base_urls = set()
 
         async def handle_request(request):
             url = request.url
@@ -165,7 +167,7 @@ class HeadlessBrowserCollector:
                 resource_type=resource_type,
                 content=""
             ))
-
+        
         async def handle_response(response):
             """拦截 JS 响应并捕获正文"""
             url = response.url
@@ -524,6 +526,110 @@ class HeadlessBrowserCollector:
     async def cleanup(self) -> None:
         """清理资源"""
         await self.close()
+    
+    async def add_api_interceptor(self):
+        """添加 API 拦截器 - 拦截 fetch/XHR 调用并提取 baseURL"""
+        if not self.page:
+            return
+        
+        interceptor_script = '''
+        (() => {
+            if (window.__apiInterceptorActive) return;
+            window.__apiInterceptorActive = true;
+            window.__interceptedAPIs = [];
+            window.__discoveredBaseURLs = [];
+            
+            const originalFetch = window.fetch;
+            window.fetch = async function(...args) {
+                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                const method = args[0]?.method || 'GET';
+                
+                if (url && (url.includes('/prod-api') || url.includes('/api/') || 
+                            url.includes('/v1/') || url.includes('/v2/') || 
+                            url.includes('/auth') || url.includes('/admin') ||
+                            url.match(/\\/[a-z]+\\/[a-z]+/))) {
+                    window.__interceptedAPIs.push({url: url, method: method, type: 'fetch', timestamp: Date.now()});
+                    console.log('[API-FETCH]', method, url);
+                }
+                
+                return originalFetch.apply(window, args);
+            };
+            
+            const originalXHROpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (url && (url.includes('/prod-api') || url.includes('/api/') || 
+                            url.includes('/v1/') || url.includes('/v2/') || 
+                            url.includes('/auth') || url.includes('/admin') ||
+                            url.match(/\\/[a-z]+\\/[a-z]+/))) {
+                    window.__interceptedAPIs.push({url: url, method: method, type: 'xhr', timestamp: Date.now()});
+                    console.log('[API-XHR]', method, url);
+                }
+                return originalXHROpen.call(this, method, url, ...rest);
+            };
+            
+            if (window.axios) {
+                const originalCreate = window.axios.create;
+                if (typeof originalCreate === 'function') {
+                    window.axios.create = function(...args) {
+                        const instance = originalCreate.apply(window.axios, args);
+                        if (args[0]?.baseURL) {
+                            window.__discoveredBaseURLs.push(args[0].baseURL);
+                            console.log('[BASE-URL]', args[0].baseURL);
+                        }
+                        return instance;
+                    };
+                }
+            }
+            
+            if (window.Vue?.axios?.defaults) {
+                const baseURL = window.Vue.axios.defaults.baseURL;
+                if (baseURL) {
+                    window.__discoveredBaseURLs.push(baseURL);
+                    console.log('[BASE-URL-VUE]', baseURL);
+                }
+            }
+            
+            console.log('[API-INTERCEPTOR] Initialized');
+        })();
+        '''
+        
+        try:
+            await self.page.add_init_script(interceptor_script)
+            logger.info("API interceptor added")
+        except Exception as e:
+            logger.warning(f"Failed to add API interceptor: {e}")
+    
+    async def get_intercepted_apis(self) -> List[Dict]:
+        """获取拦截到的 API 调用"""
+        if not self.page:
+            return []
+        
+        script = '''
+        () => {
+            return {
+                apis: window.__interceptedAPIs || [],
+                baseURLs: window.__discoveredBaseURLs || []
+            };
+        }
+        '''
+        
+        try:
+            result = await self.page.evaluate(script)
+            if result:
+                self._intercepted_apis.extend(result.get('apis', []))
+                self._base_urls.update(result.get('baseURLs', []))
+            return result.get('apis', [])
+        except Exception as e:
+            logger.warning(f"Failed to get intercepted APIs: {e}")
+            return []
+    
+    def get_discovered_base_urls(self) -> Set[str]:
+        """获取发现的 baseURL 前缀"""
+        return self._base_urls.copy()
+    
+    def get_all_intercepted_apis(self) -> List[Dict]:
+        """获取所有拦截到的 API 调用"""
+        return self._intercepted_apis.copy()
 
 
 async def create_browser_collector(config: Optional[Dict] = None) -> Optional[HeadlessBrowserCollector]:

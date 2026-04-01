@@ -1073,16 +1073,30 @@ class ScanEngine:
         api_endpoints = []
         spa_routes = []
         alive_js = []
+        intercepted_apis = []
+        base_urls = set()
         
         try:
             await self._browser_collector.navigate(self.config.target)
+            
+            await self._browser_collector.add_api_interceptor()
+            
             await self._browser_collector.scroll_page()
             
             page_content = await self._browser_collector.collect_page_content()
             
+            intercepted = await self._browser_collector.get_intercepted_apis()
+            intercepted_apis.extend(intercepted)
+            
+            discovered_bases = self._browser_collector.get_discovered_base_urls()
+            base_urls.update(discovered_bases)
+            
             js_urls = page_content.get('js_files', [])
             api_endpoints = page_content.get('api_endpoints', [])
             spa_routes = page_content.get('routes', [])
+            
+            intercepted_from_page = await self._browser_collector.get_all_intercepted_apis()
+            intercepted_apis.extend(intercepted_from_page)
             
             for js_url in js_urls:
                 try:
@@ -1094,6 +1108,9 @@ class ScanEngine:
                         })
                 except Exception as e:
                     logger.debug(f"Browser JS request error: {e}")
+            
+            logger.info(f"[Browser Collector] Intercepted {len(intercepted_apis)} API calls, discovered {len(base_urls)} baseURLs")
+        
         except Exception as e:
             logger.warning(f"Browser collection error: {e}")
         
@@ -1102,6 +1119,8 @@ class ScanEngine:
             'alive_js': alive_js,
             'spa_routes': spa_routes,
             'browser_apis': api_endpoints,
+            'intercepted_apis': intercepted_apis,
+            'base_urls': list(base_urls),
             'detected_framework': self._detected_framework
         }
     
