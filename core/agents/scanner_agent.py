@@ -7,8 +7,10 @@ import re
 import time
 import json
 import logging
+import aiohttp
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 from .base import BaseAgent, AgentConfig, AgentResult, Action
 from ..knowledge_base import KnowledgeBase
 
@@ -86,10 +88,6 @@ class ScannerAgent(BaseAgent):
     
     async def _discover_js(self, target: str) -> AgentResult:
         """JS资源发现"""
-        import aiohttp
-        from bs4 import BeautifulSoup
-        import asyncio
-        
         js_urls = []
         
         try:

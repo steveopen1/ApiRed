@@ -4,6 +4,7 @@ Dispatcher Module
 """
 
 import asyncio
+import heapq
 import logging
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
@@ -287,31 +288,33 @@ class AsyncTaskDispatcher:
 
 
 class PriorityQueue:
-    """优先级队列"""
+    """优先级队列（使用heapq优化）"""
     
     def __init__(self):
-        self._queue: List[Task] = []
+        self._heap: List[Task] = []
         self._lock = threading.Lock()
+        self._counter = 0
     
     def put(self, task: Task):
-        """添加任务"""
+        """添加任务 - O(log n)"""
         with self._lock:
-            self._queue.append(task)
-            self._queue.sort(key=lambda t: t.priority.value, reverse=True)
+            heapq.heappush(self._heap, (-task.priority.value, self._counter, task))
+            self._counter += 1
     
     def get(self) -> Optional[Task]:
-        """获取任务"""
+        """获取任务 - O(log n)"""
         with self._lock:
-            if self._queue:
-                return self._queue.pop(0)
+            if self._heap:
+                _, _, task = heapq.heappop(self._heap)
+                return task
             return None
     
     def empty(self) -> bool:
         """检查是否为空"""
         with self._lock:
-            return len(self._queue) == 0
+            return len(self._heap) == 0
     
     def size(self) -> int:
         """获取大小"""
         with self._lock:
-            return len(self._queue)
+            return len(self._heap)

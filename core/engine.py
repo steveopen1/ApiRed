@@ -137,6 +137,15 @@ class ScanCheckpoint:
 class ScanEngine:
     """统一扫描引擎"""
     
+    _HREF_PATTERN = re.compile(r'href=["\']([^"\']+)["\']')
+    _SRC_PATTERN = re.compile(r'src=["\']([^"\']+)["\']')
+    _ACTION_PATTERN = re.compile(r'action=["\']([^"\']+)["\']')
+    _URL_PATTERN = re.compile(r'url:\s*["\']([^"\']+)["\']')
+    _API_URL_PATTERN = re.compile(r'["\'](\/api\/[^"\']+)["\']')
+    _GENERIC_API_PATTERN = re.compile(r'["\'](/[a-zA-Z0-9_/-]+)["\']')
+    _CONFIG_PATTERN = re.compile(r'(?:baseURL|apiUrl|api_base)\s*[:=]\s*["\']([^"\']+)["\']')
+    _ROUTER_PATTERN = re.compile(r'router(?:\.push|\.replace)\(["\']([^"\']+)["\']')
+    
     def __init__(self, config: EngineConfig):
         self.config = config
         self.cfg = Config()
@@ -1513,28 +1522,23 @@ class ScanEngine:
             if main_response and main_response.status_code == 200:
                 content = main_response.content
                 
-                href_pattern = re.compile(r'href=["\']([^"\']+)["\']')
-                for match in href_pattern.findall(content):
+                for match in self._HREF_PATTERN.findall(content):
                     if self._is_valid_path_segment(match):
                         path_segments.add(self._normalize_path_segment(match))
                 
-                src_pattern = re.compile(r'src=["\']([^"\']+)["\']')
-                for match in src_pattern.findall(content):
+                for match in self._SRC_PATTERN.findall(content):
                     if self._is_valid_path_segment(match):
                         path_segments.add(self._normalize_path_segment(match))
                 
-                action_pattern = re.compile(r'action=["\']([^"\']+)["\']')
-                for match in action_pattern.findall(content):
+                for match in self._ACTION_PATTERN.findall(content):
                     if self._is_valid_path_segment(match):
                         path_segments.add(self._normalize_path_segment(match))
                 
-                url_pattern = re.compile(r'url:\s*["\']([^"\']+)["\']')
-                for match in url_pattern.findall(content):
+                for match in self._URL_PATTERN.findall(content):
                     if self._is_valid_path_segment(match):
                         path_segments.add(self._normalize_path_segment(match))
                 
-                api_url_pattern = re.compile(r'["\'](\/api\/[^"\']+)["\']')
-                for match in api_url_pattern.findall(content):
+                for match in self._API_URL_PATTERN.findall(content):
                     if self._is_valid_path_segment(match):
                         path_segments.add(self._normalize_path_segment(match))
                         
@@ -1549,18 +1553,15 @@ class ScanEngine:
                     if js_response and js_response.status_code == 200:
                         content = js_response.content
                         
-                        api_pattern = re.compile(r'["\'](/[a-zA-Z0-9_/-]+)["\']')
-                        for match in api_pattern.findall(content):
+                        for match in self._GENERIC_API_PATTERN.findall(content):
                             if self._is_valid_path_segment(match):
                                 path_segments.add(self._normalize_path_segment(match))
                         
-                        config_pattern = re.compile(r'(?:baseURL|apiUrl|api_base)\s*[:=]\s*["\']([^"\']+)["\']')
-                        for match in config_pattern.findall(content):
+                        for match in self._CONFIG_PATTERN.findall(content):
                             if match.startswith('/'):
                                 path_segments.add(self._normalize_path_segment(match))
                         
-                        router_pattern = re.compile(r'router(?:\.push|\.replace)\(["\']([^"\']+)["\']')
-                        for match in router_pattern.findall(content):
+                        for match in self._ROUTER_PATTERN.findall(content):
                             if self._is_valid_path_segment(match):
                                 path_segments.add(self._normalize_path_segment(match))
                                 

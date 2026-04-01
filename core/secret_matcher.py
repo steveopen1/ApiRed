@@ -88,7 +88,7 @@ class SecretMatcher:
         r'admin123', r'key123', r'secret123', r'undefined', r'null',
         r'true', r'false', r'function', r'class', r'return',
         r'const', r'let', r'var', r'strReplace', r'REPLACE_ME',
-        r'TODO', r'FIXME', r'CHANGEME', r'CHANGEME',
+        r'TODO', r'FIXME', r'CHANGEME',
     ]
 
     EXAMPLE_VALUES = {

@@ -287,9 +287,9 @@ class UnifiedFusionEngine:
         """判断是否为ID"""
         return (
             s.isdigit() or
-            bool(re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', s, re.IGNORECASE)) or
+            bool(UnifiedFusionEngine._UUID_PATTERN.match(s)) or
             (len(s) > 3 and s[:2].isalpha() and s[2:].isdigit()) or
-            (len(s) > 8 and bool(re.match(r'^[a-zA-Z0-9_-]+$', s)) and ('-' in s or '_' in s))
+            (len(s) > 8 and bool(UnifiedFusionEngine._ALPHANUM_DASH_UNDERSCORE_PATTERN.match(s)) and ('-' in s or '_' in s))
         )
 
     @staticmethod
