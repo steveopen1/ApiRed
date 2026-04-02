@@ -25,7 +25,9 @@ class VerifiedAPI:
     content_hash: str = ""
     is_valid_json: bool = False
     is_unique_content: bool = False
+    is_sensitive_response: bool = False
     response_preview: str = ""
+    extracted_urls: List[str] = field(default_factory=list)
     error: str = ""
 
 
@@ -35,14 +37,17 @@ class VerificationResult:
     total_apis: int = 0
     valid_json_apis: List[VerifiedAPI] = field(default_factory=list)
     unique_content_apis: List[VerifiedAPI] = field(default_factory=list)
+    sensitive_apis: List[VerifiedAPI] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
             'total_apis': self.total_apis,
             'valid_json_count': len(self.valid_json_apis),
             'unique_content_count': len(self.unique_content_apis),
+            'sensitive_count': len(self.sensitive_apis),
             'valid_json_apis': [self._api_to_dict(a) for a in self.valid_json_apis],
             'unique_content_apis': [self._api_to_dict(a) for a in self.unique_content_apis],
+            'sensitive_apis': [self._api_to_dict(a) for a in self.sensitive_apis],
         }
     
     def _api_to_dict(self, api: VerifiedAPI) -> Dict[str, Any]:
@@ -52,6 +57,9 @@ class VerificationResult:
             'status_code': api.status_code,
             'content_length': api.content_length,
             'content_hash': api.content_hash,
+            'is_valid_json': api.is_valid_json,
+            'is_sensitive': api.is_sensitive_response,
+            'extracted_urls': api.extracted_urls,
             'response_preview': api.response_preview[:100] if api.response_preview else "",
             'error': api.error,
         }
@@ -118,6 +126,8 @@ class APIVerifier:
                     result.valid_json_apis.append(r)
                     if r.content_hash:
                         content_hashes.add(r.content_hash)
+                elif r.is_sensitive_response:
+                    result.sensitive_apis.append(r)
         
         seen_hashes: Set[str] = set()
         for api in result.valid_json_apis:
@@ -129,6 +139,7 @@ class APIVerifier:
         logger.info(
             f"[API Verifier] 验证完成: 总API={result.total_apis}, "
             f"有效JSON={len(result.valid_json_apis)}, "
+            f"敏感响应(403)={len(result.sensitive_apis)}, "
             f"唯一内容={len(result.unique_content_apis)}"
         )
         
@@ -178,6 +189,30 @@ class APIVerifier:
                         except:
                             verified.response_preview = str(response.content_bytes[:200])
                         break
+                    else:
+                        verified.response_preview = response.content_bytes[:200].decode('utf-8', errors='ignore').strip()
+                        verified.is_sensitive_response = True
+                        verified.extracted_urls = self._extract_urls_from_response(response.content_bytes)
+                        break
+                
+                elif response.status_code == 403:
+                    verified.is_sensitive_response = True
+                    verified.error = f"HTTP 403 Forbidden - Access Denied"
+                    verified.content_type = response.headers.get('Content-Type', '').lower()
+                    verified.content_length = len(response.content_bytes)
+                    verified.response_preview = response.content_bytes[:200].decode('utf-8', errors='ignore').strip()
+                    verified.extracted_urls = self._extract_urls_from_response(response.content_bytes)
+                    break
+                
+                elif response.status_code == 401:
+                    verified.is_sensitive_response = True
+                    verified.error = f"HTTP 401 Unauthorized - Authentication Required"
+                    verified.content_type = response.headers.get('Content-Type', '').lower()
+                    verified.content_length = len(response.content_bytes)
+                    verified.response_preview = response.content_bytes[:200].decode('utf-8', errors='ignore').strip()
+                    verified.extracted_urls = self._extract_urls_from_response(response.content_bytes)
+                    break
+                
                 else:
                     verified.error = f"HTTP {response.status_code}"
                     
@@ -188,6 +223,36 @@ class APIVerifier:
                 continue
         
         return verified
+    
+    def _extract_urls_from_response(self, content: bytes) -> List[str]:
+        """从响应内容中提取API链接"""
+        import re
+        from urllib.parse import urlparse
+        
+        extracted = []
+        try:
+            text = content.decode('utf-8', errors='ignore')
+        except:
+            return extracted
+        
+        url_patterns = [
+            r'''["\'](/api/[^"\']+)["\']''',
+            r'''["\'](/[a-zA-Z0-9_/-]+\.json)["\']''',
+            r'''href=["\'](/[^"\']+)["\']''',
+            r'''url:\s*["\']([^"\']+)["\']''',
+            r'''src=["\'](/[^"\']+)["\']''',
+        ]
+        
+        for pattern in url_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if match and len(match) > 1:
+                    path = match.strip()
+                    if path.startswith('/') and not path.startswith('//'):
+                        if path not in extracted:
+                            extracted.append(path)
+        
+        return extracted
     
     def _is_valid_json(self, content: bytes, content_type: str) -> bool:
         """检查响应是否为有效JSON"""
@@ -213,6 +278,7 @@ class APIVerifier:
         print(f"\n总 API 数量: {result.total_apis}")
         print(f"有效 JSON 响应: {len(result.valid_json_apis)}")
         print(f"唯一内容: {len(result.unique_content_apis)}")
+        print(f"敏感响应(403/401): {len(result.sensitive_apis)}")
         
         print("\n" + "-" * 60)
         print("有效 JSON 响应")
@@ -221,6 +287,19 @@ class APIVerifier:
             for api in result.valid_json_apis:
                 preview = api.response_preview[:50].replace('\n', ' ').replace('\r', '') if api.response_preview else ""
                 print(f"  [{api.method}] {api.path} - {api.content_length} bytes - {preview}...")
+        else:
+            print("  无")
+        
+        print("\n" + "-" * 60)
+        print("敏感响应 (403/401 - 可能需要认证)")
+        print("-" * 60)
+        if result.sensitive_apis:
+            for api in result.sensitive_apis:
+                preview = api.response_preview[:50].replace('\n', ' ').replace('\r', '') if api.response_preview else ""
+                print(f"  [{api.method}] {api.path} - {api.status_code} - {preview}...")
+                if api.extracted_urls:
+                    for url in api.extracted_urls[:5]:
+                        print(f"      -> 发现链接: {url}")
         else:
             print("  无")
         
