@@ -30,6 +30,15 @@ from .auto_auth import (
     AuthType,
     auto_authenticate
 )
+from .frontend_deep_analyzer import (
+    FrontendDeepAnalyzer,
+    SourceMapAnalyzer,
+    VueSFCAnalyzer,
+    WebSocketDiscovery,
+    GraphQLDiscovery,
+    ProxyConfigAnalyzer,
+    analyze_frontend,
+)
 from .passive_sources import PassiveSourceCollector, PassiveSource, collect_passive, TokenBucket
 from .smart_filter import SmartFilter, ScoredEndpoint, SmartFilter, ResponseClusterAnalyzer, prioritize_endpoints, EndpointValue
 from .burp_importer import BurpSuiteImporter, ProxyRequest, ProxyResponse, ProxyTransaction, import_burp_file, convert_burp_to_openapi
@@ -77,6 +86,14 @@ __all__ = [
     'LoginEndpoint',
     'AuthType',
     'auto_authenticate',
+    # Frontend Deep Analyzer
+    'FrontendDeepAnalyzer',
+    'SourceMapAnalyzer',
+    'VueSFCAnalyzer',
+    'WebSocketDiscovery',
+    'GraphQLDiscovery',
+    'ProxyConfigAnalyzer',
+    'analyze_frontend',
     # Passive Sources
     'PassiveSourceCollector',
     'PassiveSource',
