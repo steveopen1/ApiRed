@@ -40,11 +40,14 @@ class APIRequestTester:
     API 请求测试器
     
     支持：
-    1. 三种请求方式：GET / POST DATA / POST JSON
-    2. 有参请求测试
+    1. 八种 HTTP 方法：GET / POST / PUT / DELETE / PATCH / OPTIONS / HEAD / TRACE
+    2. 三种请求体：表单数据 / JSON / 纯文本
     3. Bypass 技术
     4. 响应差异检测
+    5. CORS 和 Method Discovery
     """
+    
+    HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE']
     
     def __init__(self, http_client=None):
         self.http_client = http_client
@@ -52,21 +55,25 @@ class APIRequestTester:
         self.parameter_extractor = APIParameterExtractor()
         self.bypass_techniques = BypassTechniques.get_all_techniques()
     
-    async def test_endpoint(self, url: str, params: Dict = None, headers: Dict = None) -> List[APIRequestResult]:
+    async def test_endpoint(self, url: str, params: Dict = None, headers: Dict = None, test_all_methods: bool = False) -> List[APIRequestResult]:
         """
-        测试端点的三种请求方式
+        测试端点的多种请求方式
         
         Args:
             url: API URL
             params: 参数字典
             headers: 请求头
+            test_all_methods: 是否测试所有 HTTP 方法
         
         Returns:
             所有请求结果
         """
         results = []
         
-        methods = ['GET', 'POST_DATA', 'POST_JSON']
+        if test_all_methods:
+            methods = self.HTTP_METHODS
+        else:
+            methods = ['GET', 'POST_DATA', 'POST_JSON']
         
         for method in methods:
             result = await self._test_method(url, method, params, headers)
@@ -82,9 +89,59 @@ class APIRequestTester:
         
         try:
             start_time = time.time()
+            method_upper = method.upper()
             
-            if method == 'GET':
+            if method_upper == 'GET':
                 response = await self.http_client.request(url, params=params, headers=headers)
+            elif method_upper == 'POST':
+                json_data = json.dumps(params or {})
+                response = await self.http_client.request(
+                    url,
+                    method='POST',
+                    data=json_data,
+                    headers={**(headers or {}), 'Content-Type': 'application/json'}
+                )
+            elif method_upper == 'PUT':
+                json_data = json.dumps(params or {})
+                response = await self.http_client.request(
+                    url,
+                    method='PUT',
+                    data=json_data,
+                    headers={**(headers or {}), 'Content-Type': 'application/json'}
+                )
+            elif method_upper == 'DELETE':
+                response = await self.http_client.request(
+                    url,
+                    method='DELETE',
+                    params=params,
+                    headers=headers
+                )
+            elif method_upper == 'PATCH':
+                json_data = json.dumps(params or {})
+                response = await self.http_client.request(
+                    url,
+                    method='PATCH',
+                    data=json_data,
+                    headers={**(headers or {}), 'Content-Type': 'application/json'}
+                )
+            elif method_upper == 'OPTIONS':
+                response = await self.http_client.request(
+                    url,
+                    method='OPTIONS',
+                    headers=headers
+                )
+            elif method_upper == 'HEAD':
+                response = await self.http_client.request(
+                    url,
+                    method='HEAD',
+                    headers=headers
+                )
+            elif method_upper == 'TRACE':
+                response = await self.http_client.request(
+                    url,
+                    method='TRACE',
+                    headers=headers
+                )
             elif method == 'POST_DATA':
                 data = urlencode(params or {})
                 response = await self.http_client.request(

