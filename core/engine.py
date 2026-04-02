@@ -809,6 +809,75 @@ class ScanEngine:
         logger.info(f"[OSS Collector] Found {oss_summary['total_count']} OSS endpoints: {oss_summary['by_provider']}")
 
         self._oss_collector = oss_collector
+        
+        await self._try_auto_auth()
+    
+    async def _try_auto_auth(self):
+        """尝试自动认证"""
+        try:
+            from .collectors.auto_auth import auto_authenticate, AuthInfoExtractor, LoginInterfaceDiscoverer
+            
+            if self.config.cookies:
+                logger.info("[AutoAuth] 已提供 cookies，跳过自动认证")
+                return
+            
+            js_contents = []
+            if self._collector_results:
+                js_result = self._collector_results.get('js', {})
+                if 'js_content_all' in js_result:
+                    js_contents.append(js_result['js_content_all'])
+            
+            all_api_paths = []
+            if self._collector_results:
+                for key in ['api', 'swagger', 'passive']:
+                    if key in self._collector_results:
+                        paths = self._collector_results[key].get('api_paths', [])
+                        all_api_paths.extend(paths)
+            
+            extractor = AuthInfoExtractor()
+            discoverer = LoginInterfaceDiscoverer()
+            
+            credentials = []
+            for js in js_contents:
+                creds, _ = extractor.extract_from_js(js)
+                credentials.extend(creds)
+            
+            login_endpoints = discoverer.discover_from_paths(all_api_paths)
+            
+            if not login_endpoints and not credentials:
+                logger.info("[AutoAuth] 未发现登录接口或凭据，跳过自动认证")
+                return
+            
+            logger.info(f"[AutoAuth] 发现 {len(credentials)} 个凭据, {len(login_endpoints)} 个登录接口")
+            
+            auth_result = await auto_authenticate(
+                self._http_client,
+                self.config.target,
+                js_contents
+            )
+            
+            if auth_result and auth_result.headers:
+                self.config.cookies = auth_result.cookie
+                if auth_result.token:
+                    logger.info(f"[AutoAuth] 认证成功，获得 Token")
+                    self.result.statistics['auto_auth'] = {
+                        'success': True,
+                        'auth_type': auth_result.auth_type.value,
+                        'token_prefix': auth_result.token[:20] + '...' if len(auth_result.token) > 20 else auth_result.token
+                    }
+                else:
+                    logger.info(f"[AutoAuth] 认证成功，获得 Cookie")
+                    self.result.statistics['auto_auth'] = {
+                        'success': True,
+                        'auth_type': auth_result.auth_type.value,
+                        'cookie': auth_result.cookie[:50] + '...' if len(auth_result.cookie) > 50 else auth_result.cookie
+                    }
+            else:
+                logger.info("[AutoAuth] 自动认证失败")
+                self.result.statistics['auto_auth'] = {'success': False}
+                
+        except Exception as e:
+            logger.debug(f"[AutoAuth] 自动认证异常: {e}")
     
     async def _collect_swagger(self) -> Dict[str, Any]:
         """采集 Swagger/OpenAPI 文档"""

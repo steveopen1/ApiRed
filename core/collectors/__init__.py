@@ -21,6 +21,15 @@ from .api_path_finder import ApiPathFinder, ApiPathCombiner, DiscoveredAPI, Resp
 from .js_ast_analyzer import JavaScriptASTAnalyzer, JSASTDifferentialAnalyzer, extract_api_paths_from_js
 from .swagger_discoverer import SwaggerDiscoverer, SwaggerDoc, SwaggerEndpoint, discover_swagger
 from .api_bypass import APIBypasser, SmartBypasser, BypassResult, BypassTechnique, quick_bypass
+from .auto_auth import (
+    AutoAuthenticator,
+    AuthInfoExtractor,
+    LoginInterfaceDiscoverer,
+    AuthCredential,
+    LoginEndpoint,
+    AuthType,
+    auto_authenticate
+)
 from .passive_sources import PassiveSourceCollector, PassiveSource, collect_passive, TokenBucket
 from .smart_filter import SmartFilter, ScoredEndpoint, SmartFilter, ResponseClusterAnalyzer, prioritize_endpoints, EndpointValue
 from .burp_importer import BurpSuiteImporter, ProxyRequest, ProxyResponse, ProxyTransaction, import_burp_file, convert_burp_to_openapi
@@ -60,6 +69,14 @@ __all__ = [
     'BypassResult',
     'BypassTechnique',
     'quick_bypass',
+    # Auto Auth
+    'AutoAuthenticator',
+    'AuthInfoExtractor',
+    'LoginInterfaceDiscoverer',
+    'AuthCredential',
+    'LoginEndpoint',
+    'AuthType',
+    'auto_authenticate',
     # Passive Sources
     'PassiveSourceCollector',
     'PassiveSource',
