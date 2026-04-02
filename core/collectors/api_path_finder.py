@@ -383,23 +383,23 @@ class ApiPathFinder:
     def _compile_method_patterns(self) -> List[Tuple[re.Pattern, str]]:
         """编译HTTP方法识别模式"""
         patterns = [
-            (re.compile(r'\.get\s*\(\s*["\']([^"\']+)["\']'), 'GET'),
-            (re.compile(r'\.post\s*\(\s*["\']([^"\']+)["\']'), 'POST'),
-            (re.compile(r'\.put\s*\(\s*["\']([^"\']+)["\']'), 'PUT'),
-            (re.compile(r'\.delete\s*\(\s*["\']([^"\']+)["\']'), 'DELETE'),
-            (re.compile(r'\.patch\s*\(\s*["\']([^"\']+)["\']'), 'PATCH'),
-            (re.compile(r'\.head\s*\(\s*["\']([^"\']+)["\']'), 'HEAD'),
-            (re.compile(r'\.options\s*\(\s*["\']([^"\']+)["\']'), 'OPTIONS'),
-            (re.compile(r'\.get\s*\(\s*`([^`]+)`'), 'GET'),
-            (re.compile(r'\.post\s*\(\s*`([^`]+)`'), 'POST'),
-            (re.compile(r'\.put\s*\(\s*`([^`]+)`'), 'PUT'),
-            (re.compile(r'\.delete\s*\(\s*`([^`]+)`'), 'DELETE'),
-            (re.compile(r'axios\s*\.\s*(?:get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', re.IGNORECASE), 'AUTO'),
-            (re.compile(r'fetch\s*\(\s*["\']([^"\']+)["\']'), 'GET'),
-            (re.compile(r'\$(?:\.ajax|\.get|\.post)\s*\(\s*\{[^}]*?url\s*:\s*["\']([^"\']+)["\']'), 'AUTO'),
-            (re.compile(r'method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
-            (re.compile(r'_method\s*=\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
-            (re.compile(r'\.request\s*\(\s*\{[^}]*?method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
+            (r'\.get\s*\(\s*["\']([^"\']+)["\']', 'GET'),
+            (r'\.post\s*\(\s*["\']([^"\']+)["\']', 'POST'),
+            (r'\.put\s*\(\s*["\']([^"\']+)["\']', 'PUT'),
+            (r'\.delete\s*\(\s*["\']([^"\']+)["\']', 'DELETE'),
+            (r'\.patch\s*\(\s*["\']([^"\']+)["\']', 'PATCH'),
+            (r'\.head\s*\(\s*["\']([^"\']+)["\']', 'HEAD'),
+            (r'\.options\s*\(\s*["\']([^"\']+)["\']', 'OPTIONS'),
+            (r'\.get\s*\(\s*`([^`]+)`', 'GET'),
+            (r'\.post\s*\(\s*`([^`]+)`', 'POST'),
+            (r'\.put\s*\(\s*`([^`]+)`', 'PUT'),
+            (r'\.delete\s*\(\s*`([^`]+)`', 'DELETE'),
+            (r'axios\s*\.\s*(?:get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', 'AUTO'),
+            (r'fetch\s*\(\s*["\']([^"\']+)["\']', 'GET'),
+            (r'\$(?:\.ajax|\.get|\.post)\s*\(\s*\{[^}]*?url\s*:\s*["\']([^"\']+)["\']', 'AUTO'),
+            (r'method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', 'AUTO'),
+            (r'_method\s*=\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', 'AUTO'),
+            (r'\.request\s*\(\s*\{[^}]*?method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', 'AUTO'),
         ]
         return [(re.compile(p, re.IGNORECASE), m) for p, m in patterns]
     
@@ -424,7 +424,7 @@ class ApiPathFinder:
         context_end = min(len(text), path_pos + len(path) + 200)
         context = text[context_start:context_end]
         
-        method_counts = {'GET': 0, 'POST': 0, 'PUT': 0, 'DELETE': 0, 'PATCH': 0}
+        method_counts = {'GET': 0, 'POST': 0, 'PUT': 0, 'DELETE': 0, 'PATCH': 0, 'HEAD': 0, 'OPTIONS': 0}
         
         for pattern, method in self._method_patterns:
             matches = pattern.findall(context)

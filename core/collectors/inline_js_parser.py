@@ -728,6 +728,45 @@ class InlineJSParser:
                 probe_paths.append(path)
         
         return probe_paths
+    
+    def _extract_params(self, script_content: str) -> Set[str]:
+        """
+        从脚本内容中提取参数名
+        
+        Args:
+            script_content: JavaScript 代码内容
+            
+        Returns:
+            发现的参数名集合
+        """
+        params = set()
+        
+        for pattern in self.PARAM_PATTERNS:
+            matches = pattern.findall(script_content)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for g in match:
+                        if g and len(g) > 1 and g not in self.INVALID_KEYWORDS:
+                            params.add(g)
+                elif match and len(match) > 1:
+                    if match not in self.INVALID_KEYWORDS:
+                        params.add(match)
+        
+        for param_name in self.COMMON_PARAM_NAMES:
+            if param_name in script_content:
+                params.add(param_name)
+        
+        path_params = re.findall(r'\{(\w+)\}', script_content)
+        for p in path_params:
+            if p and len(p) > 1:
+                params.add(p)
+        
+        query_params = re.findall(r'[?&](\w+)=', script_content)
+        for p in query_params:
+            if p and len(p) > 1:
+                params.add(p)
+        
+        return params
 
 
 class ResponseBasedAPIDiscovery:
@@ -1411,42 +1450,3 @@ class SmartPathCombiner:
                 combiner.add_api_path(path)
         
         return combiner
-    
-    def _extract_params(self, script_content: str) -> Set[str]:
-        """
-        从脚本内容中提取参数名
-        
-        Args:
-            script_content: JavaScript 代码内容
-            
-        Returns:
-            发现的参数名集合
-        """
-        params = set()
-        
-        for pattern in self.PARAM_PATTERNS:
-            matches = pattern.findall(script_content)
-            for match in matches:
-                if isinstance(match, tuple):
-                    for g in match:
-                        if g and len(g) > 1 and g not in self.INVALID_KEYWORDS:
-                            params.add(g)
-                elif match and len(match) > 1:
-                    if match not in self.INVALID_KEYWORDS:
-                        params.add(match)
-        
-        for param_name in self.COMMON_PARAM_NAMES:
-            if param_name in script_content:
-                params.add(param_name)
-        
-        path_params = re.findall(r'\{(\w+)\}', script_content)
-        for p in path_params:
-            if p and len(p) > 1:
-                params.add(p)
-        
-        query_params = re.findall(r'[?&](\w+)=', script_content)
-        for p in query_params:
-            if p and len(p) > 1:
-                params.add(p)
-        
-        return params

@@ -144,7 +144,9 @@ class APIVerifier:
         
         for method in methods:
             try:
-                full_url = urljoin(self.base_url + '/', api_path.lstrip('/'))
+                base = self.base_url.rstrip('/')
+                path = api_path.lstrip('/')
+                full_url = f"{base}/{path}"
                 
                 response = await self.http_client.request(
                     full_url,

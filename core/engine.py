@@ -2177,6 +2177,34 @@ class ScanEngine:
                         )
         
         all_api_paths = list(existing_paths)
+        logger.info(f"Starting bypass fuzzing with {len(all_api_paths)} discovered paths")
+        
+        bypasser = APIBypasser()
+        fuzz_added_count = 0
+        for discovered_path in all_api_paths:
+            full_url = f"{self.config.target.rstrip('/')}/{discovered_path.lstrip('/')}"
+            fuzz_results = bypasser.fuzz_parent_child_paths(full_url, "GET")
+            for fuzz_result in fuzz_results[:50]:
+                fuzzed_path = fuzz_result.bypassed_url.replace(self.config.target.rstrip('/'), '')
+                if fuzzed_path not in existing_paths:
+                    existing_paths.add(fuzzed_path)
+                    from .collectors.api_collector import APIFindResult
+                    api_find_result = APIFindResult(
+                        path=fuzzed_path,
+                        method="GET",
+                        source_type="bypass_fuzz",
+                        base_url="",
+                        url_type="fuzzed"
+                    )
+                    self._api_aggregator.add_api(
+                        api_find_result,
+                        source_info={'source': f'bypass_fuzz:{discovered_path}'}
+                    )
+                    fuzz_added_count += 1
+        
+        logger.info(f"Bypass fuzzing added {fuzz_added_count} new paths")
+        
+        all_api_paths = list(existing_paths)
         probed_parent_paths = await self._probe_parent_paths(js_results, additional_paths=all_api_paths)
         
         for parent_path, sub_endpoints in probed_parent_paths.items():
