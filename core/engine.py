@@ -853,7 +853,8 @@ class ScanEngine:
             auth_result = await auto_authenticate(
                 self._http_client,
                 self.config.target,
-                js_contents
+                js_contents,
+                all_api_paths
             )
             
             if auth_result and auth_result.headers:

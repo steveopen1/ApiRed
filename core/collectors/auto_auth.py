@@ -381,7 +381,8 @@ class AutoAuthenticator:
         self,
         base_url: str,
         credentials: List[AuthCredential],
-        login_endpoints: List[LoginEndpoint]
+        login_endpoints: List[LoginEndpoint],
+        discovered_paths: List[str] = None
     ) -> Optional[AuthCredential]:
         """
         尝试多种认证方式
@@ -390,6 +391,7 @@ class AutoAuthenticator:
             base_url: 目标 base URL
             credentials: 从 JS 提取的凭据
             login_endpoints: 发现的登录接口
+            discovered_paths: 已发现的 API 路径列表（用于父路径探测）
             
         Returns:
             成功的认证凭据，失败返回 None
@@ -407,7 +409,7 @@ class AutoAuthenticator:
             if result:
                 return result
         
-        result = await self._try_common_login_endpoints(base)
+        result = await self._try_common_login_endpoints(base, discovered_paths)
         if result:
             return result
         
@@ -476,8 +478,12 @@ class AutoAuthenticator:
         
         return None
     
-    async def _try_common_login_endpoints(self, base_url: str) -> Optional[AuthCredential]:
-        """尝试常见登录接口"""
+    async def _try_common_login_endpoints(
+        self,
+        base_url: str,
+        discovered_paths: List[str] = None
+    ) -> Optional[AuthCredential]:
+        """尝试常见登录接口，并基于父路径探测"""
         common_endpoints = [
             ('/api/v1/auth/login', ['username', 'password']),
             ('/api/v1/login', ['username', 'password']),
@@ -488,19 +494,53 @@ class AutoAuthenticator:
             ('/api/sms/login', ['mobile', 'smsCode']),
         ]
         
+        tried_paths = set()
+        
+        if discovered_paths:
+            for path in discovered_paths:
+                parent_paths = self._get_parent_paths(path)
+                for parent in parent_paths:
+                    for suffix in ['/auth/login', '/login', '/signin', '/oauth/login', '/passport/login']:
+                        combined = parent + suffix
+                        if combined not in tried_paths:
+                            tried_paths.add(combined)
+                            endpoint = LoginEndpoint(
+                                path=combined,
+                                method='POST',
+                                param_names=['username', 'password'],
+                                body_template={'username': 'test', 'password': 'test'},
+                                source="parent_path_discovery"
+                            )
+                            result = await self._try_login_endpoint(base_url, endpoint)
+                            if result:
+                                return result
+        
         for path, param_names in common_endpoints:
-            endpoint = LoginEndpoint(
-                path=path,
-                method='POST',
-                param_names=param_names,
-                body_template={n: 'test' for n in param_names},
-                source="common_discovery"
-            )
-            result = await self._try_login_endpoint(base_url, endpoint)
-            if result:
-                return result
+            if path not in tried_paths:
+                tried_paths.add(path)
+                endpoint = LoginEndpoint(
+                    path=path,
+                    method='POST',
+                    param_names=param_names,
+                    body_template={n: 'test' for n in param_names},
+                    source="common_discovery"
+                )
+                result = await self._try_login_endpoint(base_url, endpoint)
+                if result:
+                    return result
         
         return None
+    
+    def _get_parent_paths(self, path: str) -> List[str]:
+        """获取路径的所有父路径"""
+        parents = []
+        segments = path.strip('/').split('/')
+        
+        for i in range(1, len(segments)):
+            parent = '/' + '/'.join(segments[:i])
+            parents.append(parent)
+        
+        return parents
     
     def _generate_test_bodies(self, endpoint: LoginEndpoint) -> List[Dict[str, Any]]:
         """生成测试请求体"""
@@ -593,7 +633,8 @@ class AutoAuthenticator:
 async def auto_authenticate(
     http_client,
     base_url: str,
-    js_contents: List[str] = None
+    js_contents: List[str] = None,
+    discovered_paths: List[str] = None
 ) -> Optional[AuthCredential]:
     """
     自动化认证入口函数
@@ -602,6 +643,7 @@ async def auto_authenticate(
         http_client: HTTP 客户端
         base_url: 目标 URL
         js_contents: 可选的 JS 内容列表
+        discovered_paths: 已发现的 API 路径列表
         
     Returns:
         认证成功的凭据，失败返回 None
@@ -625,7 +667,8 @@ async def auto_authenticate(
     result = await authenticator.try_authenticate(
         base_url,
         credentials,
-        login_endpoints
+        login_endpoints,
+        discovered_paths
     )
     
     if result:
