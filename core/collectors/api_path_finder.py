@@ -378,6 +378,109 @@ class ApiPathFinder:
         self.discovered_apis: List[DiscoveredAPI] = []
         self.all_api_paths: Set[str] = set()
         self._compiled_patterns = [re.compile(p) for p in self.API_PATTERNS]
+        self._method_patterns = self._compile_method_patterns()
+    
+    def _compile_method_patterns(self) -> List[Tuple[re.Pattern, str]]:
+        """编译HTTP方法识别模式"""
+        patterns = [
+            (re.compile(r'\.get\s*\(\s*["\']([^"\']+)["\']'), 'GET'),
+            (re.compile(r'\.post\s*\(\s*["\']([^"\']+)["\']'), 'POST'),
+            (re.compile(r'\.put\s*\(\s*["\']([^"\']+)["\']'), 'PUT'),
+            (re.compile(r'\.delete\s*\(\s*["\']([^"\']+)["\']'), 'DELETE'),
+            (re.compile(r'\.patch\s*\(\s*["\']([^"\']+)["\']'), 'PATCH'),
+            (re.compile(r'\.head\s*\(\s*["\']([^"\']+)["\']'), 'HEAD'),
+            (re.compile(r'\.options\s*\(\s*["\']([^"\']+)["\']'), 'OPTIONS'),
+            (re.compile(r'\.get\s*\(\s*`([^`]+)`'), 'GET'),
+            (re.compile(r'\.post\s*\(\s*`([^`]+)`'), 'POST'),
+            (re.compile(r'\.put\s*\(\s*`([^`]+)`'), 'PUT'),
+            (re.compile(r'\.delete\s*\(\s*`([^`]+)`'), 'DELETE'),
+            (re.compile(r'axios\s*\.\s*(?:get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', re.IGNORECASE), 'AUTO'),
+            (re.compile(r'fetch\s*\(\s*["\']([^"\']+)["\']'), 'GET'),
+            (re.compile(r'\$(?:\.ajax|\.get|\.post)\s*\(\s*\{[^}]*?url\s*:\s*["\']([^"\']+)["\']'), 'AUTO'),
+            (re.compile(r'method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
+            (re.compile(r'_method\s*=\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
+            (re.compile(r'\.request\s*\(\s*\{[^}]*?method\s*:\s*["\']?(POST|PUT|DELETE|PATCH)["\']?', re.IGNORECASE), 'AUTO'),
+        ]
+        return [(re.compile(p, re.IGNORECASE), m) for p, m in patterns]
+    
+    def infer_method_from_context(self, text: str, path: str) -> str:
+        """
+        从上下文推断HTTP方法
+        
+        Args:
+            text: 包含路径的文本内容
+            path: API路径
+            
+        Returns:
+            HTTP方法 (GET, POST, PUT, DELETE, PATCH, AUTO)
+        """
+        path_lower = path.lower()
+        path_pos = text.lower().find(path_lower)
+        
+        if path_pos == -1:
+            return 'GET'
+        
+        context_start = max(0, path_pos - 200)
+        context_end = min(len(text), path_pos + len(path) + 200)
+        context = text[context_start:context_end]
+        
+        method_counts = {'GET': 0, 'POST': 0, 'PUT': 0, 'DELETE': 0, 'PATCH': 0}
+        
+        for pattern, method in self._method_patterns:
+            matches = pattern.findall(context)
+            if method == 'AUTO':
+                for match in matches:
+                    match_upper = match.upper() if isinstance(match, str) else ''
+                    if match_upper in method_counts:
+                        method_counts[match_upper] += 1
+                    else:
+                        method_counts['GET'] += 1
+            else:
+                method_counts[method] += len(matches)
+        
+        max_method = max(method_counts.items(), key=lambda x: x[1])
+        return max_method[0] if max_method[1] > 0 else 'GET'
+    
+    def find_api_paths_with_method(self, text: str, referer: str = "") -> List[DiscoveredAPI]:
+        """
+        在文本中查找API路径并识别HTTP方法
+        
+        Args:
+            text: JavaScript/HTML文本内容
+            referer: 来源URL
+            
+        Returns:
+            发现的API路径列表（带HTTP方法）
+        """
+        found_apis = []
+        found_paths_set = set()
+        
+        for pattern in self._compiled_patterns:
+            try:
+                matches = pattern.findall(text)
+                if not matches:
+                    continue
+                
+                for match in matches:
+                    cleaned = self._clean_match(match)
+                    if not cleaned:
+                        continue
+                    
+                    paths = self.url_filter([cleaned])
+                    for path in paths:
+                        if path not in found_paths_set and len(path) > 1:
+                            found_paths_set.add(path)
+                            
+                            method = self.infer_method_from_context(text, path)
+                            api = self._create_api_object(path, referer, method)
+                            if api:
+                                found_apis.append(api)
+                                self.all_api_paths.add(path)
+            except Exception as e:
+                logger.debug(f"Pattern matching error: {e}")
+                continue
+        
+        return found_apis
     
     def url_filter(self, lst: List[str]) -> List[str]:
         """
@@ -537,7 +640,7 @@ class ApiPathFinder:
         
         return path
     
-    def _create_api_object(self, path: str, referer: str) -> Optional[DiscoveredAPI]:
+    def _create_api_object(self, path: str, referer: str, method: str = "GET") -> Optional[DiscoveredAPI]:
         """创建API对象"""
         if not path or len(path) < 2:
             return None
@@ -555,11 +658,14 @@ class ApiPathFinder:
         
         is_static = any(path_lower.endswith("." + ext) for ext in STATIC_FILE_EXT_BLACK_LIST)
         
+        if method == "AUTO":
+            method = "GET"
+        
         return DiscoveredAPI(
             path=path,
             referer=referer,
             url_type="api_path",
-            method="GET",
+            method=method,
             is_static=is_static
         )
     

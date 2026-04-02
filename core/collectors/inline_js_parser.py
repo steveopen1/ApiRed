@@ -244,6 +244,32 @@ class InlineJSParser:
         self.extracted_templates: Set[str] = set()
         self.extracted_configs: Dict[str, str] = {}
         self.extracted_sensitive_resources: Set[str] = set()
+        self.extracted_params: Set[str] = set()
+    
+    PARAM_PATTERNS = [
+        re.compile(r'''['"](\w+)\s*[:=]\s*['"][^'"]*['"]'''),
+        re.compile(r'''\b(id|userId|user_id|orderId|productId|categoryId|page|pageSize|limit|offset|keyword|search|filter|sort|status|type|name|phone|email|token|token|auth)[:=]\s*['"]?[\w-]*['"]?'''),
+        re.compile(r'''\{[^}]*?(\w+)\s*:\s*(?:'[^']*'|"[^"]*"|\d+)'''),
+        re.compile(r'''params\s*:\s*\{([^}]+)\}'''),
+        re.compile(r'''data\s*:\s*\{([^}]+)\}'''),
+        re.compile(r'''\((\w+)\s*,\s*\w+\)\s*=>'''),
+    ]
+    
+    COMMON_PARAM_NAMES = [
+        'id', 'userId', 'user_id', 'orderId', 'order_id', 'productId', 'product_id',
+        'categoryId', 'category_id', 'page', 'pageSize', 'page_size', 'limit', 'offset',
+        'keyword', 'search', 'filter', 'sort', 'order', 'status', 'type', 'name',
+        'phone', 'mobile', 'email', 'password', 'username', 'token', 'auth', 'session',
+        'startDate', 'endDate', 'start_date', 'end_date', 'startTime', 'endTime',
+        'uuid', 'guid', 'code', 'no', 'number', 'ids', 'ids', 'data', 'body',
+        'callback', 'jsonp', 'format', 'output', 'api_key', 'key', 'secret',
+    ]
+    
+    RESTFUL_PARAM_PATTERNS = [
+        re.compile(r'''\{(\w+)\}'''),
+        re.compile(r''':(\w+)'''),
+        re.compile(r'''/(\w+)/(\d+)'''),
+    ]
     
     def parse_html(self, html_content: str) -> Dict[str, Set[str]]:
         """
@@ -260,7 +286,8 @@ class InlineJSParser:
             'routes': set(),
             'url_templates': set(),
             'configs': {},
-            'sensitive_resources': set()
+            'sensitive_resources': set(),
+            'params': set()
         }
         
         script_blocks = self._extract_script_blocks(html_content)
@@ -281,12 +308,16 @@ class InlineJSParser:
             
             configs = self._extract_configs(script_content)
             results['configs'].update(configs)
+            
+            params = self._extract_params(script_content)
+            results['params'].update(params)
         
         self.extracted_paths.update(results['api_paths'])
         self.extracted_routes.update(results['routes'])
         self.extracted_templates.update(results['url_templates'])
         self.extracted_configs.update(results['configs'])
         self.extracted_sensitive_resources.update(results['sensitive_resources'])
+        self.extracted_params.update(results['params'])
         
         return results
     
@@ -1380,3 +1411,42 @@ class SmartPathCombiner:
                 combiner.add_api_path(path)
         
         return combiner
+    
+    def _extract_params(self, script_content: str) -> Set[str]:
+        """
+        从脚本内容中提取参数名
+        
+        Args:
+            script_content: JavaScript 代码内容
+            
+        Returns:
+            发现的参数名集合
+        """
+        params = set()
+        
+        for pattern in self.PARAM_PATTERNS:
+            matches = pattern.findall(script_content)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for g in match:
+                        if g and len(g) > 1 and g not in self.INVALID_KEYWORDS:
+                            params.add(g)
+                elif match and len(match) > 1:
+                    if match not in self.INVALID_KEYWORDS:
+                        params.add(match)
+        
+        for param_name in self.COMMON_PARAM_NAMES:
+            if param_name in script_content:
+                params.add(param_name)
+        
+        path_params = re.findall(r'\{(\w+)\}', script_content)
+        for p in path_params:
+            if p and len(p) > 1:
+                params.add(p)
+        
+        query_params = re.findall(r'[?&](\w+)=', script_content)
+        for p in query_params:
+            if p and len(p) > 1:
+                params.add(p)
+        
+        return params

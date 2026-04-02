@@ -102,6 +102,28 @@ class APIBypasser:
         'format=json', 'output=json', 'callback=',
         'api_key=test', 'token=test', 'key=test',
         'debug=true', 'test=1', '_=',
+        'id=1', 'userId=1', 'uid=1', 'uuid=1',
+        'name=', 'username=', 'phone=', 'mobile=',
+        'status=1', 'type=1', 'category=',
+        'startDate=', 'endDate=', 'startTime=', 'endTime=',
+        'keyword=', 'query=', 'search=',
+    ]
+    
+    RESTFUL_SUFFIXES = [
+        'list', 'page', 'all', 'tree', 'export', 'import',
+        'detail', 'info', 'view', 'show', 'get', 'fetch',
+        'add', 'create', 'new', 'insert', 'save',
+        'edit', 'update', 'modify', 'put', 'patch',
+        'delete', 'remove', 'del', 'cancel',
+        'login', 'logout', 'register', 'reset', 'forgetPassword',
+        'enable', 'disable', 'status', 'switch', 'toggle',
+        'bind', 'unbind', 'link', 'unlink',
+        'upload', 'download', 'preview', 'thumbnail',
+        'count', 'total', 'sum', 'statistics', 'stat',
+        'approve', 'reject', 'submit', 'confirm', 'complete',
+        'refresh', 'sync', 'init', 'config', 'setting',
+        'menu', 'nav', 'options', 'select', 'combo',
+        'template', 'sample', 'demo', 'test',
     ]
 
     PATH_TRAVERSAL_PATTERNS = [
@@ -415,7 +437,102 @@ class APIBypasser:
                 ))
         
         return results
-
+    
+    def fuzz_parent_child_paths(self, url: str, method: str = "GET") -> List[BypassResult]:
+        """
+        父子路径 Fuzzing - 发现同级的隐藏端点
+        
+        Args:
+            url: 目标 URL (例如 /api/v1/clean/workOrder/list)
+            method: HTTP 方法
+            
+        Returns:
+            Fuzzing 结果列表
+        """
+        results = []
+        parsed = urlparse(url)
+        path = parsed.path.rstrip('/')
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        
+        segments = [s for s in path.split('/') if s]
+        if len(segments) < 2:
+            return results
+        
+        parent_paths = []
+        for i in range(1, len(segments)):
+            parent = '/' + '/'.join(segments[:i])
+            parent_paths.append(parent)
+        
+        resource = segments[-1] if segments else ""
+        
+        for parent in parent_paths:
+            for suffix in self.RESTFUL_SUFFIXES[:20]:
+                new_path = f"{parent}/{suffix}"
+                if new_path != path:
+                    bypassed_url = base + new_path
+                    results.append(BypassResult(
+                        original_url=url,
+                        bypassed_url=bypassed_url,
+                        technique=BypassTechnique.PATH_PREFIX,
+                        method=method,
+                        description=f"Parent path fuzzing: {parent} + /{suffix}"
+                    ))
+        
+        if len(segments) >= 2:
+            parent_without_last = '/' + '/'.join(segments[:-1])
+            for suffix in self.RESTFUL_SUFFIXES[:15]:
+                new_path = f"{parent_without_last}/{suffix}"
+                if new_path != path:
+                    bypassed_url = base + new_path
+                    results.append(BypassResult(
+                        original_url=url,
+                        bypassed_url=bypassed_url,
+                        technique=BypassTechnique.PATH_PREFIX,
+                        method=method,
+                        description=f"Sibling fuzzing: {parent_without_last} + /{suffix}"
+                    ))
+        
+        return results
+    
+    def fuzz_path_parameters(self, url: str, method: str = "GET") -> List[BypassResult]:
+        """
+        路径参数 Fuzzing - 将查询参数转为路径参数
+        
+        Args:
+            url: 目标 URL
+            method: HTTP 方法
+            
+        Returns:
+            Fuzzing 结果列表
+        """
+        results = []
+        parsed = urlparse(url)
+        path = parsed.path.rstrip('/')
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        
+        if not parsed.query:
+            return results
+        
+        params = dict(p.split('=') if '=' in p else (p, '') for p in parsed.query.split('&'))
+        
+        for param_name, param_value in params.items():
+            if param_value:
+                path_with_param = f"{path}/{param_value}"
+                query_without_param = '&'.join(f"{k}={v}" if v else k for k, v in params.items() if k != param_name)
+                bypassed_url = base + path_with_param
+                if query_without_param:
+                    bypassed_url += '?' + query_without_param
+                
+                results.append(BypassResult(
+                    original_url=url,
+                    bypassed_url=bypassed_url,
+                    technique=BypassTechnique.PATH_TRAVERSAL,
+                    method=method,
+                    description=f"Path param fuzzing: {param_name}={param_value} -> /{param_value}"
+                ))
+        
+        return results
+    
     def generate_bypass_matrix(self, urls: List[str], methods: Optional[List[str]] = None) -> List[BypassResult]:
         """
         生成 Bypass 矩阵

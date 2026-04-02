@@ -99,6 +99,29 @@ class JavaScriptASTAnalyzer:
         'createRouter', 'createWebHistory',
     }
     
+    VUE_ROUTER_PATTERNS = [
+        r'''path\s*:\s*['"`]([^'"`]+)['"']''',
+        r'''name\s*:\s*['"`]([^'"`]+)['"']''',
+        r'''component\s*:\s*['"`]([^'"`]+)['"']''',
+        r'''routes\s*:\s*\[[^\]]+\]''',
+        r'''\{[^}]*?path\s*:\s*['"`]([^'"`]+)['"'][^}]*?\}''',
+    ]
+    
+    HISTORY_MODE_PATTERNS = [
+        r'''createWebHistory\s*\(\s*['"`]([^'"`]+)['"']''',
+        r'''createWebHashHistory\s*\(\s*['"`]([^'"`]+)['"']''',
+        r'''history\s*:\s*\(?(?:\s*createWebHistory|createWebHashHistory)''',
+        r'''mode\s*:\s*['"`]history['"']''',
+        r'''historyType\s*:\s*['"`]history['"']''',
+    ]
+    
+    SSE_PATTERNS = [
+        r'''new\s+EventSource\s*\(\s*['"`]([^'"`]+)['"`]''',
+        r'''EventSource\s*\(\s*['"`]([^'"`]+)['"`]''',
+        r'''source\s*=\s*new\s+EventSource\s*\(\s*['"`]([^'"`]+)['"`]''',
+        r'''(?:stream|eventsource|event_source)\s*\(?\s*['"`]([^'"`]+)['"`]''',
+    ]
+    
     CONFIG_PROPERTY_NAMES = {
         'baseURL', 'baseUrl', 'BASE_URL', 'API_URL', 'apiUrl', 'api_url',
         'apiBase', 'apiBase', 'API_BASE',
@@ -236,6 +259,38 @@ class JavaScriptASTAnalyzer:
                     path = match.group(1)
                     if path and not path.startswith('javascript:'):
                         self.routes.append(path)
+        
+        self._extract_vue_router_config(content)
+        self._extract_history_mode_base(content)
+        self._extract_sse_endpoints(content)
+    
+    def _extract_vue_router_config(self, content: str):
+        """提取 Vue Router 配置中的路由"""
+        for pattern in self.VUE_ROUTER_PATTERNS:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                if match.lastindex:
+                    path = match.group(1)
+                    if path and not path.startswith('javascript:') and len(path) > 1:
+                        if path.startswith('/') or path.startswith('./'):
+                            self.routes.append(path)
+    
+    def _extract_history_mode_base(self, content: str):
+        """提取 History Mode 路由基础路径"""
+        for pattern in self.HISTORY_MODE_PATTERNS:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                if match.lastindex:
+                    base_path = match.group(1)
+                    if base_path:
+                        self.configs['historyModeBase'] = base_path
+    
+    def _extract_sse_endpoints(self, content: str):
+        """提取 Server-Sent Events 端点"""
+        for pattern in self.SSE_PATTERNS:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                if match.lastindex:
+                    endpoint = match.group(1)
+                    if endpoint and len(endpoint) > 3:
+                        self.websocket_endpoints.append(f"SSE:{endpoint}")
     
     def _extract_config_objects(self, content: str):
         """提取配置对象"""

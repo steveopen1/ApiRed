@@ -117,7 +117,76 @@ class SwaggerDiscoverer:
         '/component/clue/clueStatic/swagger',
         '/eiap-openapi/swagger',
         '/eiap-openapi/fmn.json',
+        '/doc.html',
+        '/swagger-ui/index.html',
+        '/swagger-ui-bundle.js',
+        '/swagger-ui-standalone-preset.js',
+        '/v3/api-docs.yaml',
+        '/v3/api-docs.yml',
+        '/v2/api-docs.json',
+        '/v2/api-docs.yaml',
+        '/api/swagger.yaml',
+        '/api/swagger.yml',
+        '/api-docs.json',
+        '/api-docs.yaml',
+        '/api-docs.yml',
+        '/openapi.json',
+        '/openapi.yaml',
+        '/openapi.yml',
+        '/swagger.json',
+        '/swagger.yaml',
+        '/swagger.yml',
+        '/api/documentation',
+        '/api-docs/swagger',
+        '/swagger-resources',
+        '/swagger-resources/',
+        '/swagger-ui/static/index.html',
+        '/swagger-ui/static/swagger-ui-bundle.js',
+        '/v1/api-docs',
+        '/v1/api-docs/',
+        '/gateway/api-docs',
+        '/gateway/v2/api-docs',
+        '/gateway/v3/api-docs',
+        '/service/api-docs',
+        '/admin/api-docs',
+        '/manage/api-docs',
+        '/system/api-docs',
     ]
+
+    SWAGGER_JS_PATTERNS = [
+        r'["\']([^"\']*api-docs[^"\']*)["\']',
+        r'["\']([^"\']*swagger[^"\']*\.json[^"\']*)["\']',
+        r'["\']([^"\']*openapi[^"\']*\.json[^"\']*)["\']',
+        r'swaggerUrl["\']?\s*:\s*["\']([^"\']+)["\']',
+        r'url=["\']([^"\']*\.json[^"\']*)["\']',
+    ]
+
+    FRAMEWORK_SPECIFIC_PATHS = {
+        'springdoc': [
+            '/v3/api-docs.yaml',
+            '/v3/api-docs.yml',
+            '/v3/api-docs?group=',
+            '/swagger-ui/index.html',
+            '/doc.html',
+            '/v3/api-docs-info',
+        ],
+        'swagger': [
+            '/swagger-ui.html',
+            '/swagger-ui/index.html',
+            '/swagger-resources/configuration/ui',
+            '/swagger-resources/configuration/security',
+        ],
+        'knife4j': [
+            '/doc.html',
+            '/v2/api-docs',
+            '/swagger-resources',
+            '/webjars/swagger-ui/',
+        ],
+        'torna': [
+            '/api-index.html',
+            '/env?key=swagger',
+        ],
+    }
 
     def __init__(self, http_client=None):
         self.http_client = http_client
@@ -222,6 +291,63 @@ class SwaggerDiscoverer:
                     swagger_urls.add(full_url)
                 break
         
+        return list(swagger_urls)
+
+    async def discover_from_js(self, js_content: str, base_url: str) -> List[str]:
+        """
+        从 JavaScript 内容中发现 Swagger 文档链接
+
+        Args:
+            js_content: JavaScript 内容
+            base_url: 基础 URL
+
+        Returns:
+            发现的 Swagger 文档 URL 列表
+        """
+        swagger_urls = set()
+
+        for pattern in self.SWAGGER_JS_PATTERNS:
+            for match in re.finditer(pattern, js_content, re.IGNORECASE):
+                url = match.group(1) if match.lastindex else match.group(0)
+                if url and not url.startswith('javascript'):
+                    full_url = urljoin(base_url, url)
+                    if full_url.endswith('.json') or full_url.endswith('.yaml') or full_url.endswith('.yml'):
+                        swagger_urls.add(full_url)
+
+        return list(swagger_urls)
+
+    async def discover_framework_specific(self, base_url: str, framework: str = None) -> List[str]:
+        """
+        发现特定框架的 API 文档路径
+
+        Args:
+            base_url: 基础 URL
+            framework: 框架名称 (springdoc, swagger, knife4j, torna)
+
+        Returns:
+            发现的 API 文档 URL 列表
+        """
+        swagger_urls = set()
+        parsed = urlparse(base_url)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+
+        paths_to_check = []
+        if framework and framework in self.FRAMEWORK_SPECIFIC_PATHS:
+            paths_to_check = self.FRAMEWORK_SPECIFIC_PATHS[framework]
+        else:
+            for paths in self.FRAMEWORK_SPECIFIC_PATHS.values():
+                paths_to_check.extend(paths)
+
+        for path in paths_to_check:
+            url = base + path
+            try:
+                if self.http_client:
+                    resp = await self.http_client.request(url, timeout=5)
+                    if resp and resp.status_code == 200:
+                        swagger_urls.add(url)
+            except Exception:
+                pass
+
         return list(swagger_urls)
 
     async def discover_common_paths(self, base_url: str) -> List[str]:
