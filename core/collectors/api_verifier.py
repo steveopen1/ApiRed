@@ -188,6 +188,7 @@ class APIVerifier:
                             verified.response_preview = response.content_bytes[:200].decode('utf-8', errors='ignore')
                         except:
                             verified.response_preview = str(response.content_bytes[:200])
+                        verified.extracted_urls = self._extract_urls_from_json(response.content_bytes)
                         break
                     else:
                         verified.response_preview = response.content_bytes[:200].decode('utf-8', errors='ignore').strip()
@@ -234,6 +235,38 @@ class APIVerifier:
             text = content.decode('utf-8', errors='ignore')
         except:
             return extracted
+    
+    def _extract_urls_from_json(self, content: bytes) -> List[str]:
+        """从 JSON 响应中提取 API 链接"""
+        extracted = []
+        try:
+            text = content.decode('utf-8', errors='ignore')
+            data = json.loads(text)
+            extracted.extend(self._extract_urls_from_dict(data))
+        except:
+            pass
+        return extracted
+    
+    def _extract_urls_from_dict(self, obj: Any, prefix: str = "") -> List[str]:
+        """递归从字典/列表中提取 URL 路径"""
+        extracted = []
+        
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key in ('url', 'path', 'api', 'endpoint', 'href', 'link', 'uri') and isinstance(value, str):
+                    if value.startswith('/') and not value.startswith('//'):
+                        extracted.append(value)
+                extracted.extend(self._extract_urls_from_dict(value, prefix))
+        
+        elif isinstance(obj, list):
+            for item in obj:
+                extracted.extend(self._extract_urls_from_dict(item, prefix))
+        
+        elif isinstance(obj, str):
+            if obj.startswith('/api/') or obj.startswith('/user') or obj.startswith('/admin'):
+                extracted.append(obj)
+        
+        return extracted
         
         url_patterns = [
             r'''["\'](/api/[^"\']+)["\']''',

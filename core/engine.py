@@ -3528,6 +3528,17 @@ class ScanEngine:
             
             self.result.statistics['api_verification'] = verification_result.to_dict()
             
+            extracted_from_verification = []
+            for verified_api in verification_result.valid_json_apis + verification_result.sensitive_apis:
+                if hasattr(verified_api, 'extracted_urls') and verified_api.extracted_urls:
+                    extracted_from_verification.extend(verified_api.extracted_urls)
+            
+            if extracted_from_verification:
+                logger.info(f"[Discovery] 从验证阶段提取到 {len(extracted_from_verification)} 个新路径")
+                for new_path in set(extracted_from_verification):
+                    if new_path not in existing_paths if 'existing_paths' in dir() else True:
+                        logger.info(f"  -> 发现新路径: {new_path}")
+            
             output_mgr = self._output_manager if hasattr(self, '_output_manager') else None
             results_base = output_mgr.results_dir if output_mgr else self.config.output_dir
             
