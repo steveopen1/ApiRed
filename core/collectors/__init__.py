@@ -43,6 +43,37 @@ from .passive_sources import PassiveSourceCollector, PassiveSource, collect_pass
 from .smart_filter import SmartFilter, ScoredEndpoint, SmartFilter, ResponseClusterAnalyzer, prioritize_endpoints, EndpointValue
 from .burp_importer import BurpSuiteImporter, ProxyRequest, ProxyResponse, ProxyTransaction, import_burp_file, convert_burp_to_openapi
 from .postman_importer import PostmanCollectionImporter, PostmanEndpoint, import_postman_file, convert_to_openapi
+from .runtime_js_collector import (
+    JSRuntimeInterceptor,
+    PageInteractionTrigger,
+    MutationObserverWatcher,
+    EnhancedRuntimeCollector,
+    InterceptedAPI,
+)
+from .graphql_enhancer import (
+    EnhancedGraphQLDiscovery,
+    GraphQLSchema,
+    GraphQLOperationExtractor,
+    DiscoveredOperation,
+    enhanced_graphql_discovery,
+)
+from .smart_bypass_engine import (
+    SmartBypassEngine,
+    WAFSignature,
+    ResponseAnalyzer,
+    BypassStrategy,
+    BypassAttempt,
+    StrategyResult,
+    create_smart_bypass_engine,
+)
+from .api_confidence_scorer import (
+    APIScoringEngine,
+    SourceType,
+    ScoredEndpoint,
+    ConfidenceFactors,
+    APISourceWeighter,
+    create_scoring_engine,
+)
 
 __all__ = [
     # JS & API Collection
@@ -117,4 +148,31 @@ __all__ = [
     'PostmanEndpoint',
     'import_postman_file',
     'convert_to_openapi',
+    # Runtime JS Collector
+    'JSRuntimeInterceptor',
+    'PageInteractionTrigger',
+    'MutationObserverWatcher',
+    'EnhancedRuntimeCollector',
+    'InterceptedAPI',
+    # GraphQL Enhancer
+    'EnhancedGraphQLDiscovery',
+    'GraphQLSchema',
+    'GraphQLOperationExtractor',
+    'DiscoveredOperation',
+    'enhanced_graphql_discovery',
+    # Smart Bypass Engine
+    'SmartBypassEngine',
+    'WAFSignature',
+    'ResponseAnalyzer',
+    'BypassStrategy',
+    'BypassAttempt',
+    'StrategyResult',
+    'create_smart_bypass_engine',
+    # API Confidence Scorer
+    'APIScoringEngine',
+    'SourceType',
+    'ScoredEndpoint',
+    'ConfidenceFactors',
+    'APISourceWeighter',
+    'create_scoring_engine',
 ]

@@ -13,6 +13,20 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+try:
+    from ..collectors.smart_bypass_engine import (
+        SmartBypassEngine as EnhancedBypassEngine,
+        WAFSignature,
+        ResponseAnalyzer,
+        BypassStrategy,
+        create_smart_bypass_engine,
+    )
+    ENHANCED_BYPASS_AVAILABLE = True
+except ImportError:
+    ENHANCED_BYPASS_AVAILABLE = False
+    EnhancedBypassEngine = None
+    BypassStrategy = None
+
 
 class BypassCategory(Enum):
     """绕过技术分类"""
@@ -404,6 +418,11 @@ class SmartBypassTester(APIBypassTester):
     
     在返回 401/403/404/500 等状态码时，
     智能选择合适的绕过技术进行测试
+    
+    增强版：集成 SmartBypassEngine，支持：
+    1. WAF指纹识别与针对性绕过
+    2. 响应内容分析，动态选择策略
+    3. 历史成功记录，自适应学习
     """
     
     BYPASS_PRIORITY = {
@@ -414,12 +433,20 @@ class SmartBypassTester(APIBypassTester):
         500: ["content_type", "parameter_manipulation"],
     }
     
+    def __init__(self, http_client=None):
+        super().__init__(http_client)
+        if ENHANCED_BYPASS_AVAILABLE:
+            self._enhanced_engine = create_smart_bypass_engine()
+        else:
+            self._enhanced_engine = None
+    
     async def smart_bypass(
         self,
         url: str,
         method: str = "GET",
         status_code: int = None,
         headers: Dict[str, str] = None,
+        response_content: str = None,
         **kwargs
     ) -> Optional[BypassResult]:
         """
@@ -430,11 +457,95 @@ class SmartBypassTester(APIBypassTester):
             method: HTTP 方法
             status_code: 当前状态码
             headers: 请求头
+            response_content: 响应内容（用于WAF检测和响应分析）
             **kwargs: 其他参数
         
         Returns:
             第一个成功的 BypassResult，或 None
         """
+        if self._enhanced_engine and response_content:
+            return await self._enhanced_smart_bypass(
+                url, method, status_code, headers or {}, response_content, **kwargs
+            )
+        
+        return await self._legacy_smart_bypass(url, method, status_code, headers, **kwargs)
+    
+    async def _enhanced_smart_bypass(
+        self,
+        url: str,
+        method: str,
+        status_code: Optional[int],
+        headers: Dict[str, str],
+        response_content: str,
+        **kwargs
+    ) -> Optional[BypassResult]:
+        """
+        使用增强版引擎进行智能绕过
+        
+        1. 分析响应内容，检测WAF类型
+        2. 根据WAF类型和状态码选择最优策略
+        3. 生成绕过请求并执行
+        """
+        is_blocked, reason, strategies = self._enhanced_engine.analyze_response(
+            url, method, status_code or 0, response_content, headers
+        )
+        
+        if not is_blocked:
+            return None
+        
+        waf_type = WAFSignature.detect_waf(response_content, headers)
+        if waf_type:
+            logger.info(f"WAF detected: {waf_type}, using targeted bypass strategies")
+        
+        bypass_requests = self._enhanced_engine.generate_bypass_requests(
+            url, method, strategies, headers, kwargs.get('params')
+        )
+        
+        for req_config in bypass_requests[:15]:
+            try:
+                response = await self._make_request(
+                    req_config['url'],
+                    req_config.get('method', 'GET'),
+                    req_config.get('headers', headers),
+                    params=req_config.get('params'),
+                    **kwargs
+                )
+                
+                if response and self._is_bypassed(response.status_code):
+                    response_text = getattr(response, 'content', '') or ''
+                    
+                    self._enhanced_engine.record_attempt(
+                        f"{url}:{method}",
+                        type('Attempt', (), {
+                            'strategy': req_config.get('strategy'),
+                            'bypassed': True,
+                            'status_code': response.status_code
+                        })()
+                    )
+                    
+                    return BypassResult(
+                        original_status=status_code,
+                        bypassed_status=response.status_code,
+                        technique=req_config.get('strategy', 'enhanced').value if hasattr(req_config.get('strategy'), 'value') else str(req_config.get('strategy', 'enhanced')),
+                        category="enhanced_smart_bypass",
+                        bypassed=True,
+                        response_time=getattr(response, 'response_time', 0),
+                        details=f"WAF: {waf_type}, Strategy: {req_config.get('strategy')}, Content changed: {len(response_text) > 0}"
+                    )
+            except Exception as e:
+                logger.debug(f"Enhanced bypass attempt failed: {e}")
+        
+        return None
+    
+    async def _legacy_smart_bypass(
+        self,
+        url: str,
+        method: str,
+        status_code: Optional[int],
+        headers: Dict[str, str],
+        **kwargs
+    ) -> Optional[BypassResult]:
+        """传统智能绕过（当增强引擎不可用时）"""
         if status_code not in self.BYPASS_PRIORITY:
             return None
         

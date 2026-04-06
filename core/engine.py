@@ -74,6 +74,10 @@ from .config.probe_patterns import ACTION_SUFFIXES, RESOURCE_WORDS, CRUD_SUFFIXE
 from .collectors.oss_collector import OSSCollector, OSSEndpoint, get_oss_collector, CloudProvider
 from .testers.oss_vuln_tester import OSSVulnTester, OSSVulnResult as OSSVulnTestResult, OSSVulnType, RiskLevel as OSSRiskLevel
 from .collectors.browser_enhancer import SensitiveInfoExtractor, PathPrefixLearner
+from .collectors.runtime_js_collector import EnhancedRuntimeCollector, JSRuntimeInterceptor, PageInteractionTrigger
+from .collectors.graphql_enhancer import EnhancedGraphQLDiscovery, GraphQLOperationExtractor
+from .collectors.smart_bypass_engine import SmartBypassEngine, WAFSignature, ResponseAnalyzer, create_smart_bypass_engine
+from .collectors.api_confidence_scorer import APIScoringEngine, SourceType, create_scoring_engine
 
 
 @dataclass
@@ -981,6 +985,8 @@ class ScanEngine:
         websocket_endpoints = set()
         env_configs = {}
         ast_routes = set()
+        runtime_apis = []
+        graphql_endpoints = []
         
         if self._browser_collector:
             try:
@@ -990,6 +996,7 @@ class ScanEngine:
                     alive_js.extend(browser_result.get('alive_js', []))
                     browser_routes = browser_result.get('spa_routes', [])
                     browser_api_endpoints = browser_result.get('browser_apis', [])
+                    runtime_apis = browser_result.get('runtime_apis', [])
                     
                     for js_item in browser_result.get('alive_js', []):
                         if isinstance(js_item, dict) and 'content' in js_item:
@@ -998,6 +1005,15 @@ class ScanEngine:
                             api_path_finder.find_api_paths_in_text(js_content, js_url)
             except Exception as e:
                 logger.warning(f"Browser collection failed: {e}")
+        
+        graphql_discovery = EnhancedGraphQLDiscovery()
+        graphql_discovery.set_http_client(self._http_client)
+        try:
+            graphql_endpoints = await graphql_discovery.discover_endpoints(self.config.target)
+            if graphql_endpoints:
+                logger.info(f"Discovered {len(graphql_endpoints)} GraphQL endpoints")
+        except Exception as e:
+            logger.debug(f"GraphQL discovery failed: {e}")
         
         response = await self._http_client.request(  # type: ignore[reportOptionalMemberAccess]
             self.config.target,
@@ -1134,6 +1150,25 @@ class ScanEngine:
         if response_sensitive:
             logger.info(f"Extracted {len(response_sensitive)} sensitive findings from response")
         
+        scoring_engine = create_scoring_engine()
+        for api_url in runtime_apis:
+            scoring_engine.score_endpoint(
+                url=api_url,
+                method="GET",
+                source=SourceType.JS_DIRECT
+            )
+        for api_url in finder_api_paths:
+            scoring_engine.score_endpoint(
+                url=api_url,
+                method="GET",
+                source=SourceType.JS_INFERRED
+            )
+        
+        scored_endpoints = scoring_engine.get_prioritized_list(min_score=0.4)
+        high_value_apis = [e.url for e in scoring_engine.get_high_value_endpoints()]
+        
+        logger.info(f"[Confidence Scoring] Scored {len(scored_endpoints)} endpoints, {len(high_value_apis)} high-value")
+        
         return {
             'total_js': len(js_urls),
             'alive_js': len(alive_js),
@@ -1144,6 +1179,8 @@ class ScanEngine:
             'response_discovered_paths': all_discovered,
             'probe_paths': inline_parser.generate_probe_paths(),
             'browser_api_endpoints': list(browser_api_endpoints) if browser_api_endpoints else [],
+            'runtime_apis': runtime_apis,
+            'graphql_endpoints': graphql_endpoints,
             'finder_api_paths': finder_api_paths,
             'js_params': list(js_params),
             'ast_routes': list(ast_routes),
@@ -1152,7 +1189,10 @@ class ScanEngine:
             'response_sensitive_resources': list(all_discovered.get('sensitive_resources', [])),
             'sensitive_findings': self._sensitive_info_extractor.get_all_findings(),
             'path_prefixes': list(self._path_prefix_learner.get_all_prefixes()),
-            'path_mappings': self._path_prefix_learner.get_mappings()
+            'path_mappings': self._path_prefix_learner.get_mappings(),
+            'scored_endpoints': [{'url': e.url, 'score': e.confidence_score, 'source': e.source_type.value} for e in scored_endpoints],
+            'high_value_apis': high_value_apis,
+            'scoring_stats': scoring_engine.get_statistics()
         }
     
     async def _collect_with_browser(self) -> Optional[Dict[str, Any]]:
@@ -1166,11 +1206,17 @@ class ScanEngine:
         alive_js = []
         intercepted_apis = []
         base_urls = set()
+        runtime_apis = []
         
         try:
             await self._browser_collector.navigate(self.config.target)
             
             await self._browser_collector.add_api_interceptor()
+            
+            enhanced_collector = EnhancedRuntimeCollector()
+            await enhanced_collector.attach(self._browser_collector.page)
+            runtime_result = await enhanced_collector.collect()
+            runtime_apis = runtime_result.get('apis', [])
             
             await self._browser_collector.scroll_page()
             
@@ -1201,6 +1247,7 @@ class ScanEngine:
                     logger.debug(f"Browser JS request error: {e}")
             
             logger.info(f"[Browser Collector] Intercepted {len(intercepted_apis)} API calls, discovered {len(base_urls)} baseURLs")
+            logger.info(f"[Runtime Collector] Found {len(runtime_apis)} APIs via runtime interception")
         
         except Exception as e:
             logger.warning(f"Browser collection error: {e}")
@@ -1211,6 +1258,7 @@ class ScanEngine:
             'spa_routes': spa_routes,
             'browser_apis': api_endpoints,
             'intercepted_apis': intercepted_apis,
+            'runtime_apis': runtime_apis,
             'base_urls': list(base_urls),
             'detected_framework': self._detected_framework
         }
