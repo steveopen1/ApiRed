@@ -1247,7 +1247,7 @@ class ScanEngine:
             api_endpoints = page_content.get('api_endpoints', [])
             spa_routes = page_content.get('routes', [])
             
-            intercepted_from_page = await self._browser_collector.get_all_intercepted_apis()
+            intercepted_from_page = self._browser_collector.get_all_intercepted_apis()
             intercepted_apis.extend(intercepted_from_page)
             
             for js_url in js_urls:
