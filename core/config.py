@@ -42,6 +42,16 @@ class ScanConfig:
     
     output_dir: str = "./results"
     
+    memory_limit: Optional[int] = None
+    cpu_quota: Optional[float] = None
+    max_response_size: int = 10 * 1024 * 1024
+    max_concurrent_requests: int = 300
+    request_timeout: int = 30
+    scan_timeout: Optional[int] = None
+    rate_limit: int = 0
+    sanitize_output: bool = True
+    sanitization_level: str = "partial"
+    
     @classmethod
     def from_scanner_config(cls, config) -> 'ScanConfig':
         """从 ScannerConfig 转换"""
