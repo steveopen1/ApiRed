@@ -90,6 +90,7 @@ class EngineConfig:
     ai_enabled: bool = False
     checkpoint_enabled: bool = True
     cookies: str = ""
+    auth_token: str = ""
     concurrency: int = 50
     concurrency_probe: bool = False
     proxy: Optional[str] = None
@@ -861,22 +862,36 @@ class ScanEngine:
                 all_api_paths
             )
             
-            if auth_result and auth_result.headers:
-                self.config.cookies = auth_result.cookie
+            if auth_result:
+                if auth_result.cookie:
+                    self.config.cookies = auth_result.cookie
+                    logger.info(f"[AutoAuth] 认证成功，获得 Cookie")
                 if auth_result.token:
+                    self.config.auth_token = auth_result.token
                     logger.info(f"[AutoAuth] 认证成功，获得 Token")
+                if auth_result.headers:
+                    logger.info(f"[AutoAuth] 认证成功，获得认证头")
                     self.result.statistics['auto_auth'] = {
                         'success': True,
                         'auth_type': auth_result.auth_type.value,
-                        'token_prefix': auth_result.token[:20] + '...' if len(auth_result.token) > 20 else auth_result.token
+                        'token_obtained': bool(auth_result.token),
+                        'cookie_obtained': bool(auth_result.cookie),
+                        'headers_obtained': bool(auth_result.headers)
+                    }
+                elif auth_result.token:
+                    self.result.statistics['auto_auth'] = {
+                        'success': True,
+                        'auth_type': auth_result.auth_type.value,
+                        'token_obtained': True
+                    }
+                elif auth_result.cookie:
+                    self.result.statistics['auto_auth'] = {
+                        'success': True,
+                        'auth_type': auth_result.auth_type.value,
+                        'cookie_obtained': True
                     }
                 else:
-                    logger.info(f"[AutoAuth] 认证成功，获得 Cookie")
-                    self.result.statistics['auto_auth'] = {
-                        'success': True,
-                        'auth_type': auth_result.auth_type.value,
-                        'cookie': auth_result.cookie[:50] + '...' if len(auth_result.cookie) > 50 else auth_result.cookie
-                    }
+                    self.result.statistics['auto_auth'] = {'success': True}
             else:
                 logger.info("[AutoAuth] 自动认证失败")
                 self.result.statistics['auto_auth'] = {'success': False}
@@ -2726,14 +2741,7 @@ class ScanEngine:
                     ep.is_high_value = True
                     break
         
-        high_value_count = sum(1 for e in endpoints if e.is_high_value)
         from .models import APIStatus
-        alive_count = sum(1 for e in endpoints if e.status == APIStatus.ALIVE)
-        
-        if self.result:
-            self.result.alive_apis = alive_count
-            self.result.high_value_apis = high_value_count
-        
         filtered_endpoints = [e for e in endpoints if e.status == APIStatus.ALIVE and e.response_type and e.response_type != 'HTML']
         if self.result and filtered_endpoints:
             self.result.api_endpoints = filtered_endpoints

@@ -366,6 +366,7 @@ class LLMUrlClassifier:
     
     _instance_cache: Dict[str, 'LLMUrlClassifier'] = {}
     _result_cache: Dict[str, Any] = {}
+    _cache_timestamps: Dict[str, float] = {}
     _cache_max_size = 1000
     _cache_ttl = 3600
     
@@ -389,6 +390,35 @@ class LLMUrlClassifier:
         if cache_key not in cls._instance_cache:
             cls._instance_cache[cache_key] = LLMUrlClassifier()
         return cls._instance_cache[cache_key]
+    
+    @classmethod
+    def clear_cache(cls):
+        """清理所有缓存"""
+        cls._instance_cache.clear()
+        cls._result_cache.clear()
+        cls._cache_timestamps.clear()
+    
+    @classmethod
+    def _cleanup_expired_cache(cls):
+        """清理过期缓存"""
+        import time
+        current_time = time.time()
+        expired_keys = [
+            k for k, timestamp in cls._cache_timestamps.items()
+            if current_time - timestamp > cls._cache_ttl
+        ]
+        for key in expired_keys:
+            cls._result_cache.pop(key, None)
+            cls._cache_timestamps.pop(key, None)
+        
+        if len(cls._result_cache) > cls._cache_max_size:
+            sorted_keys = sorted(
+                cls._cache_timestamps.items(),
+                key=lambda x: x[1]
+            )
+            for key, _ in sorted_keys[:len(cls._result_cache) - cls._cache_max_size]:
+                cls._result_cache.pop(key, None)
+                cls._cache_timestamps.pop(key, None)
     
     def _generate_cache_key(self, urls: List[str]) -> str:
         """生成URL列表的缓存键"""

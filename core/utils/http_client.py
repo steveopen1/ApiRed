@@ -73,12 +73,18 @@ class AsyncHttpClient:
         self._min_request_interval = 1.0 / rate_limit if rate_limit > 0 else 0
         self._429_count = 0
         self._429_backoff_until = 0.0
+        self._active_requests = 0
+        self._close_event = asyncio.Event()
+        self._close_event.set()
     
     async def __aenter__(self):
         await self._ensure_session()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._close_event.clear()
+        if self.session and self._active_requests > 0:
+            await self._close_event.wait()
         if self.session:
             await self.session.close()
     
@@ -89,8 +95,18 @@ class AsyncHttpClient:
         
         async with self._lock:
             if self._ssl_verified != verify_ssl and self.session is not None and not self.session.closed:
-                await self.session.close()
-                self.session = None
+                if self._active_requests > 0:
+                    old_session = self.session
+                    self.session = None
+                    async def close_after_requests():
+                        while self._active_requests > 0:
+                            await asyncio.sleep(0.1)
+                        if not old_session.closed:
+                            await old_session.close()
+                    asyncio.create_task(close_after_requests())
+                else:
+                    await self.session.close()
+                    self.session = None
             
             if self.session is None or self.session.closed:
                 self._ssl_verified = verify_ssl
@@ -117,6 +133,7 @@ class AsyncHttpClient:
         method: str = 'GET',
         headers: Optional[Dict[str, str]] = None,
         data: Any = None,
+        json_data: Any = None,
         retry: Optional[int] = None,
         timeout: Optional[int] = None,
         verify_ssl: Optional[bool] = None
@@ -142,12 +159,16 @@ class AsyncHttpClient:
                     await asyncio.sleep(wait_time)
             
             async with self.semaphore:
+                self._active_requests += 1
+                if self._active_requests == 1:
+                    self._close_event.clear()
                 try:
                     async with self.session.request(
                         method,
                         url,
                         headers=headers,
                         data=data,
+                        json=json_data,
                         proxy=self.proxy,
                         timeout=aiohttp.ClientTimeout(total=timeout_sec)
                     ) as response:
@@ -178,7 +199,6 @@ class AsyncHttpClient:
                             self._request_count += 1
                         
                         return result
-                        
                 except asyncio.TimeoutError:
                     result.error = f'Timeout after {timeout_sec}s'
                 except aiohttp.ClientError as e:
@@ -187,6 +207,10 @@ class AsyncHttpClient:
                     result.error = f'SSLError: {str(e)}'
                 except Exception as e:
                     result.error = f'Error: {str(e)}'
+                finally:
+                    self._active_requests -= 1
+                    if self._active_requests == 0:
+                        self._close_event.set()
                 
                 if attempt < retry - 1:
                     import random
@@ -199,7 +223,7 @@ class AsyncHttpClient:
         result.duration = time.time() - start_time
         
         if result.error and ('SSL' in result.error or 'ClientError' in result.error or 'sslv3' in result.error.lower()):
-            return await self._fallback_request(url, method, headers, data, timeout_sec, verify_ssl)
+            return await self._fallback_request(url, method, headers, data, timeout_sec, verify_ssl, json_data)
         
         return result
     
@@ -210,7 +234,8 @@ class AsyncHttpClient:
         headers: Optional[Dict[str, str]] = None,
         data: Any = None,
         timeout: int = 30,
-        verify_ssl: Optional[bool] = None
+        verify_ssl: Optional[bool] = None,
+        json_data: Any = None
     ) -> TaskResult:
         """同步requests降级方案，处理SSL问题"""
         result = TaskResult(url=url, method=method)
@@ -218,6 +243,7 @@ class AsyncHttpClient:
         
         try:
             verify = verify_ssl if verify_ssl is not None else self.verify_ssl
+            use_json = json_data is not None and method.upper() in ('POST', 'PUT', 'PATCH')
             
             if method == 'GET':
                 resp = requests.get(
@@ -227,7 +253,7 @@ class AsyncHttpClient:
                     verify=verify,
                     proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
                 )
-            elif method == 'POST_DATA':
+            elif method == 'POST_DATA' or (method == 'POST' and not use_json):
                 resp = requests.post(
                     url,
                     data=data,
@@ -236,10 +262,10 @@ class AsyncHttpClient:
                     verify=verify,
                     proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
                 )
-            elif method == 'POST_JSON':
+            elif method == 'POST_JSON' or use_json:
                 resp = requests.post(
                     url,
-                    json=data,
+                    json=json_data,
                     headers=headers,
                     timeout=timeout,
                     verify=verify,
@@ -250,7 +276,8 @@ class AsyncHttpClient:
                     method,
                     url,
                     headers=headers,
-                    data=data,
+                    data=data if not use_json else None,
+                    json=json_data if use_json else None,
                     timeout=timeout,
                     verify=verify,
                     proxies={'http': self.proxy, 'https': self.proxy} if self.proxy else None
