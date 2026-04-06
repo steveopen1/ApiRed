@@ -3274,6 +3274,13 @@ class ScanEngine:
             enabled_categories.add(TestCategory.CLOUD_CONFIG)
         if getattr(cfg, 'enable_devops_config_test', True):
             enabled_categories.add(TestCategory.DEV_OPS_CONFIG)
+        if getattr(cfg, 'enable_xxe_test', True):
+            enabled_categories.add(TestCategory.XXE)
+            enabled_categories.add(TestCategory.XML_BOMB)
+        if getattr(cfg, 'enable_grpc_test', True):
+            enabled_categories.add(TestCategory.GRPC_SECURITY)
+        if getattr(cfg, 'enable_dom_xss_test', True):
+            enabled_categories.add(TestCategory.DOM_XSS)
         
         vuln_count = 0
         test_stats = {
@@ -3315,6 +3322,10 @@ class ScanEngine:
             TestCategory.SESSION_FIXATION: 'test_session_fixation',
             TestCategory.CLOUD_CONFIG: 'test_cloud_config_exposure',
             TestCategory.DEV_OPS_CONFIG: 'test_devops_config_exposure',
+            TestCategory.XXE: 'test_xml_security',
+            TestCategory.XML_BOMB: 'test_xml_security',
+            TestCategory.GRPC_SECURITY: 'test_grpc_security',
+            TestCategory.DOM_XSS: 'test_dom_xss_dynamic',
         }
         
         for endpoint in high_value_apis:

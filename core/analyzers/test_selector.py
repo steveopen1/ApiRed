@@ -41,6 +41,10 @@ class TestCategory(Enum):
     SESSION_FIXATION = "session_fixation"
     CLOUD_CONFIG = "cloud_config"
     DEV_OPS_CONFIG = "devops_config"
+    XXE = "xxe"
+    XML_BOMB = "xml_bomb"
+    GRPC_SECURITY = "grpc_security"
+    DOM_XSS = "dom_xss"
 
 
 @dataclass
