@@ -45,6 +45,12 @@ class TestCategory(Enum):
     XML_BOMB = "xml_bomb"
     GRPC_SECURITY = "grpc_security"
     DOM_XSS = "dom_xss"
+    OAUTH2 = "oauth2"
+    MFA_BRUTE_FORCE = "mfa_brute_force"
+    MESSAGE_QUEUE = "message_queue"
+    KAFKA_SECURITY = "kafka_security"
+    RABBITMQ_SECURITY = "rabbitmq_security"
+    REDIS_SECURITY = "redis_security"
 
 
 @dataclass

@@ -3281,6 +3281,14 @@ class ScanEngine:
             enabled_categories.add(TestCategory.GRPC_SECURITY)
         if getattr(cfg, 'enable_dom_xss_test', True):
             enabled_categories.add(TestCategory.DOM_XSS)
+        if getattr(cfg, 'enable_oauth_test', True):
+            enabled_categories.add(TestCategory.OAUTH2)
+            enabled_categories.add(TestCategory.MFA_BRUTE_FORCE)
+        if getattr(cfg, 'enable_mq_test', True):
+            enabled_categories.add(TestCategory.MESSAGE_QUEUE)
+            enabled_categories.add(TestCategory.RABBITMQ_SECURITY)
+            enabled_categories.add(TestCategory.KAFKA_SECURITY)
+            enabled_categories.add(TestCategory.REDIS_SECURITY)
         
         vuln_count = 0
         test_stats = {
@@ -3326,6 +3334,12 @@ class ScanEngine:
             TestCategory.XML_BOMB: 'test_xml_security',
             TestCategory.GRPC_SECURITY: 'test_grpc_security',
             TestCategory.DOM_XSS: 'test_dom_xss_dynamic',
+            TestCategory.OAUTH2: 'test_oauth2_security',
+            TestCategory.MFA_BRUTE_FORCE: 'test_mfa_brute_force',
+            TestCategory.MESSAGE_QUEUE: 'test_message_queue_security',
+            TestCategory.RABBITMQ_SECURITY: 'test_message_queue_security',
+            TestCategory.KAFKA_SECURITY: 'test_message_queue_security',
+            TestCategory.REDIS_SECURITY: 'test_message_queue_security',
         }
         
         for endpoint in high_value_apis:
