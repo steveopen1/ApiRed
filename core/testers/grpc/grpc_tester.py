@@ -15,10 +15,112 @@ import base64
 import json
 import logging
 import re
+import struct
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+class ProtobufEncoder:
+    """
+    Protocol Buffer消息编码器
+    
+    支持：
+    1. 基础类型编码(int32/int64/string/bool)
+    2. 常用wire_type编码
+    3. 嵌套消息构造
+    """
+    
+    WIRE_TYPES = {
+        0: 'varint',
+        1: 'fixed64',
+        2: 'length_delimited',
+        5: 'fixed32',
+    }
+
+    @staticmethod
+    def encode_varint(value: int) -> bytes:
+        """编码Varint类型"""
+        if value < 0:
+            value = (1 << 64) + value
+        result = bytearray()
+        while value > 0x7F:
+            result.append((value & 0x7F) | 0x80)
+            value >>= 7
+        result.append(value & 0x7F)
+        return bytes(result)
+
+    @staticmethod
+    def encode_fixed64(value: float) -> bytes:
+        """编码fixed64类型"""
+        return struct.pack('<d', value)
+
+    @staticmethod
+    def encode_fixed32(value: int) -> bytes:
+        """编码fixed32类型"""
+        return struct.pack('<I', value)
+
+    @staticmethod
+    def encode_string_field(field_number: int, value: str) -> bytes:
+        """编码字符串字段 (field_number << 3 | wire_type = field_number << 3 | 2)"""
+        encoded_value = value.encode('utf-8')
+        result = bytearray()
+        result.extend(ProtobufEncoder.encode_varint((field_number << 3) | 2))
+        result.extend(ProtobufEncoder.encode_varint(len(encoded_value)))
+        result.extend(encoded_value)
+        return bytes(result)
+
+    @staticmethod
+    def encode_int32_field(field_number: int, value: int) -> bytes:
+        """编码int32字段"""
+        result = bytearray()
+        result.extend(ProtobufEncoder.encode_varint((field_number << 3) | 0))
+        result.extend(ProtobufEncoder.encode_varint(value))
+        return bytes(result)
+
+    @staticmethod
+    def encode_int64_field(field_number: int, value: int) -> bytes:
+        """编码int64字段"""
+        return ProtobufEncoder.encode_int32_field(field_number, value)
+
+    @staticmethod
+    def encode_bool_field(field_number: int, value: bool) -> bytes:
+        """编码bool字段"""
+        return bytes([(field_number << 3) | 0, 1 if value else 0])
+
+    @staticmethod
+    def encode_message(field_number: int, message: 'bytes') -> bytes:
+        """编码嵌套消息"""
+        result = bytearray()
+        result.extend(ProtobufEncoder.encode_varint((field_number << 3) | 2))
+        result.extend(ProtobufEncoder.encode_varint(len(message)))
+        result.extend(message)
+        return bytes(result)
+
+    @classmethod
+    def build_message(cls, fields: Dict[int, Any]) -> bytes:
+        """
+        构建完整ProtoBuf消息
+        
+        Args:
+            fields: {field_number: value} 字典
+            value可以是: int, str, bool, bytes
+        """
+        result = bytearray()
+        for field_number, value in fields.items():
+            if isinstance(value, int):
+                if field_number < 16:
+                    result.extend(cls.encode_int32_field(field_number, value))
+                else:
+                    result.extend(cls.encode_int64_field(field_number, value))
+            elif isinstance(value, str):
+                result.extend(cls.encode_string_field(field_number, value))
+            elif isinstance(value, bool):
+                result.extend(cls.encode_bool_field(field_number, value))
+            elif isinstance(value, bytes):
+                result.extend(cls.encode_message(field_number, value))
+        return bytes(result)
 
 
 @dataclass
@@ -211,6 +313,52 @@ class GRPCTester:
         grpc_request.extend(header)
         grpc_request.extend(message)
 
+        return bytes(grpc_request)
+
+    def build_protobuf_request(
+        self,
+        service_path: str,
+        method_name: str,
+        fields: Dict[int, Any]
+    ) -> bytes:
+        """
+        构建ProtoBuf格式的gRPC请求
+        
+        Args:
+            service_path: 服务路径
+            method_name: 方法名
+            fields: ProtoBuf字段字典 {field_number: value}
+            
+        Returns:
+            完整的gRPC请求字节
+        """
+        message = ProtobufEncoder.build_message(fields)
+        return self._build_grpc_request(service_path, method_name, message)
+
+    def build_grpc_request_with_protobuf(
+        self,
+        package: str,
+        service: str,
+        method: str,
+        protobuf_message: bytes
+    ) -> bytes:
+        """
+        使用ProtoBuf消息构建gRPC请求
+        
+        Args:
+            package: Proto包名
+            service: 服务名
+            method: 方法名
+            protobuf_message: ProtoBuf编码的消息体
+            
+        Returns:
+            完整的gRPC HTTP/2请求
+        """
+        full_method = f"/{package}.{service}/{method}"
+        
+        grpc_request = bytearray()
+        grpc_request.extend(self._build_grpc_request('', '', protobuf_message))
+        
         return bytes(grpc_request)
 
     def _build_reflection_request(self, command: str) -> bytes:
