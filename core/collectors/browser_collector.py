@@ -77,10 +77,16 @@ class HeadlessBrowserCollector:
         self.screenshots: List[str] = []
         self._js_content_set: Set[str] = set()
         self._api_url_patterns = [
-            r'/(?:api|rest|v\d+)/[a-zA-Z0-9_/-]+',
+            r'/(?:api|rest|v\d+|gateway|proxy|backend|service|app|web|www)[-/][a-zA-Z0-9_/-]+',
             r'/callComponent/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',
             r'/rpc/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',
-            r'/[a-zA-Z0-9_]+/(?:get|post|put|delete|list|query|export|import)',
+            r'/graphql',
+            r'/socket\.io',
+            r'/ws(?:s)?://',
+            r'/[a-zA-Z0-9_]+/(?:get|post|put|delete|list|query|export|import|save|update|remove|add|create|detail|info)',
+            r'/sse(?:/|$)',
+            r'/events(?:/|$)',
+            r'/realtime(?:/|$)',
         ]
         self._dep_check_done = False
     
