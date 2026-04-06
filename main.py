@@ -15,7 +15,6 @@ from typing import Optional, List
 
 from core.engine import ScanEngine, EngineConfig, ScanResultAggregator, run_multi_target
 from core.utils.config import Config
-from core.dashboard.server import run_server
 from core.collectors import BurpSuiteImporter, PostmanCollectionImporter
 from core.scheduled_testing import CronScheduler
 from core.exporters.enhanced_html_reporter import EnhancedHtmlReporter
@@ -47,7 +46,6 @@ Examples:
   %(prog)s scan -f targets.txt
   %(prog)s scan -u http://www.example.com -c "session=xxx"
   %(prog)s scan -u http://www.example.com --ai
-  %(prog)s dashboard
             '''
         )
 
@@ -128,10 +126,6 @@ Examples:
                                   help='Generate POC for vulnerabilities (default: on)')
         scan_parser.add_argument('--remediation', choices=['on', 'off'], default='on',
                                   help='Generate remediation suggestions (default: on)')
-
-        dash_parser = subparsers.add_parser('dashboard', help='Start Web Dashboard')
-        dash_parser.add_argument('--host', default='0.0.0.0')
-        dash_parser.add_argument('--port', type=int, default=8080)
 
         return parser
 
@@ -380,18 +374,11 @@ Examples:
         if getattr(parsed, 'import_postman', None):
             return self._handle_import_postman(parsed)
 
-        if parsed.command == 'dashboard':
-            return await self.run_dashboard(parsed.host, parsed.port)
-
         if parsed.command == 'scan':
             return await self.run_scan(parsed)
 
         self.parser.print_help()
         return 1
-
-    async def run_dashboard(self, host: str, port: int) -> int:
-        await run_server(host=host, port=port)
-        return 0
 
 
 def main():
