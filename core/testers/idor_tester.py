@@ -51,8 +51,19 @@ class IDORTester:
         'payment_id', 'member_id', 'customer_id', 'client_id',
         'resource_id', 'object_id', 'item_id', 'document_id',
         'file_id', 'post_id', 'comment_id', 'message_id',
-        'session_id', 'token_id', 'address_id', 'card_id'
+        'session_id', 'token_id', 'address_id', 'card_id',
+        'uuid', 'guid', 'uuid_id', 'unique_id', 'serial',
+        '用户id', '用户编号', '订单号', '订单id', '流水号', '交易号',
+        '会员id', '客户id', '账号id', '编号', '标识', '记录id',
+        'ddh', 'ddh_id', 'task_id', 'record_id', 'entry_id',
     }
+    
+    UUID_PATTERNS = [
+        r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+        r'[0-9a-f]{32}',
+        r'[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}',
+        r'\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}',
+    ]
     
     SENSITIVE_DATA_PATTERNS = {
         'email': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
@@ -244,6 +255,7 @@ class IDORTester:
     ) -> Dict[str, Any]:
         """提取可能的 IDOR 相关参数"""
         id_params = {}
+        import re
         
         for key, value in params.items():
             key_lower = key.lower()
@@ -256,6 +268,12 @@ class IDORTester:
             if part.isdigit() and i > 0:
                 prev_part = path_parts[i - 1].rstrip('s')
                 id_params[f'path_{prev_part}_id'] = part
+            
+            for uuid_pattern in self.UUID_PATTERNS:
+                if re.match(uuid_pattern, part, re.IGNORECASE):
+                    prev_part = path_parts[i - 1].rstrip('s') if i > 0 else 'resource'
+                    id_params[f'path_{prev_part}_uuid'] = part
+                    break
         
         return id_params
     

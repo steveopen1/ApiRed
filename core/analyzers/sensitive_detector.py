@@ -56,10 +56,50 @@ class TwoTierSensitiveDetector:
             'severity': Severity.CRITICAL,
             'examples': ['wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY']
         },
+        'aws_session_token': {
+            'pattern': r'ASIA[A-Z0-9]{16}',
+            'severity': Severity.CRITICAL,
+            'examples': ['ASIAXXXXXXXXXXXXXXXX']
+        },
         'github_token': {
-            'pattern': r'ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{22,}',
+            'pattern': r'ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{22,}|github_fpa_[a-zA-Z0-9_]{36,}',
             'severity': Severity.HIGH,
             'examples': ['ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'slack_token': {
+            'pattern': r'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,}',
+            'severity': Severity.HIGH,
+            'examples': ['xoxb-1234567890123-1234567890123-xxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'discord_token': {
+            'pattern': r'[MN][A-Za-z0-9]{23,}\.[\w-]{6}\.[\w-]{27}',
+            'severity': Severity.HIGH,
+            'examples': ['MTIz4567890AbCdEfGhIjKlMnOpQrStUvWx.yZ1234567890AbCdEfGhIjKlMnOpQrStUvWx-yz1234567890AbCd']
+        },
+        'twilio_api_key': {
+            'pattern': r'SK[a-f0-9]{32}',
+            'severity': Severity.HIGH,
+            'examples': ['SK1234567890abcdef1234567890abcdef']
+        },
+        'sendgrid_api_key': {
+            'pattern': r'SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}',
+            'severity': Severity.HIGH,
+            'examples': ['SG.xxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'stripe_api_key': {
+            'pattern': r'sk_live_[0-9a-zA-Z]{24,}|rk_live_[0-9a-zA-Z]{24,}',
+            'severity': Severity.CRITICAL,
+            'examples': ['sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'google_api_key': {
+            'pattern': r'AIza[0-9A-Za-z_-]{35}',
+            'severity': Severity.HIGH,
+            'examples': ['AIzaSyDcFNF7xxxxxxxxxxxxxxx']
+        },
+        'firebase_api_key': {
+            'pattern': r'AIzaSy[0-9A-Za-z_-]{35}',
+            'severity': Severity.HIGH,
+            'examples': ['AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
         },
         'jwt_token': {
             'pattern': r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}={0,2}',
@@ -105,7 +145,42 @@ class TwoTierSensitiveDetector:
             'pattern': r'(?:bearer|basic)\s+[a-zA-Z0-9_=./+-]{10,}',
             'severity': Severity.MEDIUM,
             'examples': ['Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9']
-        }
+        },
+        'htpasswd': {
+            'pattern': r'\$apr1\$[A-Za-z0-9./=]{20,}',
+            'severity': Severity.HIGH,
+            'examples': ['$apr1$xxxxxxxx$xxxxxxxxxxxxxxxx']
+        },
+        'mailgun_api_key': {
+            'pattern': r'key-[0-9a-zA-Z]{32}',
+            'severity': Severity.HIGH,
+            'examples': ['key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'mailchimp_api_key': {
+            'pattern': r'[a-f0-9]{32}-us[0-9]{1,2}',
+            'severity': Severity.HIGH,
+            'examples': ['xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-us1']
+        },
+        'shopify_access_token': {
+            'pattern': r'shpat_[a-f0-9]{32}',
+            'severity': Severity.HIGH,
+            'examples': ['shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'square_access_token': {
+            'pattern': r'sq0atp-[0-9A-Za-z_-]{22}|sq0csp-[0-9A-Za-z_-]{43}',
+            'severity': Severity.HIGH,
+            'examples': ['sq0atp-xxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'paypal_bearer_token': {
+            'pattern': r'A21AA[A-Za-z0-9_-]{92,}',
+            'severity': Severity.CRITICAL,
+            'examples': ['A21AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx']
+        },
+        'bitcoin_wallet': {
+            'pattern': r'[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{25,39}',
+            'severity': Severity.CRITICAL,
+            'examples': ['1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2']
+        },
     }
     
     CLEAR_PATTERNS = [

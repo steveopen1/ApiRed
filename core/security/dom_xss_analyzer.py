@@ -82,11 +82,13 @@ class DOMXSSTainter:
     }
     
     SAFE_PATTERNS = [
-        r'["\'][^"\']*encodeURI(?:Component)?\s*\(',
-        r'["\'][^"\']*escape\s*\(',
-        r'["\'][^"\']*\.replace\s*\([^)]*["\'][^)]*["\']',
-        r'["\'][^"\']*template literal',
-        r'\$强劲',
+        r'encodeURI(?:Component)?\s*\(',
+        r'escape\s*\(',
+        r'\.replace\s*\([^)]*["\'][^)]*["\']',
+        r'template literal',
+        r'DOMPurify\.sanitize',
+        r'sanitizer\.sanitize',
+        r'Object\.assign\s*\(\s*\{\}',
     ]
     
     def __init__(self):

@@ -332,7 +332,7 @@ class ReportGenerator:
 
 
 class POCGenerator:
-    """POC 生成器"""
+    """POC 生成器 - 增强版"""
     
     @staticmethod
     def generate_curl(method: str, url: str, headers: Dict = None, data: str = None, json_data: Dict = None) -> str:
@@ -351,7 +351,7 @@ class POCGenerator:
         
         parts.append(f"'{url}'")
         
-        return " \\\\\n  ".join(parts)
+        return " \\\n  ".join(parts)
     
     @staticmethod
     def generate_http_request(method: str, url: str, headers: Dict = None, body: str = None) -> str:
@@ -370,11 +370,83 @@ class POCGenerator:
         return "\n".join(lines)
     
     @staticmethod
+    def generate_python_poc(url: str, method: str = 'GET', headers: Dict = None, data: Dict = None, param: str = None, payload: str = None) -> str:
+        """生成 Python requests POC"""
+        code = f'''import requests
+
+url = "{url}"
+headers = {json.dumps(headers or {}, indent=4)}
+
+'''
+        if method.upper() == 'GET':
+            code += f'''response = requests.get(url, headers=headers)
+print(response.text)
+'''
+        elif param and payload:
+            code += f'''params = {{"{param}": "{payload}"}}
+response = requests.{method.lower()}(url, headers=headers, params=params)
+print(response.text)
+'''
+        else:
+            code += f'''data = {json.dumps(data or {}, indent=4)}
+response = requests.{method.lower()}(url, headers=headers, json=data)
+print(response.text)
+'''
+        return code
+    
+    @staticmethod
+    def generate_js_poc(url: str, method: str = 'GET', headers: Dict = None, payload: str = None) -> str:
+        """生成 JavaScript POC (Node.js)"""
+        code = f'''const axios = require('axios');
+
+const config = {{
+  method: '{method.upper()}',
+  url: '{url}',
+'''
+        if headers:
+            code += f'''  headers: {json.dumps(headers, indent=4)},
+'''
+        if payload:
+            code += f'''  params: {{q: '{payload}'}},
+'''
+        code += '''};
+
+axios(config)
+  .then(response => console.log(response.data))
+  .catch(error => console.error(error));
+'''
+        return code
+    
+    @staticmethod
+    def generate_python_fetch_poc(url: str, method: str = 'GET', headers: Dict = None, payload: str = None) -> str:
+        """生成 Python aiohttp POC"""
+        code = f'''import asyncio
+import aiohttp
+
+async def exploit():
+    url = "{url}"
+    headers = {json.dumps(headers or {}, indent=4)}
+'''
+        if payload:
+            code += f'''    params = {{"q": "{payload}"}}
+'''
+        code += f'''
+    async with aiohttp.ClientSession() as session:
+        async with session.{method.lower()}(url, headers=headers{', params=params' if payload else ''}) as response:
+            print(await response.text())
+
+asyncio.run(exploit())
+'''
+        return code
+    
+    @staticmethod
     def generate_sqli_poc(url: str, param: str, payload: str) -> POC:
         """生成 SQL 注入 POC"""
         poc = POC()
         poc.curl = POCGenerator.generate_curl("GET", f"{url}?{param}={payload}")
         poc.request = POCGenerator.generate_http_request("GET", f"{url}?{param}={payload}")
+        poc.python = POCGenerator.generate_python_poc(url, 'GET', payload=payload, param=param)
+        poc.javascript = POCGenerator.generate_js_poc(url, 'GET', payload=payload)
         return poc
     
     @staticmethod
@@ -383,6 +455,8 @@ class POCGenerator:
         poc = POC()
         poc.curl = POCGenerator.generate_curl("GET", f"{url}?{param}={payload}")
         poc.request = POCGenerator.generate_http_request("GET", f"{url}?{param}={payload}")
+        poc.python = POCGenerator.generate_python_poc(url, 'GET', payload=payload, param=param)
+        poc.javascript = POCGenerator.generate_js_poc(url, 'GET', payload=payload)
         return poc
     
     @staticmethod
@@ -395,6 +469,7 @@ class POCGenerator:
         poc.request = POCGenerator.generate_http_request("POST", url,
                                                        headers={"Content-Type": "multipart/form-data"},
                                                        body=f"--boundary\\nContent-Disposition: form-data; name='file'; filename='{filename}'\\n\\n{content}\\n--boundary--")
+        poc.python = POCGenerator.generate_python_poc(url, 'POST', data={'file': content})
         return poc
 
 

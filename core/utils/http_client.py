@@ -159,7 +159,12 @@ class AsyncHttpClient:
                     result.error = f'Error: {str(e)}'
                 
                 if attempt < retry - 1:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    import random
+                    base_delay = 0.5
+                    max_delay = 30.0
+                    exponential_delay = min(base_delay * (2 ** attempt), max_delay)
+                    jitter = random.uniform(0, 0.3 * exponential_delay)
+                    await asyncio.sleep(exponential_delay + jitter)
         
         result.duration = time.time() - start_time
         
