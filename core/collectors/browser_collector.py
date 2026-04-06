@@ -251,7 +251,7 @@ class HeadlessBrowserCollector:
         () => {
             const routes = new Set();
             
-            // 1. 从 vue-router 获取
+            // 1. Vue Router
             if (window.Vue && window.VueRouter) {
                 try {
                     const router = window.VueRouter;
@@ -259,7 +259,7 @@ class HeadlessBrowserCollector:
                 } catch(e) {}
             }
             
-            // 2. 从 react-router 获取
+            // 2. React Router
             if (window.React && window.ReactRouter) {
                 try {
                     const routes = window.ReactRouter.routes || [];
@@ -267,7 +267,7 @@ class HeadlessBrowserCollector:
                 } catch(e) {}
             }
             
-            // 3. 从 angular router 获取
+            // 3. Angular Router
             if (window.ng && window.ng.probe) {
                 try {
                     const el = window.ng.probe(document.querySelector('app-root'));
@@ -276,7 +276,99 @@ class HeadlessBrowserCollector:
                 } catch(e) {}
             }
             
-            // 4. 从 History API 获取
+            // 4. SvelteKit
+            if (window.__sveltekit__) {
+                try {
+                    const manifest = window.__sveltekit__.manifest;
+                    if (manifest && manifest.routes) {
+                        manifest.routes.forEach(r => routes.add(r.path));
+                    }
+                } catch(e) {}
+            }
+            if (window.$app && window.$app.stores) {
+                try {
+                    const stores = window.$app.stores;
+                    if (stores.page) {
+                        stores.page.subscribe(p => routes.add(p.url.pathname));
+                    }
+                } catch(e) {}
+            }
+            
+            // 5. Next.js
+            if (window.__NEXT_DATA__) {
+                try {
+                    const nextData = window.__NEXT_DATA__;
+                    if (nextData.routes) {
+                        Object.keys(nextData.routes).forEach(r => routes.add(r));
+                    }
+                    if (nextData.buildId) {
+                        routes.add('/_next/' + nextData.buildId);
+                    }
+                } catch(e) {}
+            }
+            if (window.next && window.next.router) {
+                try {
+                    const router = window.next.router;
+                    if (router.routes) {
+                        router.routes.forEach(r => routes.add(r));
+                    }
+                } catch(e) {}
+            }
+            
+            // 6. Nuxt.js
+            if (window.__NUXT__) {
+                try {
+                    const nuxtData = window.__NUXT__;
+                    if (nuxtData.router && nuxtData.router.routes) {
+                        nuxtData.router.routes.forEach(r => routes.add(r.path));
+                    }
+                } catch(e) {}
+            }
+            if (window.$nuxt) {
+                try {
+                    const nuxt = window.$nuxt;
+                    if (nuxt.$router) {
+                        const router = nuxt.$router;
+                        if (router.options && router.options.routes) {
+                            router.options.routes.forEach(r => routes.add(r.path));
+                        }
+                    }
+                } catch(e) {}
+            }
+            
+            // 7. Remix
+            if (window.__remixContext) {
+                try {
+                    const context = window.__remixContext;
+                    if (context.routeModules) {
+                        Object.keys(context.routeModules).forEach(key => {
+                            if (key !== 'routes' && key !== 'url') {
+                                routes.add('/' + key.replace(/^\//, ''));
+                            }
+                        });
+                    }
+                } catch(e) {}
+            }
+            
+            // 8. SolidStart
+            if (window.__solidstart) {
+                try {
+                    const solidRoutes = window.__solidstart.routes;
+                    if (solidRoutes) {
+                        solidRoutes.forEach(r => routes.add(r.path));
+                    }
+                } catch(e) {}
+            }
+            if (window.$solid) {
+                try {
+                    const router = window.$solid.router;
+                    if (router && router.routes) {
+                        router.routes.forEach(r => routes.add(r.path));
+                    }
+                } catch(e) {}
+            }
+            
+            // 9. History API and links
             if (window.history && window.history.pushState) {
                 const links = document.querySelectorAll('a[href]');
                 links.forEach(a => {
@@ -285,6 +377,16 @@ class HeadlessBrowserCollector:
                         routes.add(href);
                     }
                 });
+            }
+            
+            // 10. Svelte (standalone)
+            if (window.svelte) {
+                try {
+                    const svelteRoutes = window.svelte.routes;
+                    if (svelteRoutes) {
+                        svelteRoutes.forEach(r => routes.add(r));
+                    }
+                } catch(e) {}
             }
             
             return Array.from(routes);

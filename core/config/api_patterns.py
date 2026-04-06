@@ -204,3 +204,118 @@ PATH_FRAGMENTS = [
     'currency', 'currencies', 'coin', 'coins', 'gem', 'gems', 'shop', 'stores', 'deal', 'deals', 'offer', 'offers',
     'ad', 'ads', 'advertising', 'impression', 'impressions', 'click', 'clicks', 'conversion', 'conversions'
 ]
+
+
+MICROSERVICE_PATTERNS = [
+    # Kubernetes Service Discovery
+    '/api/v1/apps/deployments',
+    '/api/v1/services',
+    '/api/v1/pods',
+    '/api/v1/namespaces',
+    '/api/v1/configmaps',
+    '/api/v1/secrets',
+    '/api/v1/endpoints',
+    '/apis/apps/v1/deployments',
+    '/apis/apps/v1/services',
+    '/apis/apps/v1/pods',
+    # Kubernetes Dashboard
+    '/api/v1/k8s/crd',
+    '/api/v1/workloads/deployments',
+    '/api/v1/workloads/replicasets',
+    # Consul Service Discovery
+    '/v1/catalog/services',
+    '/v1/catalog/service/{service}',
+    '/v1/health/service/{service}',
+    '/v1/agent/services',
+    '/v1/agent/checks',
+    '/v1/agent/self',
+    '/v1/discover/checks',
+    '/v1/discover/nodes',
+    # etcd
+    '/v2/keys/',
+    '/v2/keys/{key}',
+    # Eureka (Spring Cloud)
+    '/eureka/apps',
+    '/eureka/apps/{appId}',
+    '/eureka/apps/{appId}/instances/{instanceId}',
+    '/eureka/home',
+    # Nacos (Alibaba)
+    '/nacos/v1/cs/configs',
+    '/nacos/v1/cs/operator/switches',
+    '/nacos/v1/ns/operator/metrics',
+    '/nacos/v1/ns/service',
+    '/nacos/v1/cs/services',
+    # Zookeeper
+    '/api/v1/common/registry/browser',
+    '/zookeeper/registry',
+    # Apollo (CTrip)
+    '/configs/{appId}/{cluster}/{namespace}',
+    '/notifications',
+    '/notifications/v2',
+    # Service Mesh
+    '/api/mesh/v1/services',
+    '/api/mesh/v1/routes',
+    '/api/mesh/v1/traffic',
+    '/api/istio/v1alpha3/virtualservices',
+    '/api/istio/v1alpha3/destinationrules',
+    # API Gateway
+    '/gateway/{service}',
+    '/api-gateway/{service}',
+    '/proxy/{service}',
+    '/service/{service}',
+    '/backend/{service}',
+    # Envoys
+    '/api/v2/discovery',
+    '/api/v2/clusters',
+    '/api/v2/listeners',
+    '/api/v2/routes',
+    # AWS CloudMap
+    '/api/cloudmap/services',
+    '/api/cloudmap/namespaces',
+    # Azure Service Fabric
+    '/api/v1/applications',
+    '/api/v1/services',
+    '/api/v1/nodes',
+    # Google Cloud Endpoints
+    '/api/{service}/docs',
+    '/api/{service}/openapi.json',
+    '/api/{service}/health',
+    # Jaeger/Tracing
+    '/api/traces',
+    '/api/spans',
+    '/jaeger/traces',
+    # Prometheus/Metrics
+    '/metrics',
+    '/api/v1/metrics',
+    '/prometheus/metrics',
+    # Grafana
+    '/api/datasources',
+    '/api/dashboards',
+    # Kibana
+    '/api/index_patterns/index-pattern',
+    # SkyWalking
+    '/graphql',
+    '/v2/graphql',
+]
+
+# 服务注册中心常见端点
+SERVICE_REGISTRY_PATHS = [
+    '/services',
+    '/service-registry',
+    '/registry',
+    '/discovery',
+    '/eureka',
+    '/consul',
+    '/nacos',
+    '/zookeeper',
+    '/apollo',
+    '/admin',
+    '/actuator',
+    '/actuator/health',
+    '/actuator/info',
+    '/actuator/env',
+    '/actuator/beans',
+    '/actuator/mappings',
+    '/actuator/refresh',
+]
+

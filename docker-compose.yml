@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  apired:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apired
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config
+    networks:
+      - apired-net
+    restart: unless-stopped
+    shm_size: '2gb'
+    mem_limit: 4g
+    cpu_count: 2
+
+  apired-passive:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apired-passive
+    command: ["python", "-m", "core.engine", "--mode", "passive", "--target", "http://localhost:8000"]
+    ports:
+      - "8001:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./output:/app/output
+    networks:
+      - apired-net
+    restart: unless-stopped
+
+networks:
+  apired-net:
+    driver: bridge

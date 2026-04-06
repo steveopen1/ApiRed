@@ -52,7 +52,9 @@ class AsyncHttpClient:
         max_retries: int = 3,
         timeout: int = 30,
         proxy: Optional[str] = None,
-        verify_ssl: bool = True
+        verify_ssl: bool = True,
+        rate_limit: int = 0,
+        respect_retry_after: bool = True
     ):
         self.max_concurrent = max_concurrent
         self.max_retries = max_retries
@@ -64,6 +66,13 @@ class AsyncHttpClient:
         self._request_count = 0
         self._lock = asyncio.Lock()
         self._ssl_verified: Optional[bool] = None
+        self.rate_limit = rate_limit
+        self.respect_retry_after = respect_retry_after
+        self._rate_limit_enabled = rate_limit > 0
+        self._last_request_time = 0.0
+        self._min_request_interval = 1.0 / rate_limit if rate_limit > 0 else 0
+        self._429_count = 0
+        self._429_backoff_until = 0.0
     
     async def __aenter__(self):
         await self._ensure_session()
@@ -124,6 +133,14 @@ class AsyncHttpClient:
         start_time = time.time()
         
         for attempt in range(retry):
+            if self._rate_limit_enabled:
+                await self._apply_rate_limit()
+            
+            if self._429_backoff_until > time.time():
+                wait_time = self._429_backoff_until - time.time()
+                if wait_time > 0:
+                    await asyncio.sleep(wait_time)
+            
             async with self.semaphore:
                 try:
                     async with self.session.request(
@@ -136,6 +153,19 @@ class AsyncHttpClient:
                     ) as response:
                         result.status_code = response.status
                         result.headers = dict(response.headers)
+                        
+                        if response.status == 429 and self.respect_retry_after:
+                            retry_after = response.headers.get('Retry-After')
+                            if retry_after:
+                                try:
+                                    wait_seconds = int(retry_after)
+                                    self._429_backoff_until = time.time() + wait_seconds
+                                    logger.info(f"Rate limited. Respecting Retry-After: {wait_seconds}s")
+                                except ValueError:
+                                    self._429_backoff_until = time.time() + 60
+                            else:
+                                self._429_backoff_until = time.time() + 60
+                            self._429_count += 1
                         
                         result.content_bytes = await response.read()
                         result.content = result.content_bytes.decode('utf-8', errors='ignore')
@@ -292,6 +322,27 @@ class AsyncHttpClient:
     def reset_counter(self):
         """重置计数器"""
         self._request_count = 0
+    
+    async def _apply_rate_limit(self):
+        """应用速率限制"""
+        if not self._rate_limit_enabled or self._min_request_interval <= 0:
+            return
+        
+        current_time = time.time()
+        time_since_last = current_time - self._last_request_time
+        
+        if time_since_last < self._min_request_interval:
+            wait_time = self._min_request_interval - time_since_last
+            await asyncio.sleep(wait_time)
+        
+        self._last_request_time = time.time()
+    
+    def set_rate_limit(self, requests_per_second: int):
+        """动态设置速率限制"""
+        self.rate_limit = requests_per_second
+        self._rate_limit_enabled = requests_per_second > 0
+        self._min_request_interval = 1.0 / requests_per_second if requests_per_second > 0 else 0
+        logger.info(f"Rate limit set to {requests_per_second} req/s")
 
 
 class RequestPool:

@@ -151,6 +151,43 @@ class SwaggerDiscoverer:
         '/admin/api-docs',
         '/manage/api-docs',
         '/system/api-docs',
+        # Scalar (modern Swagger UI alternative)
+        '/scalar/v1/api-docs',
+        '/scalar/v1/download',
+        '/scalar/api',
+        '/scalar',
+        '/reference',
+        '/reference/docs',
+        # Redoc (another Swagger UI alternative)
+        '/redoc',
+        '/redoc/index.html',
+        '/redoc/static/index.html',
+        '/docs',
+        '/docs/',
+        '/documentation',
+        '/documentation/',
+        # RapiDoc
+        '/rapidoc',
+        '/rapidoc/index.html',
+        '/api/rapidoc',
+        # Stoplight
+        '/api/docs',
+        '/api/reference',
+        '/docs/raw',
+        # Spring Boot specific
+        '/swagger-ui/eap-ui.html',
+        '/v3/api-docs/eap',
+        # Other common paths
+        '/nsw-swagger-ui/swagger-ui-bundle.js',
+        '/zuul/api-docs',
+        '/proxy/api-docs',
+        '/c/swagger',
+        '/api-definition',
+        '/api/doc',
+        '/api/doc.json',
+        '/swagger/html',
+        '/swagger/static/index.html',
+        '/api/swagger-ui.html',
     ]
 
     SWAGGER_JS_PATTERNS = [
